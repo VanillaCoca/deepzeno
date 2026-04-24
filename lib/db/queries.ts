@@ -28,9 +28,30 @@ import {
   suggestion,
   vote,
 } from "./schema";
+import * as supabaseQueries from "./queries.supabase";
+import { isSupabaseAdminConfigured } from "../supabase/admin";
 
-const client = postgres(process.env.POSTGRES_URL ?? "");
-const db = drizzle(client);
+const directClient = process.env.POSTGRES_URL
+  ? postgres(process.env.POSTGRES_URL)
+  : null;
+const directDb = directClient ? drizzle(directClient) : null;
+const db: any = new Proxy(
+  {},
+  {
+    get(_target, property, receiver) {
+      if (!directDb) {
+        throw new ChatbotError(
+          "bad_request:database",
+          "Direct Postgres is not configured."
+        );
+      }
+
+      return Reflect.get(directDb as object, property, receiver);
+    },
+  }
+);
+const useSupabaseApiDatabase =
+  !process.env.POSTGRES_URL && isSupabaseAdminConfigured();
 
 export async function saveChat({
   id,
@@ -43,6 +64,10 @@ export async function saveChat({
   title: string;
   visibility: VisibilityType;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.saveChat({ id, userId, title, visibility });
+  }
+
   try {
     return await db.insert(chat).values({
       id,
@@ -57,6 +82,10 @@ export async function saveChat({
 }
 
 export async function deleteChatById({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.deleteChatById({ id });
+  }
+
   try {
     await db.delete(vote).where(eq(vote.chatId, id));
     await db.delete(message).where(eq(message.chatId, id));
@@ -76,6 +105,10 @@ export async function deleteChatById({ id }: { id: string }) {
 }
 
 export async function deleteAllChatsByUserId({ userId }: { userId: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.deleteAllChatsByUserId({ userId });
+  }
+
   try {
     const userChats = await db
       .select({ id: chat.id })
@@ -86,7 +119,7 @@ export async function deleteAllChatsByUserId({ userId }: { userId: string }) {
       return { deletedCount: 0 };
     }
 
-    const chatIds = userChats.map((c) => c.id);
+    const chatIds = userChats.map((c: { id: string }) => c.id);
 
     await db.delete(vote).where(inArray(vote.chatId, chatIds));
     await db.delete(message).where(inArray(message.chatId, chatIds));
@@ -117,6 +150,15 @@ export async function getChatsByUserId({
   startingAfter: string | null;
   endingBefore: string | null;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getChatsByUserId({
+      id,
+      limit,
+      startingAfter,
+      endingBefore,
+    });
+  }
+
   try {
     const extendedLimit = limit + 1;
 
@@ -183,6 +225,10 @@ export async function getChatsByUserId({
 }
 
 export async function getChatById({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getChatById({ id });
+  }
+
   try {
     const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));
     if (!selectedChat) {
@@ -196,6 +242,10 @@ export async function getChatById({ id }: { id: string }) {
 }
 
 export async function saveMessages({ messages }: { messages: DBMessage[] }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.saveMessages({ messages });
+  }
+
   try {
     return await db.insert(message).values(messages);
   } catch (_error) {
@@ -210,6 +260,10 @@ export async function updateMessage({
   id: string;
   parts: DBMessage["parts"];
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.updateMessage({ id, parts });
+  }
+
   try {
     return await db.update(message).set({ parts }).where(eq(message.id, id));
   } catch (_error) {
@@ -218,6 +272,10 @@ export async function updateMessage({
 }
 
 export async function getMessagesByChatId({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getMessagesByChatId({ id });
+  }
+
   try {
     return await db
       .select()
@@ -241,6 +299,10 @@ export async function voteMessage({
   messageId: string;
   type: "up" | "down";
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.voteMessage({ chatId, messageId, type });
+  }
+
   try {
     const [existingVote] = await db
       .select()
@@ -264,6 +326,10 @@ export async function voteMessage({
 }
 
 export async function getVotesByChatId({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getVotesByChatId({ id });
+  }
+
   try {
     return await db.select().from(vote).where(eq(vote.chatId, id));
   } catch (_error) {
@@ -287,6 +353,10 @@ export async function saveDocument({
   content: string;
   userId: string;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.saveDocument({ id, title, kind, content, userId });
+  }
+
   try {
     return await db
       .insert(document)
@@ -311,6 +381,10 @@ export async function updateDocumentContent({
   id: string;
   content: string;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.updateDocumentContent({ id, content });
+  }
+
   try {
     const docs = await db
       .select()
@@ -341,6 +415,10 @@ export async function updateDocumentContent({
 }
 
 export async function getDocumentsById({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getDocumentsById({ id });
+  }
+
   try {
     const documents = await db
       .select()
@@ -358,6 +436,10 @@ export async function getDocumentsById({ id }: { id: string }) {
 }
 
 export async function getDocumentById({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getDocumentById({ id });
+  }
+
   try {
     const [selectedDocument] = await db
       .select()
@@ -381,6 +463,10 @@ export async function deleteDocumentsByIdAfterTimestamp({
   id: string;
   timestamp: Date;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.deleteDocumentsByIdAfterTimestamp({ id, timestamp });
+  }
+
   try {
     await db
       .delete(suggestion)
@@ -408,6 +494,10 @@ export async function saveSuggestions({
 }: {
   suggestions: Suggestion[];
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.saveSuggestions({ suggestions });
+  }
+
   try {
     return await db.insert(suggestion).values(suggestions);
   } catch (_error) {
@@ -423,6 +513,10 @@ export async function getSuggestionsByDocumentId({
 }: {
   documentId: string;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getSuggestionsByDocumentId({ documentId });
+  }
+
   try {
     return await db
       .select()
@@ -437,6 +531,10 @@ export async function getSuggestionsByDocumentId({
 }
 
 export async function getMessageById({ id }: { id: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getMessageById({ id });
+  }
+
   try {
     return await db.select().from(message).where(eq(message.id, id));
   } catch (_error) {
@@ -454,6 +552,13 @@ export async function deleteMessagesByChatIdAfterTimestamp({
   chatId: string;
   timestamp: Date;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.deleteMessagesByChatIdAfterTimestamp({
+      chatId,
+      timestamp,
+    });
+  }
+
   try {
     const messagesToDelete = await db
       .select({ id: message.id })
@@ -463,7 +568,7 @@ export async function deleteMessagesByChatIdAfterTimestamp({
       );
 
     const messageIds = messagesToDelete.map(
-      (currentMessage) => currentMessage.id
+      (currentMessage: { id: string }) => currentMessage.id
     );
 
     if (messageIds.length > 0) {
@@ -494,6 +599,10 @@ export async function updateChatVisibilityById({
   chatId: string;
   visibility: "private" | "public";
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.updateChatVisibilityById({ chatId, visibility });
+  }
+
   try {
     return await db.update(chat).set({ visibility }).where(eq(chat.id, chatId));
   } catch (_error) {
@@ -511,6 +620,10 @@ export async function updateChatTitleById({
   chatId: string;
   title: string;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.updateChatTitleById({ chatId, title });
+  }
+
   try {
     return await db.update(chat).set({ title }).where(eq(chat.id, chatId));
   } catch (_error) {
@@ -525,6 +638,10 @@ export async function getMessageCountByUserId({
   id: string;
   differenceInHours: number;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getMessageCountByUserId({ id, differenceInHours });
+  }
+
   try {
     const cutoffTime = new Date(
       Date.now() - differenceInHours * 60 * 60 * 1000
@@ -559,6 +676,10 @@ export async function createStreamId({
   streamId: string;
   chatId: string;
 }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.createStreamId({ streamId, chatId });
+  }
+
   try {
     await db
       .insert(stream)
@@ -572,6 +693,10 @@ export async function createStreamId({
 }
 
 export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
+  if (useSupabaseApiDatabase) {
+    return supabaseQueries.getStreamIdsByChatId({ chatId });
+  }
+
   try {
     const streamIds = await db
       .select({ id: stream.id })
@@ -580,7 +705,7 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
       .orderBy(asc(stream.createdAt))
       .execute();
 
-    return streamIds.map(({ id }) => id);
+    return streamIds.map(({ id }: { id: string }) => id);
   } catch (_error) {
     throw new ChatbotError(
       "bad_request:database",

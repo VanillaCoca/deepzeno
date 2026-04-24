@@ -92,6 +92,25 @@ const modelCatalog: ChatModelDefinition[] = [
     },
   },
   {
+    id: "deepseek:default",
+    name: "DeepSeek",
+    provider: "deepseek",
+    providerLabel: "DeepSeek",
+    description: "DeepSeek's OpenAI-compatible chat model for coding and reasoning.",
+    capabilities: {
+      tools: true,
+      vision: false,
+      reasoning: false,
+    },
+    providerType: "openai-compatible",
+    envKeys: ["DEEPSEEK_API_KEY"],
+    resolveModelId: (env) => env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    resolveName: (env) => {
+      const configuredModel = env.DEEPSEEK_MODEL ?? "deepseek-chat";
+      return `${humanizeModelName(configuredModel)} (DeepSeek)`;
+    },
+  },
+  {
     id: "gateway:moonshotai/kimi-k2.5",
     name: "Kimi K2.5",
     provider: "moonshotai",
@@ -190,13 +209,27 @@ export function resolveChatModelSelection(
 }
 
 export function getDefaultModelId(env: EnvLike = process.env) {
-  return resolveChatModelSelection(DEFAULT_CHAT_MODEL, env)?.id ?? DEFAULT_CHAT_MODEL;
+  const preferredIds = [
+    DEFAULT_CHAT_MODEL,
+    "openai:gpt-4.1",
+    "deepseek:default",
+    "dashscope:default",
+    "gateway:moonshotai/kimi-k2.5",
+  ];
+  const activeModels = getActiveModels(env);
+
+  return (
+    preferredIds.find((id) => activeModels.some((model) => model.id === id)) ??
+    activeModels[0]?.id ??
+    DEFAULT_CHAT_MODEL
+  );
 }
 
 export function getTitleModelId(env: EnvLike = process.env) {
   const preferredIds = [
     "openai:gpt-4.1",
     "anthropic:claude-sonnet-4-6",
+    "deepseek:default",
     "dashscope:default",
     "gateway:moonshotai/kimi-k2.5",
   ];

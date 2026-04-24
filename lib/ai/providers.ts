@@ -22,6 +22,14 @@ const dashscopeProvider =
       })
     : null;
 
+const deepseekProvider = process.env.DEEPSEEK_API_KEY
+  ? createOpenAICompatible({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1",
+      name: "deepseek",
+    })
+  : null;
+
 export const myProvider = isTestEnvironment
   ? (() => {
       const { chatModel, titleModel } = require("./models.mock");
@@ -53,10 +61,23 @@ export function getLanguageModel(modelId: string) {
     case "openai":
       return openaiProvider.chat(model.providerModelId);
     case "openai-compatible":
-      if (!dashscopeProvider) {
-        throw new Error("DashScope is not configured.");
+      if (model.id.startsWith("dashscope:")) {
+        if (!dashscopeProvider) {
+          throw new Error("DashScope is not configured.");
+        }
+
+        return dashscopeProvider.chatModel(model.providerModelId);
       }
-      return dashscopeProvider.chatModel(model.providerModelId);
+
+      if (model.id.startsWith("deepseek:")) {
+        if (!deepseekProvider) {
+          throw new Error("DeepSeek is not configured.");
+        }
+
+        return deepseekProvider.chatModel(model.providerModelId);
+      }
+
+      throw new Error("Unsupported OpenAI-compatible provider.");
     case "gateway":
       return gateway.languageModel(model.providerModelId);
     default:

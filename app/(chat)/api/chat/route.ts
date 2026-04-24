@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     if (!resolvedModel) {
       return new ChatbotError(
         "bad_request:api",
-        "No AI model is configured. Add Anthropic, OpenAI, DashScope, or AI Gateway environment variables."
+        "No AI model is configured. Add Anthropic, OpenAI, DeepSeek, DashScope, or AI Gateway environment variables."
       ).toResponse();
     }
 
