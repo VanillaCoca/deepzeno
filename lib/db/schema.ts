@@ -237,6 +237,14 @@ export const edge = pgTable("edges", {
 
 export type Edge = InferSelectModel<typeof edge>;
 
+export const candidateDecisionSources = [
+  "zeno_extraction",
+  "mcp_agent",
+  "manual",
+] as const;
+
+export type CandidateDecisionSource = (typeof candidateDecisionSources)[number];
+
 export const candidateDecision = pgTable("candidate_decisions", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   projectId: uuid("project_id")
@@ -262,6 +270,9 @@ export const candidateDecision = pgTable("candidate_decisions", {
   resolvedDecisionId: uuid("resolved_decision_id").references(
     () => decision.id
   ),
+  source: text("source").notNull().default("zeno_extraction"),
+  sourceMetadata: jsonb("source_metadata"),
+  externalEvidence: text("external_evidence"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -282,3 +293,21 @@ export const decisionLog = pgTable("decision_log", {
 });
 
 export type DecisionLog = InferSelectModel<typeof decisionLog>;
+
+export const apiKey = pgTable("api_keys", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  label: text("label"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ApiKey = InferSelectModel<typeof apiKey>;

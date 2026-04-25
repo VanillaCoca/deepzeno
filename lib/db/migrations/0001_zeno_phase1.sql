@@ -102,6 +102,9 @@ CREATE TABLE IF NOT EXISTS "candidate_decisions" (
   "content_hash" text,
   "resolved_at" timestamptz,
   "resolved_decision_id" uuid REFERENCES "decisions"("id"),
+  "source" text NOT NULL DEFAULT 'zeno_extraction',
+  "source_metadata" jsonb,
+  "external_evidence" text,
   "created_at" timestamptz NOT NULL DEFAULT now()
 );
 
@@ -115,6 +118,23 @@ CREATE TABLE IF NOT EXISTS "decision_log" (
   "created_at" timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS "api_keys" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" uuid NOT NULL,
+  "project_id" uuid NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "key_hash" text NOT NULL UNIQUE,
+  "key_prefix" text NOT NULL,
+  "label" text,
+  "last_used_at" timestamptz,
+  "revoked_at" timestamptz,
+  "created_at" timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE "candidate_decisions"
+  ADD COLUMN IF NOT EXISTS "source" text NOT NULL DEFAULT 'zeno_extraction',
+  ADD COLUMN IF NOT EXISTS "source_metadata" jsonb,
+  ADD COLUMN IF NOT EXISTS "external_evidence" text;
+
 CREATE INDEX IF NOT EXISTS "projects_user_id_idx" ON "projects" ("user_id");
 CREATE INDEX IF NOT EXISTS "topics_project_position_idx" ON "topics" ("project_id", "position");
 CREATE INDEX IF NOT EXISTS "conversations_project_created_idx" ON "conversations" ("project_id", "created_at");
@@ -122,6 +142,7 @@ CREATE INDEX IF NOT EXISTS "messages_conversation_created_idx" ON "messages" ("c
 CREATE INDEX IF NOT EXISTS "decisions_project_topic_idx" ON "decisions" ("project_id", "topic_id");
 CREATE INDEX IF NOT EXISTS "candidate_decisions_topic_status_idx" ON "candidate_decisions" ("topic_id", "status");
 CREATE INDEX IF NOT EXISTS "decision_log_decision_created_idx" ON "decision_log" ("decision_id", "created_at");
+CREATE INDEX IF NOT EXISTS "api_keys_project_active_idx" ON "api_keys" ("project_id") WHERE "revoked_at" IS NULL;
 
 DROP TRIGGER IF EXISTS prevent_decision_log_update ON "decision_log";
 CREATE TRIGGER prevent_decision_log_update

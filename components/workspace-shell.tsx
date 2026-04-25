@@ -2,7 +2,6 @@
 
 import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
 import { useLocalStorage } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -39,15 +38,6 @@ export function WorkspaceShell({
       <ProjectSidebar userEmail={userEmail} />
 
       <SidebarInset className="min-h-dvh bg-sidebar">
-        <Toaster
-          position="top-center"
-          theme="system"
-          toastOptions={{
-            className:
-              "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
-          }}
-        />
-
         <div className="relative flex h-dvh min-w-0">
           <div className="min-w-0 flex-1">{children}</div>
 
