@@ -2,6 +2,7 @@
 
 import type { UIMessage } from "ai";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
+import { Children, isValidElement } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -322,6 +323,41 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
+function paragraphContainsBlockContent(children: React.ReactNode) {
+  return Children.toArray(children).some((child) => {
+    if (!isValidElement(child)) {
+      return false;
+    }
+
+    if (typeof child.type === "string") {
+      return ["div", "figure", "section"].includes(child.type);
+    }
+
+    const childProps = child.props as {
+      "data-streamdown"?: string;
+      node?: { tagName?: string };
+    };
+
+    return (
+      childProps["data-streamdown"] === "image-wrapper" ||
+      childProps.node?.tagName === "img"
+    );
+  });
+}
+
+const streamdownComponents = {
+  p: ({
+    children,
+    ...props
+  }: HTMLAttributes<HTMLParagraphElement> & { node?: { tagName?: string } }) => {
+    if (paragraphContainsBlockContent(children)) {
+      return <div {...props}>{children}</div>;
+    }
+
+    return <p {...props}>{children}</p>;
+  },
+};
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -329,6 +365,7 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      components={streamdownComponents}
       plugins={streamdownPlugins}
       {...props}
     />
