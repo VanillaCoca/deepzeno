@@ -1,5 +1,5 @@
-import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 
 const basePath = process.env.IS_DEMO === "1" ? "/demo" : "";
 
@@ -51,4 +51,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withBotId(nextConfig);
+export default process.env.NODE_ENV === "production"
+  ? withBotId(nextConfig)
+  : nextConfig;

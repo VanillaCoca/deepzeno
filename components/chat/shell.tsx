@@ -118,16 +118,11 @@ export function ChatShell() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium text-foreground">
-                            Restored context from{" "}
+                            将在下一次对话中带入{" "}
                             {restoredSandboxContext.decisionTitle}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {restoredSandboxContext.messages.length} linked
-                            message
-                            {restoredSandboxContext.messages.length === 1
-                              ? ""
-                              : "s"}{" "}
-                            will be available on your next send.
+                            这条节点的结构化内容会作为上下文注入给模型。
                           </p>
                         </div>
                         <button

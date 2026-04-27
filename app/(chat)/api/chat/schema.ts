@@ -36,6 +36,7 @@ export const postRequestBodySchema = z.object({
   topicId: z.string().uuid(),
   conversationId: z.string().uuid(),
   restoredContextMessageIds: z.array(z.string().uuid()).optional(),
+  injectedDecisionContext: z.string().max(12_000).nullish(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

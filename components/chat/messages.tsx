@@ -1,6 +1,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { ArrowDownIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { AgentCandidateHint } from "@/components/agent-candidate-hint";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useMessages } from "@/hooks/use-messages";
 import type { Vote } from "@/lib/db/schema";
@@ -39,7 +40,7 @@ function PureMessages({
   selectedModelId: _selectedModelId,
   onEditMessage,
 }: MessagesProps) {
-  const { restoredSandboxContext } = useWorkspace();
+  const { activeTopic, activeTopicId, restoredSandboxContext } = useWorkspace();
   const {
     containerRef: messagesContainerRef,
     endRef: messagesEndRef,
@@ -78,27 +79,20 @@ function PureMessages({
         style={isArtifactVisible ? { scrollbarWidth: "none" } : undefined}
       >
         <div className="mx-auto flex min-h-full min-w-0 max-w-4xl flex-col gap-5 px-2 py-6 md:gap-7 md:px-4">
+          <AgentCandidateHint
+            disabled={Boolean(activeTopic?.isGeneral)}
+            topicId={activeTopicId}
+          />
+
           {restoredSandboxContext && (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-4 text-sm">
               <p className="font-medium text-foreground">
-                Restored sandbox context from{" "}
+                下一次对话会带入{" "}
                 {restoredSandboxContext.decisionTitle}
               </p>
-              <div className="mt-3 flex flex-col gap-2">
-                {restoredSandboxContext.messages.map((message) => (
-                  <div
-                    className="rounded-xl border border-border/40 bg-background/80 px-3 py-2"
-                    key={message.id}
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {message.role}
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-foreground">
-                      {message.content}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                {restoredSandboxContext.contextText}
+              </p>
             </div>
           )}
 

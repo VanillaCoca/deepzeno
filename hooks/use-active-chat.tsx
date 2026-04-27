@@ -56,17 +56,21 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const { mutate } = useSWRConfig();
   const {
     activeProjectId,
+    activeTopic,
     activeTopicId,
     currentConversationId,
     isArchivedTopicReadonly,
     isLoading: isWorkspaceLoading,
-    consumeRestoredContextMessageIds,
+    consumeInjectedDecisionContext,
   } = useWorkspace();
 
   const fallbackChatIdRef = useRef(generateUUID());
   const chatId = currentConversationId ?? fallbackChatIdRef.current;
   const isWorkspaceReady = Boolean(
-    activeProjectId && activeTopicId && currentConversationId
+    activeProjectId &&
+      activeTopicId &&
+      currentConversationId &&
+      !isWorkspaceLoading
   );
 
   const [currentModelId, setCurrentModelId] = useState(DEFAULT_CHAT_MODEL);
@@ -88,6 +92,28 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
 
   const [input, setInput] = useState("");
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
+  const activeTopicIdRef = useRef<string | null>(activeTopicId);
+  const activeTopicIsGeneralRef = useRef(Boolean(activeTopic?.isGeneral));
+
+  useEffect(() => {
+    activeTopicIdRef.current = activeTopicId;
+    activeTopicIsGeneralRef.current = Boolean(activeTopic?.isGeneral);
+  }, [activeTopic?.isGeneral, activeTopicId]);
+
+  function scheduleTruthPanelRefresh(topicId: string | null) {
+    if (!topicId) {
+      return;
+    }
+
+    const key = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/decisions?topicId=${topicId}`;
+    const delays = [1500, 4000, 7000];
+
+    for (const delay of delays) {
+      window.setTimeout(() => {
+        mutate(key).catch(console.error);
+      }, delay);
+    }
+  }
 
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
@@ -185,9 +211,9 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             projectId: activeProjectId,
             topicId: activeTopicId,
             conversationId: currentConversationId,
-            restoredContextMessageIds: isToolApprovalContinuation
-              ? []
-              : consumeRestoredContextMessageIds(),
+            injectedDecisionContext: isToolApprovalContinuation
+              ? undefined
+              : consumeInjectedDecisionContext(),
             ...request.body,
           },
         };
@@ -198,6 +224,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     },
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
+
+      if (!activeTopicIsGeneralRef.current) {
+        scheduleTruthPanelRefresh(activeTopicIdRef.current);
+      }
     },
     onError: (error) => {
       if (error.message?.includes("AI Gateway requires a valid credit card")) {

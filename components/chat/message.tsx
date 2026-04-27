@@ -1,5 +1,6 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
@@ -45,6 +46,7 @@ const PurePreviewMessage = ({
   requiresScrollPadding: boolean;
   onEdit?: (message: ChatMessage) => void;
 }) => {
+  const { activeTopic } = useWorkspace();
   const attachmentsFromMessage = message.parts.filter(
     (part) => part.type === "file"
   );
@@ -326,7 +328,12 @@ const PurePreviewMessage = ({
     <>
       {attachments}
       {parts}
-      {isAssistant ? <CandidateHint messageId={message.id} /> : null}
+      {isAssistant ? (
+        <CandidateHint
+          disabled={Boolean(activeTopic?.isGeneral)}
+          messageId={message.id}
+        />
+      ) : null}
       {actions}
     </>
   );

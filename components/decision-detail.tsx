@@ -1,28 +1,86 @@
 "use client";
 
-import { CheckIcon, ExternalLinkIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
+import {
+  getDecisionKindBadgeLabel,
+  getDecisionKindLabel,
+  getDecisionKindTone,
+} from "@/lib/decision-kinds";
 import { cn } from "@/lib/utils";
-import type { WorkspaceDecision, WorkspaceEdge } from "@/lib/workspace/types";
+import type {
+  WorkspaceDecision,
+  WorkspaceEdge,
+  WorkspaceTruthSnapshot,
+} from "@/lib/workspace/types";
+
+type ResolveKind = "plan" | "constraint" | "principle" | "hypothesis" | "goal";
+
+function buildRelationLabel(
+  edge: WorkspaceEdge,
+  direction: "outgoing" | "incoming",
+  title: string
+) {
+  if (edge.type === "depends_on") {
+    return direction === "outgoing"
+      ? `depends on ${title}`
+      : `depended on by ${title}`;
+  }
+
+  if (edge.type === "resolved_by") {
+    return direction === "outgoing" ? `resolves → ${title}` : `resolved by ${title}`;
+  }
+
+  return null;
+}
+
+function buildStructuredContext(decision: WorkspaceDecision) {
+  return [
+    `[${decision.id} · ${decision.kind}] ${decision.title}`,
+    decision.content,
+    decision.rationale?.trim() ? `Because: ${decision.rationale.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 export function DecisionDetail({
   decision,
   decisions,
   edges,
   onClose,
+  onUpdated,
 }: {
   decision: WorkspaceDecision | null;
   decisions: WorkspaceDecision[];
   edges: WorkspaceEdge[];
   onClose: () => void;
+  onUpdated: (snapshot: WorkspaceTruthSnapshot) => void;
 }) {
-  const { bringDecisionToSandbox, queueReferenceDraft, setSelectedDecisionId } =
-    useWorkspace();
-  const [restored, setRestored] = useState(false);
-  const [referenced, setReferenced] = useState(false);
+  const {
+    activeTopicId,
+    bringDecisionToSandbox,
+    setSelectedDecisionId,
+    queueReferenceDraft,
+  } = useWorkspace();
+  const [injected, setInjected] = useState(false);
+  const [quoted, setQuoted] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(
+    null
+  );
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveKind, setResolveKind] = useState<ResolveKind>("plan");
+  const [resolveTitle, setResolveTitle] = useState("");
+  const [resolveContent, setResolveContent] = useState("");
+  const [resolveRationale, setResolveRationale] = useState("");
   const decisionById = useMemo(
     () => new Map(decisions.map((entry) => [entry.id, entry])),
     [decisions]
@@ -34,33 +92,71 @@ export function DecisionDetail({
     }
 
     return edges.flatMap((edge) => {
+      if (edge.type !== "depends_on" && edge.type !== "resolved_by") {
+        return [];
+      }
+
       if (edge.sourceDecisionId === decision.id) {
-        return [
-          {
-            label: `${edge.type} ${decisionById.get(edge.targetDecisionId)?.title ?? edge.targetDecisionId}`,
-            targetId: edge.targetDecisionId,
-          },
-        ];
+        const target = decisionById.get(edge.targetDecisionId);
+        const label = buildRelationLabel(
+          edge,
+          "outgoing",
+          target?.title ?? edge.targetDecisionId
+        );
+
+        return label
+          ? [{ label, targetId: edge.targetDecisionId, edgeType: edge.type }]
+          : [];
       }
 
       if (edge.targetDecisionId === decision.id) {
-        return [
-          {
-            label: `${edge.type} from ${decisionById.get(edge.sourceDecisionId)?.title ?? edge.sourceDecisionId}`,
-            targetId: edge.sourceDecisionId,
-          },
-        ];
+        const source = decisionById.get(edge.sourceDecisionId);
+        const label = buildRelationLabel(
+          edge,
+          "incoming",
+          source?.title ?? edge.sourceDecisionId
+        );
+
+        return label
+          ? [{ label, targetId: edge.sourceDecisionId, edgeType: edge.type }]
+          : [];
       }
 
       return [];
     });
   }, [decision, decisionById, edges]);
 
-  const sourceAvailable = Boolean(
-    decision?.createdFromMessageId &&
-      typeof document !== "undefined" &&
-      document.getElementById(`message-${decision.createdFromMessageId}`)
-  );
+  const versionHistory = useMemo(() => {
+    if (!decision) {
+      return [];
+    }
+
+    const history: WorkspaceDecision[] = [];
+    let cursorId = decision.id;
+    const seen = new Set<string>();
+
+    while (cursorId && !seen.has(cursorId)) {
+      seen.add(cursorId);
+      const supersedesEdge = edges.find(
+        (edge) => edge.type === "supersedes" && edge.sourceDecisionId === cursorId
+      );
+
+      if (!supersedesEdge) {
+        break;
+      }
+
+      const previous = decisionById.get(supersedesEdge.targetDecisionId);
+
+      if (!previous) {
+        break;
+      }
+
+      history.push(previous);
+      cursorId = previous.id;
+    }
+
+    return history;
+  }, [decision, decisionById, edges]);
 
   if (!decision) {
     return (
@@ -69,31 +165,77 @@ export function DecisionDetail({
   }
 
   const currentDecision = decision;
+  const isOpenQuestion =
+    currentDecision.kind === "open_question" && currentDecision.status === "active";
 
-  async function handleBringToSandbox() {
+  async function handleInjectContext() {
     const success = await bringDecisionToSandbox({
+      decisionId: currentDecision.id,
       decisionTitle: currentDecision.title,
-      messageIds:
-        currentDecision.relevantMessageIds &&
-        currentDecision.relevantMessageIds.length > 0
-          ? currentDecision.relevantMessageIds
-          : currentDecision.createdFromMessageId
-            ? [currentDecision.createdFromMessageId]
-            : [],
+      kind: currentDecision.kind,
+      content: currentDecision.content,
+      rationale: currentDecision.rationale,
     });
 
     if (success) {
-      setRestored(true);
-      window.setTimeout(() => setRestored(false), 1000);
+      setInjected(true);
+      window.setTimeout(() => setInjected(false), 1000);
     }
   }
 
-  function handleReferenceNode() {
+  function handleQuote() {
     queueReferenceDraft(
-      `> [Decision: ${currentDecision.title}] ${currentDecision.content}`
+      `> [${currentDecision.id} · ${currentDecision.kind}] ${currentDecision.title}\n> ${currentDecision.content}`
     );
-    setReferenced(true);
-    window.setTimeout(() => setReferenced(false), 1000);
+    setQuoted(true);
+    window.setTimeout(() => setQuoted(false), 1000);
+  }
+
+  async function handleResolveOpenQuestion() {
+    if (!activeTopicId) {
+      return;
+    }
+
+    setIsResolving(true);
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/decisions/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            decisionId: currentDecision.id,
+            topicId: activeTopicId,
+            kind: resolveKind,
+            title: resolveTitle.trim(),
+            content: resolveContent.trim(),
+            rationale: resolveRationale.trim() || null,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to resolve open question");
+      }
+
+      const payload = (await response.json()) as {
+        decision: WorkspaceDecision;
+        snapshot: WorkspaceTruthSnapshot;
+      };
+
+      onUpdated(payload.snapshot);
+      setSelectedDecisionId(payload.decision.id);
+      setResolveOpen(false);
+      toast.success("Open question resolved into a decision.");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to resolve open question.");
+    } finally {
+      setIsResolving(false);
+    }
   }
 
   return (
@@ -118,52 +260,32 @@ export function DecisionDetail({
       </div>
 
       <div className="flex h-[calc(100%-72px)] flex-col gap-5 overflow-y-auto px-4 py-4">
+        {isOpenQuestion && (
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 text-sm text-amber-900">
+            This is an open question — no decision yet.
+          </div>
+        )}
+
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{decision.kind}</Badge>
-            <Badge
-              variant={decision.status === "active" ? "secondary" : "outline"}
-            >
-              {decision.status}
+            <Badge className={getDecisionKindTone(decision.kind)} variant="outline">
+              {getDecisionKindBadgeLabel(decision.kind)}
             </Badge>
+            <Badge variant="secondary">active</Badge>
             <Badge variant="outline">{decision.weight}</Badge>
           </div>
-          <p className="text-sm leading-6 text-foreground">
-            {decision.content}
-          </p>
+          <p className="text-sm leading-6 text-foreground">{decision.content}</p>
         </section>
 
         <section className="flex flex-col gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Because
           </p>
-          <p className="text-sm leading-6 text-muted-foreground">
-            {decision.rationale ?? "No rationale captured yet."}
-          </p>
-          {decision.createdFromMessageId ? (
-            sourceAvailable ? (
-              <button
-                className="flex items-center gap-2 text-sm text-foreground underline underline-offset-4"
-                onClick={() => {
-                  const target = document.getElementById(
-                    `message-${decision.createdFromMessageId}`
-                  );
-                  target?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                  });
-                }}
-                type="button"
-              >
-                <ExternalLinkIcon className="size-4" />
-                View source message
-              </button>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Source conversation archived
-              </p>
-            )
-          ) : null}
+          <div className="border-l-2 border-border/70 pl-3">
+            <p className="text-sm leading-6 text-muted-foreground">
+              {decision.rationale ?? "No rationale captured yet."}
+            </p>
+          </div>
           <p className="text-xs text-muted-foreground">
             Confirmed {new Date(decision.createdAt).toLocaleString()}
           </p>
@@ -191,31 +313,196 @@ export function DecisionDetail({
           )}
         </section>
 
-        <section className="mt-auto flex flex-col gap-2">
+        <section className="flex flex-col gap-2">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Actions
           </p>
           <Button
             className={cn(
-              restored && "bg-emerald-600 text-white hover:bg-emerald-600"
+              injected && "bg-emerald-600 text-white hover:bg-emerald-600"
             )}
             onClick={() => {
-              handleBringToSandbox().catch(console.error);
+              handleInjectContext().catch(console.error);
             }}
             size="sm"
           >
-            {restored ? <CheckIcon className="size-4" /> : null}
-            Bring to sandbox
+            {injected ? <CheckIcon className="size-4" /> : null}
+            {isOpenQuestion ? "讨论这个问题" : "拉入对话"}
           </Button>
           <Button
-            className={cn(referenced && "ring-2 ring-foreground/20")}
-            onClick={handleReferenceNode}
+            className={cn(quoted && "ring-2 ring-foreground/20")}
+            onClick={handleQuote}
             size="sm"
             variant="outline"
           >
-            Reference node
+            引用
           </Button>
+          {isOpenQuestion && (
+            <Button
+              onClick={() => {
+                setResolveKind("plan");
+                setResolveTitle(currentDecision.title);
+                setResolveContent(currentDecision.content);
+                setResolveRationale(currentDecision.rationale ?? "");
+                setResolveOpen((current) => !current);
+              }}
+              size="sm"
+              variant="default"
+            >
+              解决为决策
+            </Button>
+          )}
+          {isOpenQuestion && resolveOpen && (
+            <div className="rounded-2xl border border-border/60 bg-card/50 p-3">
+              <div className="grid gap-3">
+                <select
+                  className="h-10 rounded-xl border border-border/60 bg-background px-3 text-sm"
+                  onChange={(event) =>
+                    setResolveKind(event.target.value as ResolveKind)
+                  }
+                  value={resolveKind}
+                >
+                  <option value="plan">plan</option>
+                  <option value="constraint">constraint</option>
+                  <option value="principle">principle</option>
+                  <option value="hypothesis">hypothesis</option>
+                  <option value="goal">goal</option>
+                </select>
+                <Input
+                  onChange={(event) => setResolveTitle(event.target.value)}
+                  placeholder="Decision title"
+                  value={resolveTitle}
+                />
+                <Textarea
+                  onChange={(event) => setResolveContent(event.target.value)}
+                  placeholder="Decision content"
+                  rows={4}
+                  value={resolveContent}
+                />
+                <Textarea
+                  onChange={(event) => setResolveRationale(event.target.value)}
+                  placeholder="Rationale (optional)"
+                  rows={3}
+                  value={resolveRationale}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    disabled={
+                      isResolving ||
+                      !resolveTitle.trim() ||
+                      !resolveContent.trim()
+                    }
+                    onClick={() => {
+                      handleResolveOpenQuestion().catch(console.error);
+                    }}
+                    size="sm"
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    onClick={() => setResolveOpen(false)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
+
+        {versionHistory.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <button
+              className="flex items-center justify-between rounded-xl border border-border/50 px-3 py-2 text-left"
+              onClick={() => setHistoryOpen((current) => !current)}
+              type="button"
+            >
+              <span className="text-sm font-medium text-foreground">
+                历史版本 ({versionHistory.length} 次变更)
+              </span>
+              <ChevronDownIcon
+                className={cn(
+                  "size-4 transition-transform duration-200",
+                  historyOpen && "rotate-180"
+                )}
+              />
+            </button>
+            <div
+              className={cn(
+                "grid transition-all duration-200 ease-out",
+                historyOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-70"
+              )}
+            >
+              <div className="overflow-hidden">
+                <div className="flex flex-col gap-2 pt-1">
+                  {versionHistory.map((version, index) => {
+                    const summary =
+                      version.rationale?.split(/[。.!?]/)[0]?.trim() ||
+                      version.content.slice(0, 80);
+                    const expanded = expandedVersionId === version.id;
+
+                    return (
+                      <div
+                        className="rounded-xl border border-border/50 bg-card/60"
+                        key={version.id}
+                      >
+                        <button
+                          className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+                          onClick={() =>
+                            setExpandedVersionId((current) =>
+                              current === version.id ? null : version.id
+                            )
+                          }
+                          type="button"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              v{versionHistory.length - index} ·{" "}
+                              {new Date(version.createdAt).toLocaleDateString()} ·{" "}
+                              {summary}
+                            </p>
+                          </div>
+                          <ChevronDownIcon
+                            className={cn(
+                              "size-4 transition-transform duration-200",
+                              expanded && "rotate-180"
+                            )}
+                          />
+                        </button>
+                        <div
+                          className={cn(
+                            "grid transition-all duration-200 ease-out",
+                            expanded
+                              ? "grid-rows-[1fr] opacity-100"
+                              : "grid-rows-[0fr] opacity-70"
+                          )}
+                        >
+                          <div className="overflow-hidden">
+                            <div className="border-t border-border/50 px-3 py-3">
+                              <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+                                {version.content}
+                              </p>
+                              {version.rationale && (
+                                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                                  {version.rationale}
+                                </p>
+                              )}
+                              <p className="mt-3 text-xs text-muted-foreground">
+                                confirmed_in {new Date(version.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </aside>
   );

@@ -70,8 +70,19 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+    const parsed = postRequestBodySchema.safeParse(json);
+
+    if (!parsed.success) {
+      console.error("Chat API request body validation failed", {
+        issues: parsed.error.issues,
+        body: json,
+      });
+      return new ChatbotError("bad_request:api").toResponse();
+    }
+
+    requestBody = parsed.data;
+  } catch (error) {
+    console.error("Chat API request body parsing failed", error);
     return new ChatbotError("bad_request:api").toResponse();
   }
 
@@ -85,11 +96,24 @@ export async function POST(request: Request) {
       topicId,
       conversationId,
       restoredContextMessageIds = [],
+      injectedDecisionContext,
     } = requestBody;
+    console.info("Chat API request received", {
+      selectedChatModel,
+      projectId,
+      topicId,
+      conversationId,
+      messageRole: message?.role ?? null,
+      messagesCount: messages?.length ?? 0,
+      restoredContextMessageIdsCount: restoredContextMessageIds.length,
+      hasInjectedDecisionContext: Boolean(injectedDecisionContext?.trim()),
+    });
     const id = conversationId;
 
     const [, session] = await Promise.all([
-      checkBotId().catch(() => null),
+      process.env.NODE_ENV === "production"
+        ? checkBotId().catch(() => null)
+        : Promise.resolve(null),
       auth(),
     ]);
 
@@ -131,6 +155,12 @@ export async function POST(request: Request) {
       projectId,
       topicId,
       conversationId,
+    });
+    console.info("Chat API workspace selection ready", {
+      projectId: workspaceSelection.project.id,
+      topicId: workspaceSelection.topic.id,
+      conversationId: workspaceSelection.conversation.id,
+      isGeneralTopic: workspaceSelection.topic.isGeneral,
     });
     const shouldInjectWorkspaceContext = !workspaceSelection.topic.isGeneral;
 
@@ -253,6 +283,9 @@ export async function POST(request: Request) {
             )
             .join("\n")}\n</restored_context>`
         : "";
+    const injectedDecisionContextBlock = injectedDecisionContext?.trim()
+      ? `<discussion_context>\n${injectedDecisionContext.trim()}\n</discussion_context>`
+      : "";
 
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
@@ -265,21 +298,12 @@ export async function POST(request: Request) {
               ? buildDecisionContextBlock(decisionContext)
               : "",
             restoredContextBlock,
+            injectedDecisionContextBlock,
           ]
             .filter(Boolean)
             .join("\n\n"),
           messages: modelMessages,
           stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            isReasoningModel && !supportsTools
-              ? []
-              : [
-                  "getWeather",
-                  "createDocument",
-                  "editDocument",
-                  "updateDocument",
-                  "requestSuggestions",
-                ],
           providerOptions: {
             ...(resolvedModel.gatewayOrder && {
               gateway: { order: resolvedModel.gatewayOrder },
@@ -288,25 +312,38 @@ export async function POST(request: Request) {
               openai: { reasoningEffort: resolvedModel.reasoningEffort },
             }),
           },
-          tools: {
-            getWeather,
-            createDocument: createDocument({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-            editDocument: editDocument({ dataStream, session }),
-            updateDocument: updateDocument({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-          },
+          ...(supportsTools
+            ? {
+                experimental_activeTools: [
+                  "getWeather",
+                  "createDocument",
+                  "editDocument",
+                  "updateDocument",
+                  "requestSuggestions",
+                ],
+                tools: {
+                  getWeather,
+                  createDocument: createDocument({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                  editDocument: editDocument({ dataStream, session }),
+                  updateDocument: updateDocument({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                  requestSuggestions: requestSuggestions({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                },
+              }
+            : {
+                experimental_activeTools: isReasoningModel ? [] : undefined,
+              }),
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
             functionId: "stream-text",
@@ -397,11 +434,13 @@ export async function POST(request: Request) {
               topicId,
               projectId,
               messageId: lastAssistantMessage.id,
+              assistantModel: resolvedModel.providerModelId,
             }).catch(console.error);
           });
         }
       },
       onError: (error) => {
+        console.error("Chat stream execution error", error);
         if (
           error instanceof Error &&
           error.message?.includes(
@@ -439,6 +478,10 @@ export async function POST(request: Request) {
     const vercelId = request.headers.get("x-vercel-id");
 
     if (error instanceof ChatbotError) {
+      console.error("Chat API handled error:", {
+        code: `${error.type}:${error.surface}`,
+        cause: error.cause,
+      });
       return error.toResponse();
     }
 

@@ -5,25 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  getDecisionKindBadgeLabel,
+  getDecisionKindTone,
+} from "@/lib/decision-kinds";
+import { cn } from "@/lib/utils";
 import type {
   WorkspaceCandidateDecision,
   WorkspaceTruthSnapshot,
 } from "@/lib/workspace/types";
-
-function kindTone(kind: string | null) {
-  switch (kind) {
-    case "goal":
-      return "bg-emerald-500/10 text-emerald-700 border-emerald-500/20";
-    case "constraint":
-      return "bg-amber-500/10 text-amber-700 border-amber-500/20";
-    case "principle":
-      return "bg-blue-500/10 text-blue-700 border-blue-500/20";
-    case "hypothesis":
-      return "bg-sky-500/10 text-sky-700 border-sky-500/20";
-    default:
-      return "bg-violet-500/10 text-violet-700 border-violet-500/20";
-  }
-}
 
 export function CandidatePool({
   topicId,
@@ -86,7 +76,7 @@ export function CandidatePool({
   }
 
   return (
-    <section className="flex min-h-[220px] shrink-0 flex-col rounded-2xl border border-border/60 bg-background/85 shadow-[var(--shadow-card)]">
+    <section className="flex min-h-[220px] max-h-[min(48dvh,520px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background/85 shadow-[var(--shadow-card)]">
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-foreground">
@@ -136,15 +126,34 @@ export function CandidatePool({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-medium text-foreground">
+                        <p
+                          className={cn(
+                            "truncate text-sm font-medium text-foreground",
+                            candidate.proposedKind === "rejection" &&
+                              "line-through opacity-70"
+                          )}
+                        >
                           {candidate.proposedTitle ?? "Untitled candidate"}
                         </p>
                         <Badge
-                          className={kindTone(candidate.proposedKind)}
+                          className={getDecisionKindTone(
+                            candidate.proposedKind ?? "plan"
+                          )}
                           variant="outline"
                         >
-                          {candidate.proposedKind ?? "plan"}
+                          {getDecisionKindBadgeLabel(
+                            candidate.proposedKind ?? "plan"
+                          )}
                         </Badge>
+                        {candidate.source !== "zeno_extraction" && (
+                          <Badge variant="secondary">
+                            via{" "}
+                            {String(
+                              candidate.sourceMetadata?.agent ??
+                                candidate.source.replaceAll("_", " ")
+                            )}
+                          </Badge>
+                        )}
                       </div>
                       <button
                         className="mt-2 text-left text-sm leading-6 text-muted-foreground transition-colors hover:text-foreground"
@@ -159,6 +168,16 @@ export function CandidatePool({
                           {candidate.proposedContent}
                         </span>
                       </button>
+                      {candidate.externalEvidence && (
+                        <a
+                          className="mt-2 block text-xs text-muted-foreground underline underline-offset-4"
+                          href={candidate.externalEvidence}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          external evidence
+                        </a>
+                      )}
                     </div>
                   </label>
                 </div>
@@ -167,7 +186,7 @@ export function CandidatePool({
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-border/50 px-4 py-3">
+        <div className="sticky bottom-0 flex items-center gap-2 border-t border-border/50 bg-background/95 px-4 py-3 backdrop-blur">
           <Button
             className="flex-1"
             disabled={!topicId || candidates.length === 0 || isMutating}

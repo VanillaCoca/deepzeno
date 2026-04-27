@@ -5,62 +5,74 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
+import {
+  decisionKindOrder,
+  getDecisionKindBadgeLabel,
+  getDecisionKindLabel,
+  getDecisionKindTone,
+} from "@/lib/decision-kinds";
 import { cn } from "@/lib/utils";
 import type { WorkspaceDecision, WorkspaceEdge } from "@/lib/workspace/types";
 
 type ViewMode = "type" | "relation";
 
-function kindOrder(kind: string) {
-  return ["goal", "constraint", "plan", "hypothesis", "principle"].indexOf(
-    kind
-  );
+function kindPriority(kind: string) {
+  const index = decisionKindOrder.indexOf(kind as (typeof decisionKindOrder)[number]);
+  return index >= 0 ? index : decisionKindOrder.length;
 }
 
 function DecisionNode({
   decision,
   depth = 0,
-  dimmed = false,
+  relationLabel,
 }: {
   decision: WorkspaceDecision;
   depth?: number;
-  dimmed?: boolean;
+  relationLabel?: string;
 }) {
   const { selectedDecisionId, setSelectedDecisionId } = useWorkspace();
+  const isOpenQuestion = decision.kind === "open_question";
+  const isRejection = decision.kind === "rejection";
 
   return (
-    <button
-      className={cn(
-        "flex w-full items-start gap-2 rounded-xl border border-border/50 bg-card/70 px-3 py-2 text-left transition-colors hover:border-border hover:bg-card",
-        selectedDecisionId === decision.id &&
-          "border-foreground/20 bg-accent/40",
-        dimmed && "opacity-55"
-      )}
-      onClick={() => setSelectedDecisionId(decision.id)}
-      style={{ marginLeft: depth * 12 }}
-      type="button"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p
-            className={cn(
-              "truncate text-sm font-medium",
-              decision.status === "superseded" && "line-through"
-            )}
-          >
-            {decision.title}
-          </p>
-          <Badge variant="outline">{decision.kind}</Badge>
-          <Badge
-            variant={decision.status === "active" ? "secondary" : "outline"}
-          >
-            {decision.status}
-          </Badge>
-        </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-          {decision.content}
+    <div className="flex flex-col gap-2" style={{ marginLeft: depth * 12 }}>
+      {relationLabel ? (
+        <p className="pl-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          {relationLabel}
         </p>
-      </div>
-    </button>
+      ) : null}
+      <button
+        className={cn(
+          "flex w-full items-start gap-2 rounded-xl border border-border/50 bg-card/70 px-3 py-2 text-left transition-colors hover:border-border hover:bg-card",
+          selectedDecisionId === decision.id &&
+            "border-foreground/20 bg-accent/40"
+        )}
+        onClick={() => setSelectedDecisionId(decision.id)}
+        type="button"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {isOpenQuestion ? (
+              <span className="text-sm font-semibold text-amber-700">?</span>
+            ) : null}
+            <p
+              className={cn(
+                "truncate text-sm font-medium",
+                isRejection && "line-through opacity-65"
+              )}
+            >
+              {decision.title}
+            </p>
+            <Badge className={getDecisionKindTone(decision.kind)} variant="outline">
+              {getDecisionKindBadgeLabel(decision.kind)}
+            </Badge>
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+            {decision.content}
+          </p>
+        </div>
+      </button>
+    </div>
   );
 }
 
@@ -74,68 +86,82 @@ export function DecisionTree({
   isLoading: boolean;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("type");
-  const [showSuperseded, setShowSuperseded] = useState(false);
-  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>({
+    rejection: true,
+  });
 
   const visibleDecisions = useMemo(
-    () =>
-      decisions.filter(
-        (decision) => showSuperseded || decision.status !== "superseded"
-      ),
-    [decisions, showSuperseded]
+    () => decisions.filter((decision) => decision.status === "active"),
+    [decisions]
   );
   const decisionById = useMemo(
     () => new Map(visibleDecisions.map((decision) => [decision.id, decision])),
     [visibleDecisions]
   );
-  const visibleEdges = useMemo(
-    () =>
-      edges.filter(
-        (edge) =>
-          decisionById.has(edge.sourceDecisionId) &&
-          decisionById.has(edge.targetDecisionId)
-      ),
-    [decisionById, edges]
-  );
 
   const groupedByKind = useMemo(() => {
     const groups = new Map<string, WorkspaceDecision[]>();
 
-    for (const decision of visibleDecisions) {
-      const key = decision.kind;
-      const current = groups.get(key) ?? [];
-      current.push(decision);
-      groups.set(key, current);
+    for (const kind of decisionKindOrder) {
+      groups.set(kind, []);
     }
 
-    return [...groups.entries()].sort(
-      ([leftKind], [rightKind]) => kindOrder(leftKind) - kindOrder(rightKind)
-    );
+    for (const decision of visibleDecisions) {
+      const current = groups.get(decision.kind) ?? [];
+      current.push(decision);
+      groups.set(decision.kind, current);
+    }
+
+    return [...groups.entries()]
+      .map(([kind, entries]) => [
+        kind,
+        [...entries].sort((left, right) =>
+          right.createdAt.localeCompare(left.createdAt)
+        ),
+      ] as const)
+      .filter(([, entries]) => entries.length > 0)
+      .sort(([leftKind], [rightKind]) => kindPriority(leftKind) - kindPriority(rightKind));
   }, [visibleDecisions]);
 
-  const relationChildren = useMemo(() => {
-    const children = new Map<string, WorkspaceDecision[]>();
+  const relationGraph = useMemo(() => {
+    const children = new Map<
+      string,
+      Array<{ decision: WorkspaceDecision; label?: string }>
+    >();
     const attachedIds = new Set<string>();
     const childIds = new Set<string>();
 
-    for (const edge of visibleEdges) {
-      if (edge.type !== "depends_on") {
+    for (const edge of edges) {
+      if (edge.type !== "depends_on" && edge.type !== "resolved_by") {
         continue;
       }
 
-      const parent = decisionById.get(edge.targetDecisionId);
-      const child = decisionById.get(edge.sourceDecisionId);
+      const source = decisionById.get(edge.sourceDecisionId);
+      const target = decisionById.get(edge.targetDecisionId);
 
-      if (!parent || !child) {
+      if (!source || !target) {
         continue;
       }
 
-      attachedIds.add(parent.id);
-      attachedIds.add(child.id);
-      childIds.add(child.id);
-      children.set(parent.id, [...(children.get(parent.id) ?? []), child]);
+      if (edge.type === "depends_on") {
+        attachedIds.add(source.id);
+        attachedIds.add(target.id);
+        childIds.add(source.id);
+        children.set(target.id, [
+          ...(children.get(target.id) ?? []),
+          { decision: source },
+        ]);
+      }
+
+      if (edge.type === "resolved_by") {
+        attachedIds.add(source.id);
+        attachedIds.add(target.id);
+        childIds.add(source.id);
+        children.set(target.id, [
+          ...(children.get(target.id) ?? []),
+          { decision: source, label: "resolved by" },
+        ]);
+      }
     }
 
     const roots = visibleDecisions
@@ -154,31 +180,30 @@ export function DecisionTree({
         return right.createdAt.localeCompare(left.createdAt);
       });
 
-    const standalone = visibleDecisions.filter(
-      (decision) => !attachedIds.has(decision.id)
-    );
+    const standalone = visibleDecisions
+      .filter((decision) => !attachedIds.has(decision.id))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
-    return {
-      children,
-      roots,
-      standalone,
-    };
-  }, [decisionById, visibleDecisions, visibleEdges]);
+    return { children, roots, standalone };
+  }, [decisionById, edges, visibleDecisions]);
 
   function renderRelationNode(
     decision: WorkspaceDecision,
-    depth = 0
+    depth = 0,
+    relationLabel?: string
   ): React.ReactNode {
-    const children = relationChildren.children.get(decision.id) ?? [];
+    const children = relationGraph.children.get(decision.id) ?? [];
 
     return (
       <div className="flex flex-col gap-2" key={decision.id}>
         <DecisionNode
           decision={decision}
           depth={depth}
-          dimmed={decision.status === "superseded"}
+          relationLabel={relationLabel}
         />
-        {children.map((child) => renderRelationNode(child, depth + 1))}
+        {children.map((child) =>
+          renderRelationNode(child.decision, depth + 1, child.label)
+        )}
       </div>
     );
   }
@@ -189,34 +214,25 @@ export function DecisionTree({
         <div>
           <p className="text-sm font-semibold text-foreground">Decision Tree</p>
           <p className="text-xs text-muted-foreground">
-            Confirmed truth for the current topic
+            Active truth for the current topic
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-xl border border-border/60 bg-card/70 p-1">
-            <Button
-              onClick={() => setViewMode("type")}
-              size="sm"
-              variant={viewMode === "type" ? "secondary" : "ghost"}
-            >
-              <Layers3Icon className="size-4" />
-              By Type
-            </Button>
-            <Button
-              onClick={() => setViewMode("relation")}
-              size="sm"
-              variant={viewMode === "relation" ? "secondary" : "ghost"}
-            >
-              <GitBranchIcon className="size-4" />
-              By Relation
-            </Button>
-          </div>
+        <div className="flex items-center rounded-xl border border-border/60 bg-card/70 p-1">
           <Button
-            onClick={() => setShowSuperseded((current) => !current)}
+            onClick={() => setViewMode("type")}
             size="sm"
-            variant="outline"
+            variant={viewMode === "type" ? "secondary" : "ghost"}
           >
-            {showSuperseded ? "Hide superseded" : "Show superseded"}
+            <Layers3Icon className="size-4" />
+            By Type
+          </Button>
+          <Button
+            onClick={() => setViewMode("relation")}
+            size="sm"
+            variant={viewMode === "relation" ? "secondary" : "ghost"}
+          >
+            <GitBranchIcon className="size-4" />
+            By Relation
           </Button>
         </div>
       </div>
@@ -246,46 +262,43 @@ export function DecisionTree({
                   }
                   type="button"
                 >
-                  <span className="capitalize">
-                    {kind} ({entries.length})
-                  </span>
+                  <span>{getDecisionKindLabel(kind)} ({entries.length})</span>
                   <ChevronDownIcon
                     className={cn(
-                      "size-4 transition-transform",
+                      "size-4 transition-transform duration-200",
                       isCollapsed && "-rotate-90"
                     )}
                   />
                 </button>
-                {!isCollapsed && (
-                  <div className="flex flex-col gap-2">
-                    {entries.map((decision) => (
-                      <DecisionNode
-                        decision={decision}
-                        dimmed={decision.status === "superseded"}
-                        key={decision.id}
-                      />
-                    ))}
+                <div
+                  className={cn(
+                    "grid transition-all duration-200 ease-out",
+                    isCollapsed
+                      ? "grid-rows-[0fr] opacity-70"
+                      : "grid-rows-[1fr] opacity-100"
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <div className="flex flex-col gap-2 pt-1">
+                      {entries.map((decision) => (
+                        <DecisionNode decision={decision} key={decision.id} />
+                      ))}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             );
           })
         ) : (
           <>
-            {relationChildren.roots.map((decision) =>
-              renderRelationNode(decision)
-            )}
-            {relationChildren.standalone.length > 0 && (
+            {relationGraph.roots.map((decision) => renderRelationNode(decision))}
+            {relationGraph.standalone.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Standalone
                 </p>
-                {relationChildren.standalone.map((decision) => (
-                  <DecisionNode
-                    decision={decision}
-                    dimmed={decision.status === "superseded"}
-                    key={decision.id}
-                  />
+                {relationGraph.standalone.map((decision) => (
+                  <DecisionNode decision={decision} key={decision.id} />
                 ))}
               </div>
             )}

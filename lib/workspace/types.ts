@@ -93,6 +93,23 @@ export type WorkspaceCandidateDecision = {
   createdAt: string;
 };
 
+export type WorkspaceApiKey = {
+  id: string;
+  userId: string;
+  projectId: string;
+  keyPrefix: string;
+  label: string | null;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+};
+
+export type WorkspaceTruthSnapshot = {
+  decisions: WorkspaceDecision[];
+  edges: WorkspaceEdge[];
+  pendingCandidates: WorkspaceCandidateDecision[];
+};
+
 export type WorkspaceBootstrap = {
   projects: WorkspaceProject[];
   topics: WorkspaceTopic[];
@@ -102,16 +119,11 @@ export type WorkspaceBootstrap = {
   currentConversationId: string;
   pendingCandidateCounts: PendingCandidateCounts;
   isArchivedTopicReadonly: boolean;
+  truthSnapshot: WorkspaceTruthSnapshot | null;
 };
 
 export type WorkspaceSelectionParams = {
   projectId?: string | null;
   topicId?: string | null;
   conversationId?: string | null;
-};
-
-export type WorkspaceTruthSnapshot = {
-  decisions: WorkspaceDecision[];
-  edges: WorkspaceEdge[];
-  pendingCandidates: WorkspaceCandidateDecision[];
 };

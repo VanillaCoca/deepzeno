@@ -1,5 +1,6 @@
 import "server-only";
 
+import { decisionKindOrder } from "@/lib/decision-kinds";
 import { serializeDecisionGraph } from "@/lib/decision-serializer";
 import {
   listDecisionsByTopicId,
@@ -27,6 +28,12 @@ function prioritizeDecisionIds(
   }
 
   const anchors = decisions.filter((decision) => decision.weight === "anchor");
+  const openQuestions = decisions.filter(
+    (decision) => decision.kind === "open_question"
+  );
+  const rejections = decisions.filter(
+    (decision) => decision.kind === "rejection"
+  );
   const keys = decisions.filter((decision) => decision.weight === "key");
   const normals = decisions.filter(
     (decision) => decision.weight !== "anchor" && decision.weight !== "key"
@@ -66,6 +73,18 @@ function prioritizeDecisionIds(
     }
   }
 
+  for (const decision of openQuestions.sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt)
+  )) {
+    pushDecision(decision.id);
+  }
+
+  for (const decision of rejections.sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt)
+  )) {
+    pushDecision(decision.id);
+  }
+
   for (const decision of keys.sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt)
   )) {
@@ -82,10 +101,21 @@ function prioritizeDecisionIds(
 }
 
 export async function assembleContext(topicId: string, _projectId: string) {
-  const [decisions, edges] = await Promise.all([
+  const [allDecisions, allEdges] = await Promise.all([
     listDecisionsByTopicId(topicId),
     listEdgesByTopicId(topicId),
   ]);
+
+  const decisions = allDecisions.filter(
+    (decision: WorkspaceDecision) => decision.status === "active"
+  );
+  const decisionIds = new Set(
+    decisions.map((decision: WorkspaceDecision) => decision.id)
+  );
+  const edges = allEdges.filter(
+    (edge: WorkspaceEdge) =>
+      decisionIds.has(edge.sourceDecisionId) && decisionIds.has(edge.targetDecisionId)
+  );
 
   if (decisions.length === 0) {
     return "";
@@ -113,5 +143,20 @@ export async function assembleContext(topicId: string, _projectId: string) {
     selected.push(decision);
   }
 
-  return serializeDecisionGraph(selected, edges);
+  const orderedSelected = [...selected].sort((left, right) => {
+    const leftKind = decisionKindOrder.indexOf(
+      left.kind as (typeof decisionKindOrder)[number]
+    );
+    const rightKind = decisionKindOrder.indexOf(
+      right.kind as (typeof decisionKindOrder)[number]
+    );
+
+    if (leftKind !== rightKind) {
+      return (leftKind >= 0 ? leftKind : 999) - (rightKind >= 0 ? rightKind : 999);
+    }
+
+    return right.createdAt.localeCompare(left.createdAt);
+  });
+
+  return serializeDecisionGraph(orderedSelected, edges);
 }

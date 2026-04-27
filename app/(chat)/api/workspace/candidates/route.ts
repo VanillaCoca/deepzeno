@@ -2,7 +2,9 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import {
   listCandidatesByMessageId,
+  listCandidatesByTopicId,
   listPendingCandidatesByTopicId,
+  getTopicByIdForUser,
 } from "@/lib/workspace/queries";
 import { getTopicTruthSnapshot } from "@/lib/workspace/service";
 
@@ -17,15 +19,21 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const topicId = searchParams.get("topicId");
     const messageId = searchParams.get("messageId");
+    const source = searchParams.get("source");
+    const includeReviewed = searchParams.get("includeReviewed") === "true";
 
     if (messageId) {
       const candidates = await listCandidatesByMessageId(messageId);
 
       if (candidates.length > 0) {
-        await getTopicTruthSnapshot({
-          userId: session.user.id,
-          topicId: candidates[0].topicId,
-        });
+        const topic = await getTopicByIdForUser(
+          candidates[0].topicId,
+          session.user.id
+        );
+
+        if (!topic) {
+          return new ChatbotError("forbidden:chat").toResponse();
+        }
       }
 
       return Response.json({ candidates });
@@ -36,6 +44,23 @@ export async function GET(request: Request) {
         "bad_request:api",
         "topicId or messageId is required"
       ).toResponse();
+    }
+
+    if (source) {
+      await getTopicTruthSnapshot({
+        userId: session.user.id,
+        topicId,
+      });
+
+      const candidates = await listCandidatesByTopicId(topicId, {
+        source,
+        statuses: includeReviewed
+          ? ["pending", "accepted", "rejected"]
+          : ["pending"],
+        limit: includeReviewed ? 24 : undefined,
+      });
+
+      return Response.json({ candidates });
     }
 
     const snapshot = await getTopicTruthSnapshot({

@@ -1,7 +1,40 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-export async function middleware(request: NextRequest) {
+function decodeJwtPayload(token: string | null | undefined) {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "="
+    );
+    const payload = JSON.parse(
+      Buffer.from(padded, "base64").toString("utf8")
+    ) as {
+      sub?: string;
+      exp?: number;
+    };
+
+    if (payload.exp && payload.exp * 1000 <= Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -37,21 +70,23 @@ export async function middleware(request: NextRequest) {
   });
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
+  const claims = decodeJwtPayload(session?.access_token);
+  const userId = typeof claims?.sub === "string" ? claims.sub : null;
   const { pathname, search } = request.nextUrl;
   const isAuthPage = pathname === "/login" || pathname === "/register";
   const isProtectedPage = pathname === "/" || pathname.startsWith("/chat");
 
-  if (!user && isProtectedPage) {
+  if (!userId && isProtectedPage) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isAuthPage) {
+  if (userId && isAuthPage) {
     const workspaceUrl = request.nextUrl.clone();
     workspaceUrl.pathname = "/";
     workspaceUrl.search = "";
@@ -62,7 +97,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/", "/chat/:path*", "/login", "/register"],
 };

@@ -20,7 +20,6 @@ import type {
   PendingCandidateCounts,
   WorkspaceBootstrap,
   WorkspaceConversation,
-  WorkspaceMessageRecord,
   WorkspaceProject,
   WorkspaceSelectionParams,
   WorkspaceTopic,
@@ -31,11 +30,11 @@ type DraftInsertion = {
   text: string;
 };
 
-type RestoredSandboxContext = {
+type InjectedSandboxContext = {
   nonce: number;
   decisionTitle: string;
-  messageIds: string[];
-  messages: WorkspaceMessageRecord[];
+  kind: string;
+  contextText: string;
   consumeOnNextSend: boolean;
 };
 
@@ -68,13 +67,16 @@ type WorkspaceContextValue = {
   referenceDraft: DraftInsertion | null;
   queueReferenceDraft: (text: string) => void;
   consumeReferenceDraft: () => DraftInsertion | null;
-  restoredSandboxContext: RestoredSandboxContext | null;
+  restoredSandboxContext: InjectedSandboxContext | null;
   bringDecisionToSandbox: (params: {
+    decisionId: string;
     decisionTitle: string;
-    messageIds: string[];
+    kind: string;
+    content: string;
+    rationale?: string | null;
   }) => Promise<boolean>;
   clearRestoredSandboxContext: () => void;
-  consumeRestoredContextMessageIds: () => string[];
+  consumeInjectedDecisionContext: () => string | null;
   setPendingCount: (topicId: string, count: number) => void;
 };
 
@@ -106,6 +108,35 @@ function buildBootstrapUrl(selection: WorkspaceSelectionParams) {
   return query ? `${prefix}?${query}` : prefix;
 }
 
+function selectionMatchesWorkspace(
+  workspace: WorkspaceBootstrap | null,
+  selection: WorkspaceSelectionParams
+) {
+  if (!workspace) {
+    return false;
+  }
+
+  if (
+    selection.projectId &&
+    workspace.activeProjectId !== selection.projectId
+  ) {
+    return false;
+  }
+
+  if (selection.topicId && workspace.activeTopicId !== selection.topicId) {
+    return false;
+  }
+
+  if (
+    selection.conversationId &&
+    workspace.currentConversationId !== selection.conversationId
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const selectionRef = useRef<WorkspaceSelectionParams>({
@@ -121,15 +152,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     null
   );
   const [restoredSandboxContext, setRestoredSandboxContext] =
-    useState<RestoredSandboxContext | null>(null);
+    useState<InjectedSandboxContext | null>(null);
   const [pendingCandidateCounts, setPendingCandidateCounts] =
     useState<PendingCandidateCounts>({});
 
-  const { data, isLoading, mutate } = useSWR<{ workspace: WorkspaceBootstrap }>(
+  const {
+    data,
+    isLoading: isBootstrapLoading,
+    isValidating,
+    mutate,
+  } = useSWR<{ workspace: WorkspaceBootstrap }>(
     buildBootstrapUrl(selection),
     fetcher,
     {
       revalidateOnFocus: false,
+      keepPreviousData: true,
+      dedupingInterval: 1_500,
     }
   );
 
@@ -142,6 +180,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const currentConversationId = workspace?.currentConversationId ?? null;
   const activeTopic =
     topics.find((topic) => topic.id === activeTopicId) ?? null;
+  const isSelectionPending = !selectionMatchesWorkspace(workspace, selection);
+  const isLoading = isBootstrapLoading || (isValidating && isSelectionPending);
 
   useEffect(() => {
     selectionRef.current = selection;
@@ -376,40 +416,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   async function bringDecisionToSandbox({
+    decisionId: _decisionId,
     decisionTitle,
-    messageIds,
+    kind,
+    content,
+    rationale,
   }: {
+    decisionId: string;
     decisionTitle: string;
-    messageIds: string[];
+    kind: string;
+    content: string;
+    rationale?: string | null;
   }) {
-    if (messageIds.length === 0) {
-      toast.error("This node does not have linked source messages yet.");
+    const normalizedContent = content.trim();
+
+    if (!normalizedContent) {
+      toast.error("This node does not have enough structured content yet.");
       return false;
     }
 
-    const params = new URLSearchParams();
-
-    for (const messageId of messageIds) {
-      params.append("ids", messageId);
-    }
-
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/messages?${params.toString()}`
-    );
-
-    if (!response.ok) {
-      toast.error("Failed to restore the related workspace context.");
-      return false;
-    }
-
-    const payload = await response.json();
-    const messages = payload.messages as WorkspaceMessageRecord[];
+    const lines = [
+      `[${kind}] ${decisionTitle}`,
+      normalizedContent,
+      rationale?.trim() ? `Because: ${rationale.trim()}` : null,
+    ].filter(Boolean);
 
     setRestoredSandboxContext({
       nonce: Date.now(),
       decisionTitle,
-      messageIds,
-      messages,
+      kind,
+      contextText: lines.join("\n"),
       consumeOnNextSend: true,
     });
 
@@ -420,9 +456,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setRestoredSandboxContext(null);
   }
 
-  function consumeRestoredContextMessageIds() {
+  function consumeInjectedDecisionContext() {
     if (!restoredSandboxContext?.consumeOnNextSend) {
-      return [];
+      return null;
     }
 
     setRestoredSandboxContext((current) =>
@@ -434,7 +470,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         : null
     );
 
-    return restoredSandboxContext.messageIds;
+    return restoredSandboxContext.contextText;
   }
 
   function setPendingCount(topicId: string, count: number) {
@@ -476,7 +512,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     restoredSandboxContext,
     bringDecisionToSandbox,
     clearRestoredSandboxContext,
-    consumeRestoredContextMessageIds,
+    consumeInjectedDecisionContext,
     setPendingCount,
   };
 

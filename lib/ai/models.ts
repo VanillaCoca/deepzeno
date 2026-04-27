@@ -76,7 +76,7 @@ const modelCatalog: ChatModelDefinition[] = [
     providerLabel: "DashScope",
     description: "OpenAI-compatible model routed through DashScope.",
     capabilities: {
-      tools: true,
+      tools: false,
       vision: false,
       reasoning: false,
     },
@@ -100,7 +100,7 @@ const modelCatalog: ChatModelDefinition[] = [
     description:
       "DeepSeek's OpenAI-compatible chat model for coding and reasoning.",
     capabilities: {
-      tools: true,
+      tools: false,
       vision: false,
       reasoning: false,
     },

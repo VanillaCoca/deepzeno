@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ProjectApiKeyDialog } from "@/components/project-api-key-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -70,6 +71,8 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
     () => topics.filter((topic) => Boolean(topic.archivedAt)),
     [topics]
   );
+  const activeProjectName =
+    projects.find((project) => project.id === activeProjectId)?.name ?? null;
 
   async function handleSignOut() {
     if (!isSupabaseConfigured()) {
@@ -176,6 +179,11 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                   <PlusIcon className="size-4" />
                   New Project
                 </Button>
+                <ProjectApiKeyDialog
+                  disabled={isLoading}
+                  projectId={activeProjectId}
+                  projectName={activeProjectName}
+                />
               </div>
             </SidebarGroupContent>
           </SidebarGroup>

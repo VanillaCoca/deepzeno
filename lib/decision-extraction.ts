@@ -3,6 +3,11 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { generateObject } from "ai";
 import { z } from "zod";
+import {
+  decisionKindOrder,
+  isDecisionKind,
+  type DecisionKind,
+} from "@/lib/decision-kinds";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { serializeDecisionGraph } from "@/lib/decision-serializer";
 import { extractionSystemPrompt } from "@/lib/prompting";
@@ -20,7 +25,7 @@ const extractedCandidateSchema = z.object({
   proposed_content: z.string().min(1).max(4000),
   proposed_rationale: z.string().max(4000).nullable().optional(),
   proposed_kind: z
-    .enum(["goal", "constraint", "plan", "hypothesis", "principle"])
+    .enum(decisionKindOrder)
     .nullable()
     .optional(),
   proposed_weight: z.enum(["anchor", "key", "normal"]).nullable().optional(),
@@ -35,6 +40,7 @@ const extractedCandidateSchema = z.object({
     .nullable()
     .optional(),
   relevant_message_ids: z.array(z.string().uuid()).default([]),
+  pre_selected: z.boolean().nullable().optional(),
 });
 
 const extractionResponseSchema = z.object({
@@ -60,10 +66,34 @@ function summarizeTitle(content: string) {
   return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
 }
 
-function inferKind(
-  content: string
-): "goal" | "constraint" | "plan" | "hypothesis" | "principle" {
+function inferKind(content: string): DecisionKind {
   const text = content.toLowerCase();
+
+  if (
+    text.includes("以后再说") ||
+    text.includes("先不决定") ||
+    text.includes("待定") ||
+    text.includes("we'll decide later") ||
+    text.includes("decide later") ||
+    text.includes("看情况")
+  ) {
+    return "open_question";
+  }
+
+  if (
+    text.includes("不买") ||
+    text.includes("不碰") ||
+    text.includes("不要做") ||
+    text.includes("不要") ||
+    text.includes("不考虑") ||
+    text.includes("先不做") ||
+    text.includes("排除") ||
+    text.includes("避免") ||
+    text.includes("not use") ||
+    text.includes("decided not to")
+  ) {
+    return "rejection";
+  }
 
   if (
     text.includes("must") ||
@@ -100,7 +130,7 @@ function inferKind(
     return "principle";
   }
 
-  return "plan" as const;
+  return "plan";
 }
 
 function heuristicExtraction(
@@ -120,48 +150,75 @@ function heuristicExtraction(
     .split(/[\n。！？.!?]/)
     .map((segment: string) => segment.trim())
     .filter(Boolean)
-    .filter((segment: string) => segment.length > 16)
+    .filter((segment: string) => segment.length > 8)
     .filter((segment: string) =>
-      /(will|should|must|need|use|prefer|decide|plan|adopt|需要|采用|决定|计划|应该|将)/i.test(
+      /(will|should|must|need|use|prefer|decide|plan|adopt|avoid|target|需要|采用|决定|计划|应该|将|目标|优先|不买|不碰|不要|先不|排除|避免|只做)/i.test(
         segment
       )
     )
-    .slice(0, 3);
+    .slice(0, 5);
 
-  return segments.map((segment: string) => ({
-    proposed_title: summarizeTitle(segment),
-    proposed_content: segment,
-    proposed_rationale: "Extracted with the lightweight fallback extractor.",
-    proposed_kind: inferKind(segment),
-    proposed_weight: "normal" as const,
-    confidence: 0.55,
-    suggested_edges: [],
-    relevant_message_ids: sourceMessages.map(
-      (message: WorkspaceMessageRecord) => message.id
-    ),
-  }));
+  return segments.map((segment: string) => {
+    const kind = inferKind(segment);
+
+    return {
+      proposed_title: summarizeTitle(segment),
+      proposed_content: segment,
+      proposed_rationale: "Extracted with the lightweight fallback extractor.",
+      proposed_kind: kind,
+      proposed_weight: "normal" as const,
+      confidence:
+        kind === "open_question" || kind === "rejection" ? 0.45 : 0.55,
+      suggested_edges: [],
+      relevant_message_ids: sourceMessages.map(
+        (message: WorkspaceMessageRecord) => message.id
+      ),
+      pre_selected: kind === "rejection" ? false : undefined,
+    };
+  });
 }
 
 function normalizeCandidates(
   rawCandidates: z.infer<typeof extractedCandidateSchema>[]
 ) {
   return rawCandidates
-    .map((candidate) => ({
-      proposedTitle: candidate.proposed_title?.trim() || null,
-      proposedContent: candidate.proposed_content.trim(),
-      proposedRationale: candidate.proposed_rationale?.trim() || null,
-      proposedKind: candidate.proposed_kind ?? "plan",
-      proposedWeight: candidate.proposed_weight ?? "normal",
-      confidence: candidate.confidence ?? 0.75,
-      suggestedEdges:
-        candidate.suggested_edges?.map((edge) => ({
-          type: edge.type,
-          ...(edge.target_decision_id
-            ? { targetDecisionId: edge.target_decision_id }
-            : {}),
-        })) ?? [],
-      relevantMessageIds: candidate.relevant_message_ids,
-    }))
+    .map((candidate) => {
+      const proposedKind = candidate.proposed_kind ?? "plan";
+
+      if (!isDecisionKind(proposedKind)) {
+        console.warn("Dropping extracted candidate with unsupported kind", {
+          proposedKind,
+        });
+        return null;
+      }
+
+      const confidence = candidate.confidence ?? 0.75;
+      const preSelected =
+        candidate.pre_selected ??
+        (proposedKind === "rejection" ? false : confidence >= 0.5);
+
+      return {
+        proposedTitle: candidate.proposed_title?.trim() || null,
+        proposedContent: candidate.proposed_content.trim(),
+        proposedRationale: candidate.proposed_rationale?.trim() || null,
+        proposedKind,
+        proposedWeight: candidate.proposed_weight ?? "normal",
+        confidence,
+        preSelected,
+        suggestedEdges:
+          candidate.suggested_edges?.map((edge) => ({
+            type: edge.type,
+            ...(edge.target_decision_id
+              ? { targetDecisionId: edge.target_decision_id }
+              : {}),
+          })) ?? [],
+        relevantMessageIds: candidate.relevant_message_ids,
+      };
+    })
+    .filter(
+      (candidate): candidate is NonNullable<typeof candidate> =>
+        Boolean(candidate)
+    )
     .filter((candidate) => candidate.proposedContent.length > 0);
 }
 
@@ -170,11 +227,13 @@ export async function extractDecisions({
   topicId,
   projectId,
   messageId,
+  assistantModel,
 }: {
   conversationId: string;
   topicId: string;
   projectId: string;
   messageId: string;
+  assistantModel: string;
 }) {
   try {
     const [messages, decisions, edges] = await Promise.all([
@@ -196,16 +255,30 @@ export async function extractDecisions({
       .join("\n");
 
     let normalized: ReturnType<typeof normalizeCandidates> = [];
+    let extractionSourceModel = "heuristic-fallback";
+    const extractionPrompt = `Existing decisions:\n${serializedGraph || "(none)"}\n\nConversation:\n${transcript}`;
 
-    if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const extractorModelId = process.env.ANTHROPIC_API_KEY
+        ? "anthropic:claude-sonnet-4-6"
+        : assistantModel;
+
       const result = await generateObject({
-        model: getLanguageModel("anthropic:claude-sonnet-4-6"),
+        model: getLanguageModel(extractorModelId),
         system: extractionSystemPrompt,
-        prompt: `Existing decisions:\n${serializedGraph || "(none)"}\n\nConversation:\n${transcript}`,
+        prompt: extractionPrompt,
         schema: extractionResponseSchema,
       });
+
       normalized = normalizeCandidates(result.object.candidates);
-    } else {
+      extractionSourceModel = extractorModelId;
+    } catch (modelError) {
+      console.warn("Structured decision extraction failed, falling back", {
+        assistantModel,
+        error:
+          modelError instanceof Error ? modelError.message : String(modelError),
+      });
+
       normalized = normalizeCandidates(
         heuristicExtraction(messages, messageId)
       );
@@ -239,15 +312,13 @@ export async function extractDecisions({
           proposedKind: candidate.proposedKind,
           proposedWeight: candidate.proposedWeight,
           confidence: candidate.confidence,
-          preSelected: true,
+          preSelected: candidate.preSelected,
           suggestedEdges: candidate.suggestedEdges,
           relevantMessageIds: candidate.relevantMessageIds,
           contentHash,
           source: "zeno_extraction",
           sourceMetadata: {
-            extractor: process.env.ANTHROPIC_API_KEY
-              ? "claude-sonnet-4-6"
-              : "heuristic-fallback",
+            model: extractionSourceModel,
           },
         },
       ]);

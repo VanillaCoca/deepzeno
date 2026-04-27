@@ -9,19 +9,27 @@ import {
 import { fetcher } from "@/lib/utils";
 import type { WorkspaceCandidateDecision } from "@/lib/workspace/types";
 
-export function CandidateHint({ messageId }: { messageId: string }) {
+export function CandidateHint({
+  messageId,
+  disabled = false,
+}: {
+  messageId: string;
+  disabled?: boolean;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { data, mutate } = useSWR<{ candidates: WorkspaceCandidateDecision[] }>(
-    `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/candidates?messageId=${messageId}`,
+    disabled
+      ? null
+      : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/candidates?messageId=${messageId}`,
     fetcher,
     {
       revalidateOnFocus: false,
-      refreshInterval: 4000,
+      refreshInterval: !disabled && !isSupabaseConfigured() ? 4000 : 0,
     }
   );
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
+    if (disabled || !isSupabaseConfigured()) {
       return;
     }
 
@@ -45,7 +53,7 @@ export function CandidateHint({ messageId }: { messageId: string }) {
     return () => {
       supabase.removeChannel(channel).catch(console.error);
     };
-  }, [messageId, mutate]);
+  }, [disabled, messageId, mutate]);
 
   const candidates = data?.candidates ?? [];
 

@@ -8,16 +8,20 @@ import {
   createTopicForProject,
   endConversation,
   getConversationByIdForUser,
+  getDecisionByIdForUser,
   getProjectByIdForUser,
   getTopicByIdForUser,
+  insertDecision,
+  insertDecisionLog,
+  insertEdge,
   listConversationsByTopicId,
   listDecisionsByTopicId,
   listEdgesByTopicId,
-  listPendingCandidateCountsByProjectId,
   listPendingCandidatesByTopicId,
   listProjectsByUserId,
   listTopicsByProjectId,
   listWorkspaceMessagesByIds,
+  updateDecisionStatus,
 } from "./queries";
 import type {
   WorkspaceBootstrap,
@@ -122,7 +126,9 @@ export async function bootstrapWorkspace({
       ? await getProjectByIdForUser(selectedConversation.projectId, userId)
       : null) ??
     (selection?.projectId
-      ? await getProjectByIdForUser(selection.projectId, userId)
+      ? projects.find(
+          (project: (typeof projects)[number]) => project.id === selection.projectId
+        ) ?? null
       : null) ??
     projects[0];
 
@@ -188,10 +194,6 @@ export async function bootstrapWorkspace({
     );
   }
 
-  const pendingCandidateCounts = await listPendingCandidateCountsByProjectId(
-    activeProject.id
-  );
-
   return {
     projects,
     topics,
@@ -199,8 +201,9 @@ export async function bootstrapWorkspace({
     activeProjectId: activeProject.id,
     activeTopicId: activeTopic.id,
     currentConversationId,
-    pendingCandidateCounts,
+    pendingCandidateCounts: {},
     isArchivedTopicReadonly: Boolean(activeTopic.archivedAt),
+    truthSnapshot: null,
   };
 }
 
@@ -389,4 +392,87 @@ export async function getWorkspaceMessagesForSandbox({
   return allowed.filter((record): record is (typeof records)[number] =>
     Boolean(record)
   );
+}
+
+export async function resolveOpenQuestionForUser({
+  userId,
+  decisionId,
+  kind,
+  title,
+  content,
+  rationale,
+}: {
+  userId: string;
+  decisionId: string;
+  kind: "plan" | "constraint" | "principle" | "hypothesis" | "goal";
+  title: string;
+  content: string;
+  rationale?: string | null;
+}) {
+  const sourceDecision = await getDecisionByIdForUser(decisionId, userId);
+
+  if (!sourceDecision) {
+    throw new ChatbotError("forbidden:chat", "Decision not found");
+  }
+
+  if (sourceDecision.kind !== "open_question" || sourceDecision.status !== "active") {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Only active open questions can be resolved"
+    );
+  }
+
+  const createdDecision = await insertDecision({
+    projectId: sourceDecision.projectId,
+    topicId: sourceDecision.topicId,
+    title,
+    content,
+    rationale: rationale ?? null,
+    kind,
+    weight: sourceDecision.weight,
+    status: "active",
+    relevantMessageIds: sourceDecision.relevantMessageIds,
+    createdFromMessageId: sourceDecision.createdFromMessageId,
+    confirmedByUserId: userId,
+  });
+
+  await insertEdge({
+    projectId: sourceDecision.projectId,
+    topicId: sourceDecision.topicId,
+    sourceDecisionId: createdDecision.id,
+    targetDecisionId: sourceDecision.id,
+    type: "resolved_by",
+  });
+
+  await updateDecisionStatus({
+    decisionId: sourceDecision.id,
+    status: "superseded",
+  });
+
+  await insertDecisionLog({
+    decisionId: sourceDecision.id,
+    action: "open_question_resolved",
+    actorType: "user",
+    metadata: {
+      resolvedByDecisionId: createdDecision.id,
+    },
+  });
+  await insertDecisionLog({
+    decisionId: createdDecision.id,
+    action: "created",
+    actorType: "user",
+    metadata: {
+      resolvedOpenQuestionId: sourceDecision.id,
+    },
+  });
+
+  const snapshot = await getTopicTruthSnapshot({
+    userId,
+    topicId: sourceDecision.topicId,
+  });
+
+  return {
+    decision: createdDecision,
+    snapshot,
+  };
 }

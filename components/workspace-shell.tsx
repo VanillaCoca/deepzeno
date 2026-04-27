@@ -44,7 +44,7 @@ export function WorkspaceShell({
 
           <aside
             className={cn(
-              "hidden h-dvh w-[360px] shrink-0 border-l border-border/40 bg-muted/35 xl:flex xl:flex-col",
+              "hidden h-dvh min-h-0 w-[360px] shrink-0 border-l border-border/40 bg-muted/35 xl:flex xl:flex-col",
               !showTruthPanel && "xl:hidden"
             )}
           >

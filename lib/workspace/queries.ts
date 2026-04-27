@@ -602,15 +602,42 @@ export async function listPendingCandidateCountsByProjectId(projectId: string) {
 }
 
 export async function listPendingCandidatesByTopicId(topicId: string) {
+  return listCandidatesByTopicId(topicId, {
+    statuses: ["pending"],
+  });
+}
+
+export async function listCandidatesByTopicId(
+  topicId: string,
+  options?: {
+    source?: string;
+    statuses?: string[];
+    limit?: number;
+  }
+) {
   const client = getClient();
+  let query = client
+    .from("candidate_decisions")
+    .select("*")
+    .eq("topic_id", topicId);
+
+  if (options?.source) {
+    query = query.eq("source", options.source);
+  }
+
+  if (options?.statuses?.length === 1) {
+    query = query.eq("status", options.statuses[0]);
+  } else if (options?.statuses && options.statuses.length > 1) {
+    query = query.in("status", options.statuses);
+  }
+
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
   const rows = await ensureResult(
-    client
-      .from("candidate_decisions")
-      .select("*")
-      .eq("topic_id", topicId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: false }),
-    "Failed to list pending candidates"
+    query.order("created_at", { ascending: false }),
+    "Failed to list topic candidates"
   );
 
   return (rows ?? []).map((row: DatabaseRecord) => mapCandidate(row));
@@ -743,6 +770,21 @@ export async function listDecisionsByTopicId(topicId: string) {
   );
 
   return (rows ?? []).map((row: DatabaseRecord) => mapDecision(row));
+}
+
+export async function getDecisionByIdForUser(decisionId: string, userId: string) {
+  const client = getClient();
+  const row = await ensureResult(
+    client
+      .from("decisions")
+      .select("*, projects!inner(user_id)")
+      .eq("id", decisionId)
+      .eq("projects.user_id", userId)
+      .maybeSingle(),
+    "Failed to load decision"
+  );
+
+  return row ? mapDecision(row as DatabaseRecord) : null;
 }
 
 export async function listEdgesByTopicId(topicId: string) {
