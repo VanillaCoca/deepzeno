@@ -1,0 +1,62 @@
+
+###UI与视觉方面的小优化：
+1. 把每个topic标签后的 “active” 删掉
+2. 把Deploy with Vercel icon 删掉
+3. 把开始对话前的四个预设的prompt选项删掉（What are the advantages of using Next.js?Help me write an essay about Silicon Valley; Write code to demonstrate Dijkstra's algorithm; What is the weather in San Francisco?）
+4. 把中间 sandbox左上角，选择 Private/Public 的按钮和功能删掉
+
+
+###交互层面的UI优化
+## Candidate Pool 位置调整
+
+**Context:**
+当前实现把 Candidate Pool 放在右侧 Truth Panel 顶部，这违反了产品的"三层状态分离"架构（Sandbox / Candidate / Truth）。Candidate 是 Sandbox 的产物，是流动的待决策状态；Truth 是已确认的稳定判断。两者放在同一容器里互相挤压视觉空间，会模糊语义边界，并且让用户在 sandbox 对话时无法感知候选的存在。
+
+**Goal:**
+把 Candidate Pool 从 Truth Panel 移到 Sandbox 区域内，让候选在用户的对话视线焦点附近出现，同时把整个右侧 Truth Panel 留给 Decision Tree。
+
+**Changes:**
+
+1. **移除位置**：Truth Panel（右侧）顶部的整个 Candidate Pool 区块完全移除，包括 "Candidate Pool / No pending candidates" 标题、空状态占位、Confirm Selected / Dismiss All 按钮。Truth Panel 只保留 Decision Tree（含 By Type / By Relation 切换）。
+
+2. **新位置**：在 Sandbox 中间区域（消息列表）的**底部、输入框（Ask anything...）上方**，新增一个 Candidate Pool 容器，宽度与输入框对齐（同一 max-width，同一水平居中）。
+
+3. **默认状态：collapsed（折叠）**
+   - 单行高度，约 40-48px
+   - 内容从左到右：图标 + 文字 "N candidates pending"（N=0 时显示 "No pending candidates" 并整行降低透明度到 0.5）+ 右侧展开箭头（chevron-down）
+   - 整行可点击展开
+   - 视觉风格：与输入框同色调的容器，圆角与输入框一致，但边框比输入框更弱（subtle），保证视觉权重低于输入框
+
+4. **展开状态：expanded**
+   - 容器从底部向上展开，最大高度限制为 sandbox 可视高度的 50%，超出滚动
+   - 内容：候选列表 + 底部固定的操作栏（Confirm Selected / Dismiss All 两个按钮，靠右对齐）
+   - 列表项保留现有交互：每条候选可勾选、显示 confidence、source_model、type 标签
+   - 右上角放收起箭头（chevron-up）
+
+5. **新候选到达时的提示**
+   - 不要自动展开（避免打断用户输入）
+   - collapsed 容器右侧出现一个数字角标，显示新增候选数量
+   - 整行做一次轻微的高亮脉冲动画（约 600ms，背景色短暂变亮后回落），仅触发一次
+   - 数字角标在用户展开过一次后清零
+
+6. **状态持久化**
+   - 折叠/展开状态在 topic 切换时重置为 collapsed
+   - 同一 topic 内，用户手动展开后，状态在当前 session 内保持
+
+**Out of scope（明确不做）：**
+- 不要把 Candidate Pool 做成可拖拽改变高度
+- 不要在 Truth Panel 留任何 candidate 相关入口
+- 不要做"自动 confirm 高 confidence 候选"
+- 不要改 candidate 数据结构和 API
+
+**验收标准：**
+- Truth Panel 顶部不再有任何 candidate 相关 UI，整个右侧从顶到底只有 Decision Tree
+- 在 sandbox 任意状态下，用户都能在不离开对话视线的情况下看到 "N candidates pending" 这一行
+- 折叠状态下 Candidate Pool 占用的垂直空间不超过输入框单行高度的 1.2 倍
+
+---
+
+直接复制给 codex。两个补充：
+
+- 如果 codex 问"要不要在 collapsed 状态显示候选预览（比如最新一条）"，**不要**——会让那一行视觉权重压过输入框。
+- 如果它问"按钮要不要保留 sticky 在容器底部"，**要**，长列表滚动时操作栏要常驻可见。

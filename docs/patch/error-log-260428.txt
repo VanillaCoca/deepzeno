@@ -1,0 +1,359 @@
+PS C:\Users\10021\Documents\GitHub\zeno-vercel-chatbot> npm run dev
+
+> chatbot@3.1.0 dev
+> next dev --turbo
+
+▲ Next.js 16.2.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.2.168:3000
+- Environments: .env.local
+✓ Ready in 393ms
+- Cache Components enabled
+- Experiments (use with caution):
+  ✓ appNewScrollHandler
+  ✓ cachedNavigations
+  ✓ inlineCss
+  ✓ prefetchInlining
+
+ │ GET https://qrwpkynidozvewvx../rest/v1/projects?select=*&user_i.. 200 in 399ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*&projec.. 200 in 79ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/conversations?select=*&topic_.. 200 in 76ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Message_v2?select=*&chatId.. 200 in 77ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 85ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 57ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Vote_v2?select=*&chatId.. 200 in 66ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/projects?select=*&user_i.. 200 in 57ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*&projec.. 200 in 72ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/conversations?select=*&topic_.. 200 in 56ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 62ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Message_v2?select=*&chatId.. 200 in 72ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 55ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 56ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 115ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 134ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 61ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Vote_v2?select=*&chatId.. 200 in 74ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 96ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 64ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 100ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 120ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 53ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 237ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+Chat API request received {
+  selectedChatModel: 'openai:gpt-4.1',
+  projectId: '8dcf6962-f050-4f0c-bcc4-5e24f325496d',
+  topicId: 'a773e9b5-b286-4322-838e-646a5aed446b',
+  conversationId: '6be0be33-5c81-4da5-b9ad-c7c7a06d8d04',
+  messageRole: 'user',
+  messagesCount: 0,
+  restoredContextMessageIdsCount: 0,
+  hasInjectedDecisionContext: false
+}
+Chat API workspace selection ready {
+  projectId: '8dcf6962-f050-4f0c-bcc4-5e24f325496d',
+  topicId: 'a773e9b5-b286-4322-838e-646a5aed446b',
+  conversationId: '6be0be33-5c81-4da5-b9ad-c7c7a06d8d04',
+  isGeneralTopic: false
+}
+Error [AI_APICallError]: Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.
+    at ignore-listed frames {
+  cause: undefined,
+  url: 'https://api.openai.com/v1/chat/completions',
+  requestBodyValues: {
+    model: 'gpt-4.1',
+    logit_bias: undefined,
+    logprobs: undefined,
+    top_logprobs: undefined,
+    user: undefined,
+    parallel_tool_calls: undefined,
+    max_tokens: undefined,
+    temperature: undefined,
+    top_p: undefined,
+    frequency_penalty: undefined,
+    presence_penalty: undefined,
+    response_format: undefined,
+    stop: undefined,
+    seed: undefined,
+    verbosity: undefined,
+    max_completion_tokens: undefined,
+    store: undefined,
+    metadata: undefined,
+    prediction: undefined,
+    reasoning_effort: undefined,
+    service_tier: undefined,
+    prompt_cache_key: undefined,
+    prompt_cache_retention: undefined,
+    safety_identifier: undefined,
+    messages: [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object]
+    ],
+    tools: [ [Object], [Object], [Object], [Object], [Object] ],
+    tool_choice: 'auto',
+    stream: true,
+    stream_options: { include_usage: true }
+  },
+  statusCode: 401,
+  responseHeaders: {
+    'alt-svc': 'h3=":443"; ma=86400',
+    'cf-cache-status': 'DYNAMIC',
+    'cf-ray': '9f341084c91aa21c-YYZ',
+    connection: 'keep-alive',
+    'content-length': '410',
+    'content-type': 'text/plain',
+    date: 'Tue, 28 Apr 2026 06:38:31 GMT',
+    server: 'cloudflare',
+    'set-cookie': '_cfuvid=jFvaQZAu3SmrV01NuvMRSr_YukELduLDhgWMOO9xb74-1777358311.161751-1.0.1.1-tB6BTE3e69wkGyFkwIQZqtLmP5zFL99sUKu27obPeu0; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'x-content-type-options': 'nosniff',
+    'x-error-json': 'ewogICJlcnJvciI6IHsKICAgICJtZXNzYWdlIjogIkluY29ycmVjdCBBUEkga2V5IHByb3ZpZGVkOiBzay1wcm9qLSoqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqNkNRQS4gWW91IGNhbiBmaW5kIHlvdXIgQVBJIGtleSBhdCBodHRwczovL3BsYXRmb3JtLm9wZW5haS5jb20vYWNjb3VudC9hcGkta2V5cy4iLAogICAgInR5cGUiOiAiaW52YWxpZF9yZXF1ZXN0X2Vycm9yIiwKICAgICJjb2RlIjogImludmFsaWRfYXBpX2tleSIsCiAgICAicGFyYW0iOiBudWxsCiAgfSwKICAic3RhdHVzIjogNDAxCn0=',
+    'x-openai-authorization-error': '401',
+    'x-openai-ide-error-code': 'invalid_api_key',
+    'x-openai-internal-caller': 'unknown_through_ide',
+    'x-openai-proxy-wasm': 'v0.1',
+    'x-request-id': 'req_4a94be916c504f24929b6c13b9a7e9e7'
+  },
+  responseBody: '{\n' +
+    '  "error": {\n' +
+    '    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.",\n' +
+    '    "type": "invalid_request_error",\n' +
+    '    "code": "invalid_api_key",\n' +
+    '    "param": null\n' +
+    '  },\n' +
+    '  "status": 401\n' +
+    '}',
+  isRetryable: false,
+  data: {
+    error: {
+      message: 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.',
+      type: 'invalid_request_error',
+      param: null,
+      code: 'invalid_api_key'
+    }
+  }
+}
+Chat stream execution error Error: Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.
+    at ignore-listed frames
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=id&userI.. 200 in 57ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ HEAD https://qrwpkynidozvewvx../rest/v1/Message_v2?select=id&chatI.. 200 in 60ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 53ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/projects?select=*&id=eq... 200 in 54ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/conversations?select=*%2Cproj.. 200 in 58ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 96ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Message_v2?select=*&chatId.. 200 in 63ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://qrwpkynidozvewvx../rest/v1/Message_v2?columns=%22chat.. 201 in 73ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://qrwpkynidozvewvx../rest/v1/messages?on_conflict=id&.. 201 in 61ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 58ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 73ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://api.openai.com/v1/chat/completions 401 in 220ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 48ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 62ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 53ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 62ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 62ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 91ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 55ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 62ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 68ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+Chat API request received {
+  selectedChatModel: 'openai:gpt-4.1',
+  projectId: '8dcf6962-f050-4f0c-bcc4-5e24f325496d',
+  topicId: 'a773e9b5-b286-4322-838e-646a5aed446b',
+  conversationId: '6be0be33-5c81-4da5-b9ad-c7c7a06d8d04',
+  messageRole: 'user',
+  messagesCount: 0,
+  restoredContextMessageIdsCount: 0,
+  hasInjectedDecisionContext: false
+}
+Chat API workspace selection ready {
+  projectId: '8dcf6962-f050-4f0c-bcc4-5e24f325496d',
+  topicId: 'a773e9b5-b286-4322-838e-646a5aed446b',
+  conversationId: '6be0be33-5c81-4da5-b9ad-c7c7a06d8d04',
+  isGeneralTopic: false
+}
+Error [AI_APICallError]: Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.
+    at ignore-listed frames {
+  cause: undefined,
+  url: 'https://api.openai.com/v1/chat/completions',
+  requestBodyValues: {
+    model: 'gpt-4.1',
+    logit_bias: undefined,
+    logprobs: undefined,
+    top_logprobs: undefined,
+    user: undefined,
+    parallel_tool_calls: undefined,
+    max_tokens: undefined,
+    temperature: undefined,
+    top_p: undefined,
+    frequency_penalty: undefined,
+    presence_penalty: undefined,
+    response_format: undefined,
+    stop: undefined,
+    seed: undefined,
+    verbosity: undefined,
+    max_completion_tokens: undefined,
+    store: undefined,
+    metadata: undefined,
+    prediction: undefined,
+    reasoning_effort: undefined,
+    service_tier: undefined,
+    prompt_cache_key: undefined,
+    prompt_cache_retention: undefined,
+    safety_identifier: undefined,
+    messages: [
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object],
+      [Object], [Object]
+    ],
+    tools: [ [Object], [Object], [Object], [Object], [Object] ],
+    tool_choice: 'auto',
+    stream: true,
+    stream_options: { include_usage: true }
+  },
+  statusCode: 401,
+  responseHeaders: {
+    'alt-svc': 'h3=":443"; ma=86400',
+    'cf-cache-status': 'DYNAMIC',
+    'cf-ray': '9f3410a92ddf92c6-YYZ',
+    connection: 'keep-alive',
+    'content-length': '410',
+    'content-type': 'text/plain',
+    date: 'Tue, 28 Apr 2026 06:38:37 GMT',
+    server: 'cloudflare',
+    'set-cookie': '_cfuvid=TvtmuWGjr0dG3xqUJ9g1W64U1R7jB9eGDAhRvA3Z7YE-1777358316.9895017-1.0.1.1-vJcn4mAy4P239JGUQFcth83PUYuQXQcYiwKaLlWSPSY; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'x-content-type-options': 'nosniff',
+    'x-error-json': 'ewogICJlcnJvciI6IHsKICAgICJtZXNzYWdlIjogIkluY29ycmVjdCBBUEkga2V5IHByb3ZpZGVkOiBzay1wcm9qLSoqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqNkNRQS4gWW91IGNhbiBmaW5kIHlvdXIgQVBJIGtleSBhdCBodHRwczovL3BsYXRmb3JtLm9wZW5haS5jb20vYWNjb3VudC9hcGkta2V5cy4iLAogICAgInR5cGUiOiAiaW52YWxpZF9yZXF1ZXN0X2Vycm9yIiwKICAgICJjb2RlIjogImludmFsaWRfYXBpX2tleSIsCiAgICAicGFyYW0iOiBudWxsCiAgfSwKICAic3RhdHVzIjogNDAxCn0=',
+    'x-openai-authorization-error': '401',
+    'x-openai-ide-error-code': 'invalid_api_key',
+    'x-openai-internal-caller': 'unknown_through_ide',
+    'x-openai-proxy-wasm': 'v0.1',
+    'x-request-id': 'req_d67e92a45c72438c90f1eab790530c45'
+  },
+  responseBody: '{\n' +
+    '  "error": {\n' +
+    '    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.",\n' +
+    '    "type": "invalid_request_error",\n' +
+    '    "code": "invalid_api_key",\n' +
+    '    "param": null\n' +
+    '  },\n' +
+    '  "status": 401\n' +
+    '}',
+  isRetryable: false,
+  data: {
+    error: {
+      message: 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.',
+      type: 'invalid_request_error',
+      param: null,
+      code: 'invalid_api_key'
+    }
+  }
+}
+Chat stream execution error Error: Incorrect API key provided: sk-proj-********************************************************************************************************************************************************6CQA. You can find your API key at https://platform.openai.com/account/api-keys.
+    at ignore-listed frames
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=id&userI.. 200 in 67ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ HEAD https://qrwpkynidozvewvx../rest/v1/Message_v2?select=id&chatI.. 200 in 91ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 53ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/conversations?select=*%2Cproj.. 200 in 54ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/projects?select=*&id=eq... 200 in 93ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Chat?select=*&id=eq... 200 in 169ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/Message_v2?select=*&chatId.. 200 in 53ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://qrwpkynidozvewvx../rest/v1/Message_v2?columns=%22chat.. 201 in 54ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://qrwpkynidozvewvx../rest/v1/messages?on_conflict=id&.. 201 in 51ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 48ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 52ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ POST https://api.openai.com/v1/chat/completions 401 in 107ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&messag.. 200 in 50ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 52ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 50ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 51ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 60ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 50ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 51ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 73ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 74ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 63ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 50ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 51ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 55ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/topics?select=*%2Cproj.. 200 in 74ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/candidate_decis..?select=*&topic_.. 200 in 56ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/edges?select=*&topic_.. 200 in 58ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://qrwpkynidozvewvx../rest/v1/decisions?select=*&topic_.. 200 in 104ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
