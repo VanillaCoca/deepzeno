@@ -54,7 +54,6 @@ import {
   SlashCommandMenu,
   slashCommands,
 } from "./slash-commands";
-import { SuggestedActions } from "./suggested-actions";
 import type { VisibilityType } from "./visibility-selector";
 
 function setCookie(name: string, value: string) {
@@ -71,11 +70,11 @@ function PureMultimodalInput({
   stop,
   attachments,
   setAttachments,
-  messages,
+  messages: _messages,
   setMessages,
   sendMessage,
   className,
-  selectedVisibilityType,
+  selectedVisibilityType: _selectedVisibilityType,
   selectedModelId,
   onModelChange,
   editingMessage,
@@ -413,18 +412,6 @@ function PureMultimodalInput({
           </button>
         </div>
       )}
-
-      {!editingMessage &&
-        !isLoading &&
-        messages.length === 0 &&
-        attachments.length === 0 &&
-        uploadQueue.length === 0 && (
-          <SuggestedActions
-            chatId={chatId}
-            selectedVisibilityType={selectedVisibilityType}
-            sendMessage={sendMessage}
-          />
-        )}
 
       <input
         className="pointer-events-none fixed -top-4 -left-4 size-0.5 opacity-0"

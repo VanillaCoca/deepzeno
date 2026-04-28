@@ -17,7 +17,9 @@ import type { WorkspaceDecision, WorkspaceEdge } from "@/lib/workspace/types";
 type ViewMode = "type" | "relation";
 
 function kindPriority(kind: string) {
-  const index = decisionKindOrder.indexOf(kind as (typeof decisionKindOrder)[number]);
+  const index = decisionKindOrder.indexOf(
+    kind as (typeof decisionKindOrder)[number]
+  );
   return index >= 0 ? index : decisionKindOrder.length;
 }
 
@@ -63,7 +65,10 @@ function DecisionNode({
             >
               {decision.title}
             </p>
-            <Badge className={getDecisionKindTone(decision.kind)} variant="outline">
+            <Badge
+              className={getDecisionKindTone(decision.kind)}
+              variant="outline"
+            >
               {getDecisionKindBadgeLabel(decision.kind)}
             </Badge>
           </div>
@@ -79,16 +84,20 @@ function DecisionNode({
 export function DecisionTree({
   decisions,
   edges,
+  emptyStateDescription,
   isLoading,
 }: {
   decisions: WorkspaceDecision[];
   edges: WorkspaceEdge[];
+  emptyStateDescription?: string;
   isLoading: boolean;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("type");
-  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>({
-    rejection: true,
-  });
+  const [collapsedKinds, setCollapsedKinds] = useState<Record<string, boolean>>(
+    {
+      rejection: true,
+    }
+  );
 
   const visibleDecisions = useMemo(
     () => decisions.filter((decision) => decision.status === "active"),
@@ -113,14 +122,20 @@ export function DecisionTree({
     }
 
     return [...groups.entries()]
-      .map(([kind, entries]) => [
-        kind,
-        [...entries].sort((left, right) =>
-          right.createdAt.localeCompare(left.createdAt)
-        ),
-      ] as const)
+      .map(
+        ([kind, entries]) =>
+          [
+            kind,
+            [...entries].sort((left, right) =>
+              right.createdAt.localeCompare(left.createdAt)
+            ),
+          ] as const
+      )
       .filter(([, entries]) => entries.length > 0)
-      .sort(([leftKind], [rightKind]) => kindPriority(leftKind) - kindPriority(rightKind));
+      .sort(
+        ([leftKind], [rightKind]) =>
+          kindPriority(leftKind) - kindPriority(rightKind)
+      );
   }, [visibleDecisions]);
 
   const relationGraph = useMemo(() => {
@@ -209,12 +224,15 @@ export function DecisionTree({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border/60 bg-background/85 shadow-[var(--shadow-card)]">
+    <section
+      className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border/60 bg-background/85 shadow-[var(--shadow-card)]"
+      data-testid="decision-tree"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-foreground">Decision Tree</p>
           <p className="text-xs text-muted-foreground">
-            Active truth for the current topic
+            Structured truth for the current topic
           </p>
         </div>
         <div className="flex items-center rounded-xl border border-border/60 bg-card/70 p-1">
@@ -244,7 +262,7 @@ export function DecisionTree({
           </div>
         ) : visibleDecisions.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
-            Confirmed decisions will appear here.
+            {emptyStateDescription ?? "Confirmed decisions will appear here."}
           </div>
         ) : viewMode === "type" ? (
           groupedByKind.map(([kind, entries]) => {
@@ -262,7 +280,9 @@ export function DecisionTree({
                   }
                   type="button"
                 >
-                  <span>{getDecisionKindLabel(kind)} ({entries.length})</span>
+                  <span>
+                    {getDecisionKindLabel(kind)} ({entries.length})
+                  </span>
                   <ChevronDownIcon
                     className={cn(
                       "size-4 transition-transform duration-200",
@@ -291,7 +311,9 @@ export function DecisionTree({
           })
         ) : (
           <>
-            {relationGraph.roots.map((decision) => renderRelationNode(decision))}
+            {relationGraph.roots.map((decision) =>
+              renderRelationNode(decision)
+            )}
             {relationGraph.standalone.length > 0 && (
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

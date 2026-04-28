@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { suggestions } from "@/lib/constants";
 import { SparklesIcon } from "./icons";
 
 export function Preview() {
@@ -29,19 +28,6 @@ export function Preview() {
           <p className="mt-1.5 text-sm text-muted-foreground">
             Ask a question, write code, or explore ideas.
           </p>
-        </div>
-
-        <div className="grid w-full max-w-md grid-cols-2 gap-2">
-          {suggestions.map((suggestion) => (
-            <button
-              className="rounded-xl border border-border/30 bg-card/20 px-3 py-2.5 text-left text-[11px] leading-relaxed text-muted-foreground/70 transition-all duration-200 hover:border-border/60 hover:bg-card/40 hover:text-muted-foreground"
-              key={suggestion}
-              onClick={() => handleAction(suggestion)}
-              type="button"
-            >
-              {suggestion}
-            </button>
-          ))}
         </div>
       </div>
 

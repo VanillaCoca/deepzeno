@@ -8,7 +8,6 @@ import {
 } from "../helpers";
 
 test.describe("Chat Page", () => {
-  // biome-ignore lint/suspicious/noSkippedTests: these e2e cases require configured Supabase auth and at least one model provider
   test.skip(
     !hasSupabaseE2EConfig || !hasModelProviderE2EConfig,
     "Supabase auth and at least one model provider must be configured for chat e2e."
@@ -43,10 +42,10 @@ test.describe("Chat Page", () => {
     await expect(page.getByTestId("send-button")).toBeVisible();
   });
 
-  test("suggested actions are visible on empty chat", async ({ page }) => {
-    await expect(
-      page.locator("[data-testid='suggested-actions']")
-    ).toBeVisible();
+  test("preset prompts are hidden on empty chat", async ({ page }) => {
+    await expect(page.locator("[data-testid='suggested-actions']")).toHaveCount(
+      0
+    );
   });
 
   test("can stop generation with stop button", async ({ page }) => {
@@ -61,7 +60,6 @@ test.describe("Chat Page", () => {
 });
 
 test.describe("Chat Input Features", () => {
-  // biome-ignore lint/suspicious/noSkippedTests: these e2e cases require configured Supabase auth and at least one model provider
   test.skip(
     !hasSupabaseE2EConfig || !hasModelProviderE2EConfig,
     "Supabase auth and at least one model provider must be configured for chat e2e."

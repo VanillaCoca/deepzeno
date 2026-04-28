@@ -1,7 +1,6 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { ArrowDownIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { AgentCandidateHint } from "@/components/agent-candidate-hint";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useMessages } from "@/hooks/use-messages";
 import type { Vote } from "@/lib/db/schema";
@@ -40,7 +39,7 @@ function PureMessages({
   selectedModelId: _selectedModelId,
   onEditMessage,
 }: MessagesProps) {
-  const { activeTopic, activeTopicId, restoredSandboxContext } = useWorkspace();
+  const { restoredSandboxContext } = useWorkspace();
   const {
     containerRef: messagesContainerRef,
     endRef: messagesEndRef,
@@ -79,16 +78,10 @@ function PureMessages({
         style={isArtifactVisible ? { scrollbarWidth: "none" } : undefined}
       >
         <div className="mx-auto flex min-h-full min-w-0 max-w-4xl flex-col gap-5 px-2 py-6 md:gap-7 md:px-4">
-          <AgentCandidateHint
-            disabled={Boolean(activeTopic?.isGeneral)}
-            topicId={activeTopicId}
-          />
-
           {restoredSandboxContext && (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-4 text-sm">
               <p className="font-medium text-foreground">
-                下一次对话会带入{" "}
-                {restoredSandboxContext.decisionTitle}
+                下一次对话会带入 {restoredSandboxContext.decisionTitle}
               </p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {restoredSandboxContext.contextText}

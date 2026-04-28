@@ -19,6 +19,7 @@ import {
 } from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { CandidatePool } from "../candidate-pool";
 import { useWorkspace } from "../workspace/workspace-provider";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
@@ -135,6 +136,8 @@ export function ChatShell() {
                       </div>
                     </div>
                   )}
+
+                  <CandidatePool />
 
                   <MultimodalInput
                     attachments={attachments}

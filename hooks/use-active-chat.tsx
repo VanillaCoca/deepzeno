@@ -22,6 +22,7 @@ import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useAutoResume } from "@/hooks/use-auto-resume";
+import { getTopicTruthSnapshotKey } from "@/hooks/use-topic-truth";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
@@ -100,12 +101,13 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     activeTopicIsGeneralRef.current = Boolean(activeTopic?.isGeneral);
   }, [activeTopic?.isGeneral, activeTopicId]);
 
-  function scheduleTruthPanelRefresh(topicId: string | null) {
-    if (!topicId) {
+  function scheduleTopicTruthRefresh(topicId: string | null) {
+    const key = getTopicTruthSnapshotKey(topicId);
+
+    if (!key) {
       return;
     }
 
-    const key = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/decisions?topicId=${topicId}`;
     const delays = [1500, 4000, 7000];
 
     for (const delay of delays) {
@@ -226,7 +228,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
 
       if (!activeTopicIsGeneralRef.current) {
-        scheduleTruthPanelRefresh(activeTopicIdRef.current);
+        scheduleTopicTruthRefresh(activeTopicIdRef.current);
       }
     },
     onError: (error) => {

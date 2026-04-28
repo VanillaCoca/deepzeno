@@ -8,7 +8,6 @@ import {
 } from "../helpers";
 
 test.describe("Workspace Phase 2 flow", () => {
-  // biome-ignore lint/suspicious/noSkippedTests: this e2e case requires configured Supabase auth and at least one model provider
   test.skip(
     !hasSupabaseE2EConfig || !hasModelProviderE2EConfig,
     "Supabase auth and at least one model provider must be configured for workspace e2e."
@@ -45,14 +44,15 @@ test.describe("Workspace Phase 2 flow", () => {
 
     const topicDialog = page.getByRole("dialog");
     const chatHeader = page.locator("header").first();
-    const candidatePool = page.locator("section").filter({
-      has: page.getByText("Candidate Pool", { exact: true }),
-    });
-    const decisionTree = page.locator("section").filter({
-      has: page.getByText("Decision Tree", { exact: true }),
-    });
+    const truthPanel = page.getByTestId("truth-panel");
+    const decisionTree = truthPanel.getByTestId("decision-tree");
+    const candidatePoolToggle = page.getByTestId("candidate-pool-toggle");
+    const candidatePoolList = page.getByTestId("candidate-pool-list");
 
     await expect(page.getByRole("button", { name: "New Topic" })).toBeEnabled();
+    await expect(truthPanel.getByTestId("candidate-pool")).toHaveCount(0);
+    await expect(candidatePoolToggle).toBeVisible();
+    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
 
     await page.getByRole("button", { name: "New Topic" }).click();
     await expect(topicDialog).toBeVisible();
@@ -70,11 +70,14 @@ test.describe("Workspace Phase 2 flow", () => {
         .last()
     ).toContainText("PostgreSQL", { timeout: 30_000 });
 
-    await expect(
-      candidatePool.getByText("We will use PostgreSQL").first()
-    ).toBeVisible({
+    await expect(candidatePoolToggle).toContainText(/\d+ candidates? pending/, {
       timeout: 10_000,
     });
+    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
+
+    await candidatePoolToggle.click();
+    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(candidatePoolList).toContainText("We will use PostgreSQL");
 
     await page.getByRole("button", { name: "Confirm Selected" }).click();
 
@@ -112,6 +115,7 @@ test.describe("Workspace Phase 2 flow", () => {
     });
 
     await expect(chatHeader.getByText(topicA, { exact: true })).toBeVisible();
+    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
     await expect(
       decisionTree.getByText("We will use PostgreSQL").first()
     ).toBeVisible({
