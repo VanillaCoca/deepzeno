@@ -8,6 +8,10 @@ export type WorkspaceProject = {
   updatedAt: string;
 };
 
+export type WorkspaceProjectSummary = WorkspaceProject & {
+  topicCount: number;
+};
+
 export type WorkspaceTopic = {
   id: string;
   projectId: string;

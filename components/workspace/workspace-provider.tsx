@@ -1,11 +1,12 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   createContext,
   type ReactNode,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -74,7 +75,7 @@ type WorkspaceContextValue = {
     kind: string;
     content: string;
     rationale?: string | null;
-  }) => Promise<boolean>;
+  }) => boolean;
   clearRestoredSandboxContext: () => void;
   consumeInjectedDecisionContext: () => string | null;
   setPendingCount: (topicId: string, count: number) => void;
@@ -84,7 +85,22 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 function extractConversationId(pathname: string) {
   const match = pathname.match(/\/chat\/([^/]+)/);
-  return match ? match[1] : null;
+  if (!match || match[1] === "new") {
+    return null;
+  }
+
+  return match[1];
+}
+
+function extractSelectionFromLocation(
+  pathname: string,
+  searchParams: URLSearchParams
+): WorkspaceSelectionParams {
+  return {
+    projectId: searchParams.get("projectId"),
+    topicId: searchParams.get("topicId"),
+    conversationId: extractConversationId(pathname),
+  };
 }
 
 function buildBootstrapUrl(selection: WorkspaceSelectionParams) {
@@ -139,12 +155,19 @@ function selectionMatchesWorkspace(
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const selectionRef = useRef<WorkspaceSelectionParams>({
-    conversationId: extractConversationId(pathname),
-  });
-  const [selection, setSelection] = useState<WorkspaceSelectionParams>(() => ({
-    conversationId: extractConversationId(pathname),
-  }));
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
+  const locationSelection = useMemo(
+    () =>
+      extractSelectionFromLocation(
+        pathname,
+        new URLSearchParams(searchParamsString)
+      ),
+    [pathname, searchParamsString]
+  );
+  const selectionRef = useRef<WorkspaceSelectionParams>(locationSelection);
+  const [selection, setSelection] =
+    useState<WorkspaceSelectionParams>(locationSelection);
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(
     null
   );
@@ -167,7 +190,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     {
       revalidateOnFocus: false,
       keepPreviousData: true,
-      dedupingInterval: 1_500,
+      dedupingInterval: 1500,
     }
   );
 
@@ -186,6 +209,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
+
+  useEffect(() => {
+    selectionRef.current = locationSelection;
+    setSelection(locationSelection);
+    setSelectedDecisionId(null);
+  }, [locationSelection]);
 
   useEffect(() => {
     if (workspace) {
@@ -415,7 +444,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return currentDraft;
   }
 
-  async function bringDecisionToSandbox({
+  function bringDecisionToSandbox({
     decisionId: _decisionId,
     decisionTitle,
     kind,

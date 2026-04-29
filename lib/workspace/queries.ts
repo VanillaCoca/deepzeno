@@ -10,6 +10,7 @@ import type {
   WorkspaceEdge,
   WorkspaceMessageRecord,
   WorkspaceProject,
+  WorkspaceProjectSummary,
   WorkspaceTopic,
 } from "./types";
 
@@ -301,6 +302,51 @@ export async function listProjectsByUserId(userId: string) {
   return (rows ?? []).map((row: DatabaseRecord) => mapProject(row));
 }
 
+export async function listProjectSummariesByUserId(
+  userId: string
+): Promise<WorkspaceProjectSummary[]> {
+  const client = getClient();
+  const projectRows = await ensureResult(
+    client
+      .from("projects")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false }),
+    "Failed to list project summaries"
+  );
+
+  const projects = (projectRows ?? []).map((row: DatabaseRecord) =>
+    mapProject(row)
+  );
+
+  if (projects.length === 0) {
+    return [];
+  }
+
+  const topicRows = await ensureResult(
+    client
+      .from("topics")
+      .select("project_id")
+      .in(
+        "project_id",
+        projects.map((project: WorkspaceProject) => project.id)
+      ),
+    "Failed to count project topics"
+  );
+
+  const topicCounts = new Map<string, number>();
+
+  for (const row of topicRows ?? []) {
+    const projectId = String((row as DatabaseRecord).project_id);
+    topicCounts.set(projectId, (topicCounts.get(projectId) ?? 0) + 1);
+  }
+
+  return projects.map((project: WorkspaceProject) => ({
+    ...project,
+    topicCount: topicCounts.get(project.id) ?? 0,
+  }));
+}
+
 export async function getProjectByIdForUser(projectId: string, userId: string) {
   const client = getClient();
   const row = await ensureResult(
@@ -373,24 +419,33 @@ export async function createTopicForProject({
   projectId,
   label,
   isGeneral = false,
+  position,
 }: {
   projectId: string;
   label: string;
   isGeneral?: boolean;
+  position?: number;
 }) {
   const client = getClient();
-  const existing = await ensureResult(
-    client
-      .from("topics")
-      .select("position")
-      .eq("project_id", projectId)
-      .order("position", { ascending: false })
-      .limit(1),
-    "Failed to load topic position"
-  );
+  let nextPosition = position;
 
-  const nextPosition =
-    (existing?.[0]?.position && Number(existing[0].position)) ?? 0;
+  if (typeof nextPosition !== "number") {
+    const existing = await ensureResult(
+      client
+        .from("topics")
+        .select("position")
+        .eq("project_id", projectId)
+        .order("position", { ascending: false })
+        .limit(1),
+      "Failed to load topic position"
+    );
+
+    const highestPosition = existing?.[0]?.position;
+    nextPosition =
+      typeof highestPosition === "number"
+        ? highestPosition + 1
+        : Number(highestPosition ?? 0) + 1;
+  }
 
   const row = await ensureResult(
     client
@@ -399,7 +454,7 @@ export async function createTopicForProject({
         project_id: projectId,
         label,
         is_general: isGeneral,
-        position: isGeneral ? 0 : nextPosition + 1,
+        position: isGeneral ? 0 : nextPosition,
       })
       .select("*")
       .single(),
@@ -601,7 +656,7 @@ export async function listPendingCandidateCountsByProjectId(projectId: string) {
   );
 }
 
-export async function listPendingCandidatesByTopicId(topicId: string) {
+export function listPendingCandidatesByTopicId(topicId: string) {
   return listCandidatesByTopicId(topicId, {
     statuses: ["pending"],
   });
@@ -772,7 +827,10 @@ export async function listDecisionsByTopicId(topicId: string) {
   return (rows ?? []).map((row: DatabaseRecord) => mapDecision(row));
 }
 
-export async function getDecisionByIdForUser(decisionId: string, userId: string) {
+export async function getDecisionByIdForUser(
+  decisionId: string,
+  userId: string
+) {
   const client = getClient();
   const row = await ensureResult(
     client

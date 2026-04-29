@@ -18,6 +18,7 @@ test.describe("Workspace Phase 2 flow", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 

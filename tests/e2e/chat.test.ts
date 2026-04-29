@@ -18,6 +18,7 @@ test.describe("Chat Page", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 
@@ -70,6 +71,7 @@ test.describe("Chat Input Features", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 

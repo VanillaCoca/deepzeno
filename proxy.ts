@@ -77,7 +77,10 @@ export async function proxy(request: NextRequest) {
   const userId = typeof claims?.sub === "string" ? claims.sub : null;
   const { pathname, search } = request.nextUrl;
   const isAuthPage = pathname === "/login" || pathname === "/register";
-  const isProtectedPage = pathname === "/" || pathname.startsWith("/chat");
+  const isProtectedPage =
+    pathname === "/" ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/projects");
 
   if (!userId && isProtectedPage) {
     const loginUrl = request.nextUrl.clone();
@@ -97,5 +100,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/chat/:path*", "/login", "/register"],
+  matcher: ["/", "/chat/:path*", "/projects/:path*", "/login", "/register"],
 };

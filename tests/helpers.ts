@@ -98,7 +98,10 @@ export async function signInThroughLoginPage(
   await page.locator('input[type="password"]').fill(credentials.password);
   await page.locator('form button[type="submit"]').click();
   await page.waitForURL(
-    (url) => url.pathname === "/" || /^\/chat\/[\w-]+$/.test(url.pathname),
+    (url) =>
+      url.pathname === "/" ||
+      url.pathname === "/chat/new" ||
+      /^\/chat\/[\w-]+$/.test(url.pathname),
     { timeout: 15_000 }
   );
 }

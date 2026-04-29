@@ -21,6 +21,7 @@ test.describe("Chat API Integration", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 
@@ -80,6 +81,7 @@ test.describe("Chat Error Handling", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 
@@ -120,6 +122,7 @@ test.describe("Preset Prompts", () => {
   test.beforeEach(async ({ page }) => {
     user = await createConfirmedTestUser();
     await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 
