@@ -82,22 +82,139 @@ type InsertDecisionLog = {
   metadata?: Record<string, unknown> | null;
 };
 
+type DatabaseErrorLike = {
+  code?: string | null;
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+type QueryContext = {
+  operation?: string;
+  table?: string;
+  payload?: Record<string, unknown> | null;
+};
+
 function getClient(): any {
   return getSupabaseAdminClient() as any;
 }
 
 async function ensureResult(
-  promise: PromiseLike<{ data: any; error: { message: string } | null }>,
-  message: string
+  promise: PromiseLike<{ data: any; error: DatabaseErrorLike | null }>,
+  message: string,
+  context?: QueryContext
 ) {
   const { data, error } = await promise;
 
   if (error) {
-    console.error(message, error);
+    console.error(message, {
+      code: error.code ?? null,
+      message: error.message,
+      details: error.details ?? null,
+      hint: error.hint ?? null,
+      context: context ?? null,
+    });
     throw new ChatbotError("bad_request:database", message);
   }
 
   return data;
+}
+
+function isMissingTableError(error: DatabaseErrorLike | null | undefined) {
+  return (
+    error?.code === "PGRST205" ||
+    error?.message?.includes("Could not find the table") === true
+  );
+}
+
+function isLegacyUserForeignKeyError(
+  error: DatabaseErrorLike | null | undefined
+) {
+  return (
+    error?.code === "23503" &&
+    (error.details?.includes('table "users"') === true ||
+      error.details?.includes('table "User"') === true ||
+      error.message.includes("projects_user_id_fkey"))
+  );
+}
+
+async function ensureLegacyWorkspaceUserRecord({
+  userId,
+  userEmail,
+}: {
+  userId: string;
+  userEmail?: string | null;
+}) {
+  const client = getClient();
+  const email = userEmail?.trim() || `${userId}@placeholder.zeno.invalid`;
+
+  for (const tableName of ["users", "User"] as const) {
+    const selectResult = await client
+      .from(tableName)
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (selectResult.error) {
+      if (isMissingTableError(selectResult.error)) {
+        continue;
+      }
+
+      console.error("Failed to inspect legacy workspace user table", {
+        code: selectResult.error.code ?? null,
+        message: selectResult.error.message,
+        details: selectResult.error.details ?? null,
+        hint: selectResult.error.hint ?? null,
+        context: {
+          operation: "inspect_legacy_user",
+          table: tableName,
+          payload: {
+            userId,
+          },
+        },
+      });
+      throw new ChatbotError(
+        "bad_request:database",
+        "Failed to prepare user record"
+      );
+    }
+
+    if (selectResult.data) {
+      return;
+    }
+
+    const insertResult = await client
+      .from(tableName)
+      .insert({
+        id: userId,
+        email,
+      })
+      .select("id")
+      .single();
+
+    if (insertResult.error) {
+      console.error("Failed to insert legacy workspace user record", {
+        code: insertResult.error.code ?? null,
+        message: insertResult.error.message,
+        details: insertResult.error.details ?? null,
+        hint: insertResult.error.hint ?? null,
+        context: {
+          operation: "insert_legacy_user",
+          table: tableName,
+          payload: {
+            userId,
+            email,
+          },
+        },
+      });
+      throw new ChatbotError(
+        "bad_request:database",
+        "Failed to prepare user record"
+      );
+    }
+
+    return;
+  }
 }
 
 function toIsoString(value: unknown) {
@@ -364,22 +481,40 @@ export async function getProjectByIdForUser(projectId: string, userId: string) {
 
 export async function createProjectForUser({
   userId,
+  userEmail,
   name,
 }: {
   userId: string;
+  userEmail?: string | null;
   name: string;
 }) {
   const client = getClient();
+  const payload = {
+    user_id: userId,
+    name,
+  };
+  let result = await client
+    .from("projects")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (result.error && isLegacyUserForeignKeyError(result.error)) {
+    await ensureLegacyWorkspaceUserRecord({
+      userId,
+      userEmail,
+    });
+    result = await client.from("projects").insert(payload).select("*").single();
+  }
+
   const row = await ensureResult(
-    client
-      .from("projects")
-      .insert({
-        user_id: userId,
-        name,
-      })
-      .select("*")
-      .single(),
-    "Failed to create project"
+    Promise.resolve(result),
+    "Failed to create project",
+    {
+      operation: "create_project",
+      table: "projects",
+      payload,
+    }
   );
 
   return mapProject(row as DatabaseRecord);
@@ -458,7 +593,17 @@ export async function createTopicForProject({
       })
       .select("*")
       .single(),
-    "Failed to create topic"
+    "Failed to create topic",
+    {
+      operation: "create_topic",
+      table: "topics",
+      payload: {
+        projectId,
+        label,
+        isGeneral,
+        position: isGeneral ? 0 : nextPosition,
+      },
+    }
   );
 
   return mapTopic(row as DatabaseRecord);
@@ -531,7 +676,16 @@ export async function createConversation({
       })
       .select("*")
       .single(),
-    "Failed to create conversation"
+    "Failed to create conversation",
+    {
+      operation: "create_conversation",
+      table: "conversations",
+      payload: {
+        id: id ?? null,
+        topicId,
+        projectId,
+      },
+    }
   );
 
   return mapConversation(row as DatabaseRecord);
@@ -880,7 +1034,18 @@ export async function insertDecision(decisionInput: InsertDecision) {
       })
       .select("*")
       .single(),
-    "Failed to insert decision"
+    "Failed to insert decision",
+    {
+      operation: "insert_decision",
+      table: "decisions",
+      payload: {
+        projectId: decisionInput.projectId,
+        topicId: decisionInput.topicId,
+        title: decisionInput.title,
+        kind: decisionInput.kind ?? "plan",
+        status: decisionInput.status ?? "active",
+      },
+    }
   );
 
   return mapDecision(row as DatabaseRecord);

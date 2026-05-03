@@ -6,6 +6,9 @@ import {
   signInThroughLoginPage,
 } from "../helpers";
 
+const workspaceUrlPattern =
+  /\/chat\/(?:new\?projectId=[\w-]+&topicId=[\w-]+|[\w-]+)$/;
+
 test.describe("Homepage and create-project flow", () => {
   test.skip(
     !hasSupabaseE2EConfig,
@@ -39,7 +42,7 @@ test.describe("Homepage and create-project flow", () => {
     ).toBeVisible();
   });
 
-  test("start blank creates an untitled project and redirects to the placeholder page", async ({
+  test("start blank creates an untitled project and redirects into the workspace", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "+ New project" }).first().click();
@@ -49,8 +52,9 @@ test.describe("Homepage and create-project flow", () => {
 
     await page.getByRole("button", { name: "Start blank" }).click();
 
-    await expect(page).toHaveURL(/\/chat\/new\?projectId=[\w-]+$/);
+    await expect(page).toHaveURL(workspaceUrlPattern);
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
+    await expect(page.locator('[data-topic-label="General"]')).toBeVisible();
   });
 
   test("extract review confirms into a new project", async ({ page }) => {
@@ -76,7 +80,10 @@ test.describe("Homepage and create-project flow", () => {
 
     await page.getByRole("button", { name: "Confirm 6 in 3 topics →" }).click();
 
-    await expect(page).toHaveURL(/\/chat\/new\?projectId=[\w-]+$/);
+    await expect(page).toHaveURL(workspaceUrlPattern);
     await expect(page.getByTestId("multimodal-input")).toBeVisible();
+    await expect(
+      page.locator('[data-topic-label="Product identity"]')
+    ).toBeVisible();
   });
 });

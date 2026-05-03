@@ -42,19 +42,24 @@ function getSupabaseE2EConfig() {
   return { url, serviceRoleKey };
 }
 
+export function createSupabaseE2EClient() {
+  const { url, serviceRoleKey } = getSupabaseE2EConfig();
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
 export async function createConfirmedTestUser() {
   if (!hasSupabaseE2EConfig) {
     throw new Error("Supabase E2E environment variables are not configured.");
   }
 
   const { email, password } = generateRandomTestUser();
-  const { url, serviceRoleKey } = getSupabaseE2EConfig();
-  const supabase = createClient(url, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  const supabase = createSupabaseE2EClient();
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -78,13 +83,7 @@ export async function deleteTestUser(userId: string) {
     return;
   }
 
-  const { url, serviceRoleKey } = getSupabaseE2EConfig();
-  const supabase = createClient(url, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  const supabase = createSupabaseE2EClient();
 
   await supabase.auth.admin.deleteUser(userId);
 }

@@ -311,3 +311,100 @@ export const apiKey = pgTable("api_keys", {
 });
 
 export type ApiKey = InferSelectModel<typeof apiKey>;
+
+export const irNode = pgTable("ir_nodes", {
+  id: text("id").primaryKey().notNull(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  topicId: uuid("topic_id").references(() => topic.id, {
+    onDelete: "set null",
+  }),
+  kind: text("kind").notNull(),
+  subtype: text("subtype"),
+  status: text("status").notNull(),
+  title: text("title").notNull(),
+  content: text("content"),
+  rationale: text("rationale"),
+  sensitivity: text("sensitivity").notNull().default("normal"),
+  sourceChatId: uuid("source_chat_id"),
+  sourceTurnId: uuid("source_turn_id"),
+  sourceTextSpan: text("source_text_span"),
+  sourceLayer: text("source_layer"),
+  reactivationAnchorId: text("reactivation_anchor_id"),
+  extractionConfidence: real("extraction_confidence"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  promotedToPendingAt: timestamp("promoted_to_pending_at", {
+    withTimezone: true,
+  }),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  supersededBy: text("superseded_by"),
+  createdBy: text("created_by").notNull(),
+  confirmedBy: uuid("confirmed_by"),
+});
+
+export type IRNodeRow = InferSelectModel<typeof irNode>;
+
+export const irEdge = pgTable("ir_edges", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  fromNode: text("from_node")
+    .notNull()
+    .references(() => irNode.id),
+  toNode: text("to_node")
+    .notNull()
+    .references(() => irNode.id),
+  relation: text("relation").notNull(),
+  status: text("status").notNull().default("pending"),
+  isAnchorHint: boolean("is_anchor_hint").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+});
+
+export type IREdgeRow = InferSelectModel<typeof irEdge>;
+
+export const irExtractionEvent = pgTable("ir_extraction_events", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("project_id").references(() => project.id, {
+    onDelete: "cascade",
+  }),
+  topicId: uuid("topic_id").references(() => topic.id, {
+    onDelete: "set null",
+  }),
+  nodeId: text("node_id").references(() => irNode.id),
+  edgeId: uuid("edge_id").references(() => irEdge.id, {
+    onDelete: "set null",
+  }),
+  event: text("event").notNull(),
+  layer: text("layer").notNull().default("system"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type IRExtractionEvent = InferSelectModel<typeof irExtractionEvent>;
+
+export const chatSessionState = pgTable("chat_session_state", {
+  chatSessionId: uuid("chat_session_id")
+    .primaryKey()
+    .notNull()
+    .references(() => conversation.id, { onDelete: "cascade" }),
+  reactivationAnchorId: text("reactivation_anchor_id").references(
+    () => irNode.id
+  ),
+  reactivationAnchorSetAtTurn: integer("reactivation_anchor_set_at_turn"),
+  lastSweepAtTurn: integer("last_sweep_at_turn").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ChatSessionState = InferSelectModel<typeof chatSessionState>;

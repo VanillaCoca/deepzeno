@@ -1,16 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
   createConfirmedTestUser,
+  createSupabaseE2EClient,
   deleteTestUser,
-  hasModelProviderE2EConfig,
   hasSupabaseE2EConfig,
   signInThroughLoginPage,
 } from "../helpers";
 
-test.describe("Workspace Phase 2 flow", () => {
+test.describe("Workspace IR panel flow", () => {
   test.skip(
-    !hasSupabaseE2EConfig || !hasModelProviderE2EConfig,
-    "Supabase auth and at least one model provider must be configured for workspace e2e."
+    !hasSupabaseE2EConfig,
+    "Supabase auth must be configured for workspace IR e2e."
   );
 
   let user: Awaited<ReturnType<typeof createConfirmedTestUser>> | null = null;
@@ -29,159 +30,176 @@ test.describe("Workspace Phase 2 flow", () => {
     }
   });
 
-  test("bridges workspace topics, truth panel, decision confirmation, and segment navigation", async ({
+  test("shows IR candidates in the right panel and confirms through detail", async ({
     page,
   }) => {
     const suffix = Date.now().toString().slice(-6);
-    const topicA = `Product ${suffix}`;
-    const seedPrompt =
-      "Reply with exactly these three sentences and nothing else: We will use PostgreSQL. Archived topics must remain read-only. Clearing chat creates a new conversation segment.";
-    const scrollPrompt = `${Array.from(
-      { length: 180 },
-      (_, index) => `scroll-check line ${index + 1}`
-    ).join(
-      "\n"
-    )}\n\nNow reply with the word STREAM repeated on 120 separate lines.`;
+    const topicLabel = `IR ${suffix}`;
+    const bootstrapResponse = await page.request.get(
+      "/api/workspace/bootstrap"
+    );
+    expect(bootstrapResponse.ok()).toBeTruthy();
 
-    const topicDialog = page.getByRole("dialog");
-    const chatHeader = page.locator("header").first();
-    const truthPanel = page.getByTestId("truth-panel");
-    const decisionTree = truthPanel.getByTestId("decision-tree");
-    const candidatePoolToggle = page.getByTestId("candidate-pool-toggle");
-    const candidatePoolList = page.getByTestId("candidate-pool-list");
-
-    await expect(page.getByRole("button", { name: "New Topic" })).toBeEnabled();
-    await expect(truthPanel.getByTestId("candidate-pool")).toHaveCount(0);
-    await expect(candidatePoolToggle).toBeVisible();
-    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
-
-    await page.getByRole("button", { name: "New Topic" }).click();
-    await expect(topicDialog).toBeVisible();
-    await topicDialog.getByPlaceholder("Topic label").fill(topicA);
-    await topicDialog.getByRole("button", { name: "Create" }).click();
-
-    await expect(chatHeader.getByText(topicA, { exact: true })).toBeVisible();
-
-    await page.getByTestId("multimodal-input").fill(seedPrompt);
-    await page.getByTestId("send-button").click();
-
-    await expect(
-      page
-        .locator("[data-role='assistant'] [data-testid='message-content']")
-        .last()
-    ).toContainText("PostgreSQL", { timeout: 30_000 });
-
-    await expect(candidatePoolToggle).toContainText(/\d+ candidates? pending/, {
-      timeout: 10_000,
+    const bootstrapPayload = (await bootstrapResponse.json()) as {
+      workspace: { activeProjectId: string };
+    };
+    const topicResponse = await page.request.post("/api/workspace/topics", {
+      data: {
+        projectId: bootstrapPayload.workspace.activeProjectId,
+        label: topicLabel,
+      },
     });
-    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
+    expect(topicResponse.ok()).toBeTruthy();
 
-    await candidatePoolToggle.click();
-    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "true");
-    await expect(candidatePoolList).toContainText("We will use PostgreSQL");
-
-    await page.getByRole("button", { name: "Confirm Selected" }).click();
-
-    await expect(
-      decisionTree.getByText("We will use PostgreSQL").first()
-    ).toBeVisible({
-      timeout: 15_000,
+    const topicPayload = (await topicResponse.json()) as {
+      workspace: {
+        activeProjectId: string;
+        activeTopicId: string;
+      };
+    };
+    const projectId = topicPayload.workspace.activeProjectId;
+    const topicId = topicPayload.workspace.activeTopicId;
+    const draftResponse = await page.request.post("/api/ir/draft", {
+      data: {
+        project_id: projectId,
+        topic_id: topicId,
+        kind: "plan",
+        subtype: "decision",
+        title: "V1 uses Supabase IR tables",
+        content: "The new IR loop stores candidates in ir_nodes.",
+        rationale: "Issue #5 defines ir_nodes as the candidate/truth surface.",
+        source_layer: "manual",
+        created_by: "user",
+        initial_status: "pending",
+      },
     });
+    if (draftResponse.status() === 503) {
+      test.skip(true, "IR migrations are not applied in this test database.");
+    }
+
+    expect(draftResponse.ok()).toBeTruthy();
+
+    await page.goto(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
+    await expect(page.getByTestId("ir-panel")).toBeVisible();
+    await expect(page.getByTestId("ir-candidates-zone")).toContainText(
+      "V1 uses Supabase IR tables"
+    );
+    await expect(page.getByTestId("candidate-pool")).toHaveCount(0);
+
+    await page.getByText("V1 uses Supabase IR tables").click();
+    await expect(page.getByTestId("ir-detail-pane")).toContainText(
+      "Issue #5 defines ir_nodes"
+    );
 
     await page
-      .getByTestId("multimodal-input")
-      .fill("What database are we using? Reply with one sentence.");
-    await page.getByTestId("send-button").click();
+      .getByTestId("ir-detail-pane")
+      .getByRole("button", { exact: true, name: "Confirm" })
+      .click();
 
+    await expect(page.getByTestId("ir-truth-zone")).toContainText(
+      "V1 uses Supabase IR tables",
+      { timeout: 10_000 }
+    );
+  });
+
+  test("uses Explore new idea instead of the old clear action", async ({
+    page,
+  }) => {
     await expect(
-      page
-        .locator("[data-role='assistant'] [data-testid='message-content']")
-        .last()
-    ).toContainText("PostgreSQL", { timeout: 30_000 });
-
-    await page.locator('[data-topic-label="General"]').evaluate((element) => {
-      (element as HTMLButtonElement).click();
-    });
-
-    await expect(
-      chatHeader.getByText("General", { exact: true })
+      page.getByRole("button", { name: "Explore new idea" })
     ).toBeVisible();
-    await expect(decisionTree.getByText("We will use PostgreSQL")).toHaveCount(
-      0
-    );
-    await expect(page.locator("[data-role='user']")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Clear" })).toHaveCount(0);
 
-    await page.locator(`[data-topic-label="${topicA}"]`).evaluate((element) => {
-      (element as HTMLButtonElement).click();
-    });
-
-    await expect(chatHeader.getByText(topicA, { exact: true })).toBeVisible();
-    await expect(candidatePoolToggle).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Explore new idea" }).click();
     await expect(
-      decisionTree.getByText("We will use PostgreSQL").first()
-    ).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.locator("[data-role='user']").first()).toContainText(
-      seedPrompt
+      page.getByRole("heading", { name: "Explore new idea" })
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+  });
+
+  test("blocking manual sweep extracts chat turns into IR candidates", async ({
+    page,
+  }) => {
+    const suffix = Date.now().toString().slice(-6);
+    const topicLabel = `Sweep ${suffix}`;
+    const uniqueDecision = `candidate-only sweep ${suffix}`;
+    const bootstrapResponse = await page.request.get(
+      "/api/workspace/bootstrap"
     );
+    expect(bootstrapResponse.ok()).toBeTruthy();
 
-    await page.getByRole("button", { name: "Clear" }).click();
-    await expect(page.locator("[data-role='user']")).toHaveCount(0, {
-      timeout: 15_000,
+    const bootstrapPayload = (await bootstrapResponse.json()) as {
+      workspace: { activeProjectId: string };
+    };
+    const topicResponse = await page.request.post("/api/workspace/topics", {
+      data: {
+        projectId: bootstrapPayload.workspace.activeProjectId,
+        label: topicLabel,
+      },
     });
+    expect(topicResponse.ok()).toBeTruthy();
 
-    await page.getByRole("button", { name: "Back" }).click();
-    await expect(page.locator("[data-role='user']").first()).toContainText(
-      seedPrompt,
-      {
-        timeout: 15_000,
-      }
-    );
-
-    await page.getByRole("button", { name: "Forward" }).click();
-    await expect(page.locator("[data-role='user']")).toHaveCount(0, {
-      timeout: 15_000,
+    const topicPayload = (await topicResponse.json()) as {
+      workspace: {
+        activeProjectId: string;
+        activeTopicId: string;
+        currentConversationId: string;
+      };
+    };
+    const projectId = topicPayload.workspace.activeProjectId;
+    const topicId = topicPayload.workspace.activeTopicId;
+    const conversationId = topicPayload.workspace.currentConversationId;
+    const supabase = createSupabaseE2EClient();
+    const { error } = await supabase.from("messages").insert({
+      id: randomUUID(),
+      conversation_id: conversationId,
+      topic_id: topicId,
+      project_id: projectId,
+      role: "user",
+      content: `We decided ${uniqueDecision}: AI and MCP must only write pending candidates, never active truth.`,
+      created_at: new Date().toISOString(),
     });
+    expect(error).toBeNull();
 
-    await page.getByTestId("multimodal-input").fill(scrollPrompt);
-    await page.getByTestId("send-button").click();
-
-    await expect(page.getByTestId("stop-button")).toBeVisible({
-      timeout: 10_000,
+    const sweepResponse = await page.request.post("/api/sweep/manual", {
+      data: {
+        project_id: projectId,
+        chat_session_id: conversationId,
+        blocking: true,
+      },
     });
+    if (sweepResponse.status() === 503) {
+      test.skip(true, "IR migrations are not applied in this test database.");
+    }
 
-    const viewport = page.getByTestId("messages-viewport");
-    await page.waitForTimeout(1000);
+    expect(sweepResponse.ok()).toBeTruthy();
 
-    const beforeScrollState = await viewport.evaluate((element) => ({
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    }));
+    const sweepPayload = (await sweepResponse.json()) as {
+      status: string;
+      candidates_created: number;
+      ideas_created: number;
+    };
+    expect(sweepPayload.status).toBe("completed");
     expect(
-      beforeScrollState.scrollHeight - beforeScrollState.clientHeight
-    ).toBeGreaterThan(250);
+      sweepPayload.candidates_created + sweepPayload.ideas_created
+    ).toBeGreaterThan(0);
 
-    await viewport.evaluate((element) => {
-      element.scrollTo({ top: 0, behavior: "instant" });
-    });
-    await page.waitForTimeout(2000);
+    await expect
+      .poll(async () => {
+        const pendingResponse = await page.request.get(
+          `/api/ir?project_id=${projectId}&topic_id=${topicId}&status=pending`
+        );
 
-    const scrollState = await viewport.evaluate((element) => ({
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    }));
-    expect(scrollState.scrollTop).toBeLessThan(
-      scrollState.scrollHeight - scrollState.clientHeight - 150
-    );
+        if (!pendingResponse.ok()) {
+          return "";
+        }
 
-    await page
-      .getByTestId("stop-button")
-      .click()
-      .catch(() => {
-        // Streaming may have already finished before we stop it.
-      });
+        const payload = (await pendingResponse.json()) as {
+          nodes: Array<{ title: string; content: string | null }>;
+        };
+
+        return JSON.stringify(payload.nodes);
+      })
+      .toContain(uniqueDecision);
   });
 });

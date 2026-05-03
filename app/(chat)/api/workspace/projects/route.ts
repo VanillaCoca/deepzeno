@@ -21,11 +21,13 @@ export async function POST(request: Request) {
     const body = requestSchema.parse(await request.json());
     const bundle = await createProjectWithDefaults({
       userId: session.user.id,
+      userEmail: session.user.email,
       name: body.name,
     });
 
     const workspace = await bootstrapWorkspace({
       userId: session.user.id,
+      userEmail: session.user.email,
       selection: {
         projectId: bundle.project.id,
         topicId: bundle.generalTopic.id,

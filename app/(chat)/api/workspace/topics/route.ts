@@ -28,6 +28,7 @@ export async function POST(request: Request) {
 
     const workspace = await bootstrapWorkspace({
       userId: session.user.id,
+      userEmail: session.user.email,
       selection: {
         projectId: body.projectId,
         topicId: bundle.topic.id,

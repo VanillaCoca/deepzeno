@@ -3,10 +3,20 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  EraserIcon,
   PanelLeftIcon,
+  SparklesIcon,
 } from "lucide-react";
-import { memo } from "react";
+import { memo, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
@@ -23,16 +33,45 @@ function PureChatHeader({
 }) {
   const { state, toggleSidebar, isMobile } = useSidebar();
   const {
+    activeProjectId,
     activeTopic,
+    activeTopicId,
     canGoBack,
     canGoForward,
     clearConversation,
+    currentConversationId,
     goBack,
     goForward,
   } = useWorkspace();
+  const [exploreDialogOpen, setExploreDialogOpen] = useState(false);
+  const [isExploring, setIsExploring] = useState(false);
 
   if (state === "collapsed" && !isMobile) {
     return null;
+  }
+
+  async function handleExploreNewIdea() {
+    if (!(activeProjectId && activeTopicId && currentConversationId)) {
+      return;
+    }
+
+    setIsExploring(true);
+
+    try {
+      fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/sweep/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: activeProjectId,
+          chat_session_id: currentConversationId,
+          blocking: false,
+        }),
+      }).catch(console.error);
+      await clearConversation();
+      setExploreDialogOpen(false);
+    } finally {
+      setIsExploring(false);
+    }
   }
 
   return (
@@ -67,14 +106,19 @@ function PureChatHeader({
             Forward
           </Button>
           <Button
-            onClick={() => {
-              clearConversation().catch(console.error);
-            }}
+            disabled={
+              isExploring ||
+              !activeProjectId ||
+              !activeTopicId ||
+              !currentConversationId ||
+              Boolean(activeTopic?.archivedAt)
+            }
+            onClick={() => setExploreDialogOpen(true)}
             size="sm"
             variant="outline"
           >
-            <EraserIcon className="size-4" />
-            Clear
+            <SparklesIcon className="size-4" />
+            {isExploring ? "Reviewing..." : "Explore new idea"}
           </Button>
         </div>
       )}
@@ -87,6 +131,29 @@ function PureChatHeader({
           <p className="text-xs text-muted-foreground">Archived topic</p>
         ) : null}
       </div>
+      <AlertDialog onOpenChange={setExploreDialogOpen} open={exploreDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Explore new idea</AlertDialogTitle>
+            <AlertDialogDescription>
+              Start fresh on a new idea in this topic? ZENO will review the
+              current discussion before clearing.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isExploring}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isExploring}
+              onClick={(event) => {
+                event.preventDefault();
+                handleExploreNewIdea().catch(console.error);
+              }}
+            >
+              Yes, explore new
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

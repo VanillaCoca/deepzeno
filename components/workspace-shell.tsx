@@ -3,12 +3,12 @@
 import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
+import { IRPanel } from "@/components/ir/ir-panel";
+import { IRProvider } from "@/components/ir/ir-provider";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { TopicTruthProvider } from "@/hooks/use-topic-truth";
 import { cn } from "@/lib/utils";
 import { ProjectSidebar } from "./project-sidebar";
-import { TruthPanel } from "./truth-panel";
 
 export function WorkspaceShell({
   children,
@@ -40,7 +40,7 @@ export function WorkspaceShell({
       <ProjectSidebar userEmail={userEmail} />
 
       <SidebarInset className="min-h-dvh bg-sidebar">
-        <TopicTruthProvider>
+        <IRProvider>
           <div className="relative flex h-dvh min-w-0">
             <div className="min-w-0 flex-1">{children}</div>
 
@@ -54,10 +54,10 @@ export function WorkspaceShell({
               <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
-                    Truth Panel
+                    IR Panel
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Structured decisions for the current topic
+                    Ideas, candidates, truth, and detail
                   </p>
                 </div>
                 <Button
@@ -69,7 +69,7 @@ export function WorkspaceShell({
                 </Button>
               </div>
 
-              <TruthPanel />
+              <IRPanel />
             </aside>
 
             {!showTruthPanel && (
@@ -80,11 +80,11 @@ export function WorkspaceShell({
                 variant="outline"
               >
                 <PanelRightOpenIcon className="size-4" />
-                Truth Panel
+                IR Panel
               </Button>
             )}
           </div>
-        </TopicTruthProvider>
+        </IRProvider>
       </SidebarInset>
     </SidebarProvider>
   );

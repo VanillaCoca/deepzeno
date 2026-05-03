@@ -5,10 +5,9 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import type { IRType } from "@/lib/ir-types";
 import {
-  createProjectForUser,
-  createTopicForProject,
-  insertDecision,
-} from "@/lib/workspace/queries";
+  createProjectFromExtraction,
+  createProjectWithDefaults,
+} from "@/lib/workspace/service";
 
 type ConfirmTopicPayload = {
   name: string;
@@ -41,60 +40,38 @@ function normalizeName(value: string, fallback: string) {
 export async function createBlankProject() {
   const session = await auth();
   const userId = ensureAuthenticatedUserId(session);
-  const project = await createProjectForUser({
+  const userEmail = session?.user?.email ?? null;
+  const bundle = await createProjectWithDefaults({
     userId,
+    userEmail,
     name: "Untitled project",
   });
 
   revalidatePath("/");
 
   return {
-    projectId: project.id,
+    projectId: bundle.project.id,
+    topicId: bundle.generalTopic.id,
   };
 }
 
 export async function confirmExtraction(payload: ConfirmExtractionPayload) {
   const session = await auth();
   const userId = ensureAuthenticatedUserId(session);
+  const userEmail = session?.user?.email ?? null;
   const projectName = normalizeName(payload.projectName, "Untitled project");
-  const project = await createProjectForUser({
+  const result = await createProjectFromExtraction({
     userId,
-    name: projectName,
+    userEmail,
+    projectName,
+    topics: payload.topics,
   });
-
-  for (const [topicIndex, topic] of payload.topics.entries()) {
-    const decisions = topic.decisions.filter(
-      (decision) => decision.content.trim().length > 0
-    );
-
-    if (decisions.length === 0) {
-      continue;
-    }
-
-    const createdTopic = await createTopicForProject({
-      projectId: project.id,
-      label: normalizeName(topic.name, `Topic ${topicIndex + 1}`),
-      position: topicIndex,
-    });
-
-    for (const decision of decisions) {
-      const content = decision.content.trim();
-
-      await insertDecision({
-        projectId: project.id,
-        topicId: createdTopic.id,
-        title: content,
-        content,
-        kind: decision.type,
-        status: "active",
-        weight: "normal",
-      });
-    }
-  }
 
   revalidatePath("/");
 
   return {
-    projectId: project.id,
+    projectId: result.project.id,
+    topicId:
+      "activeTopic" in result ? result.activeTopic.id : result.generalTopic.id,
   };
 }

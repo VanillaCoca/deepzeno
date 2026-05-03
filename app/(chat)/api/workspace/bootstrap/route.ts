@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const workspace = await bootstrapWorkspace({
       userId: session.user.id,
+      userEmail: session.user.email,
       selection: {
         projectId: searchParams.get("projectId"),
         topicId: searchParams.get("topicId"),

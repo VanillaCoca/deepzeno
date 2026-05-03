@@ -37,12 +37,14 @@ const GENERAL_TOPIC_LABEL = "General";
 
 async function provisionProjectBundle({
   userId,
+  userEmail,
   name,
 }: {
   userId: string;
+  userEmail?: string | null;
   name: string;
 }) {
-  const project = await createProjectForUser({ userId, name });
+  const project = await createProjectForUser({ userId, userEmail, name });
   const generalTopic = await createTopicForProject({
     projectId: project.id,
     label: GENERAL_TOPIC_LABEL,
@@ -102,9 +104,11 @@ function pickConversationId({
 
 export async function bootstrapWorkspace({
   userId,
+  userEmail,
   selection,
 }: {
   userId: string;
+  userEmail?: string | null;
   selection?: WorkspaceSelectionParams;
 }): Promise<WorkspaceBootstrap> {
   let projects = await listProjectsByUserId(userId);
@@ -112,6 +116,7 @@ export async function bootstrapWorkspace({
   if (projects.length === 0) {
     await provisionProjectBundle({
       userId,
+      userEmail,
       name: DEFAULT_PROJECT_NAME,
     });
     projects = await listProjectsByUserId(userId);
@@ -126,9 +131,10 @@ export async function bootstrapWorkspace({
       ? await getProjectByIdForUser(selectedConversation.projectId, userId)
       : null) ??
     (selection?.projectId
-      ? projects.find(
-          (project: (typeof projects)[number]) => project.id === selection.projectId
-        ) ?? null
+      ? (projects.find(
+          (project: (typeof projects)[number]) =>
+            project.id === selection.projectId
+        ) ?? null)
       : null) ??
     projects[0];
 
@@ -209,12 +215,102 @@ export async function bootstrapWorkspace({
 
 export function createProjectWithDefaults({
   userId,
+  userEmail,
   name,
 }: {
   userId: string;
+  userEmail?: string | null;
   name: string;
 }) {
-  return provisionProjectBundle({ userId, name });
+  return provisionProjectBundle({ userId, userEmail, name });
+}
+
+export async function createProjectFromExtraction({
+  userId,
+  userEmail,
+  projectName,
+  topics,
+}: {
+  userId: string;
+  userEmail?: string | null;
+  projectName: string;
+  topics: Array<{
+    name: string;
+    decisions: Array<{
+      type: string;
+      content: string;
+    }>;
+  }>;
+}) {
+  const sanitizedTopics = topics
+    .map((topic) => ({
+      name: topic.name.trim(),
+      decisions: topic.decisions.filter(
+        (decision) => decision.content.trim().length > 0
+      ),
+    }))
+    .filter((topic) => topic.decisions.length > 0);
+
+  if (sanitizedTopics.length === 0) {
+    return provisionProjectBundle({
+      userId,
+      userEmail,
+      name: projectName,
+    });
+  }
+
+  const project = await createProjectForUser({
+    userId,
+    userEmail,
+    name: projectName,
+  });
+
+  let activeTopic: WorkspaceTopic | null = null;
+  let firstConversation: WorkspaceConversation | null = null;
+
+  for (const [topicIndex, topic] of sanitizedTopics.entries()) {
+    const createdTopic = await createTopicForProject({
+      projectId: project.id,
+      label: topic.name || `Topic ${topicIndex + 1}`,
+      position: topicIndex,
+    });
+
+    if (!activeTopic) {
+      activeTopic = createdTopic;
+      firstConversation = await createConversation({
+        topicId: createdTopic.id,
+        projectId: project.id,
+      });
+    }
+
+    for (const decision of topic.decisions) {
+      const content = decision.content.trim();
+
+      await insertDecision({
+        projectId: project.id,
+        topicId: createdTopic.id,
+        title: content,
+        content,
+        kind: decision.type,
+        status: "active",
+        weight: "normal",
+        confirmedByUserId: userId,
+      });
+    }
+  }
+
+  if (!activeTopic || !firstConversation) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to create extracted workspace"
+    );
+  }
+
+  return {
+    project,
+    activeTopic,
+    firstConversation,
+  };
 }
 
 export async function createTopicWithConversation({
@@ -415,7 +511,10 @@ export async function resolveOpenQuestionForUser({
     throw new ChatbotError("forbidden:chat", "Decision not found");
   }
 
-  if (sourceDecision.kind !== "open_question" || sourceDecision.status !== "active") {
+  if (
+    sourceDecision.kind !== "open_question" ||
+    sourceDecision.status !== "active"
+  ) {
     throw new ChatbotError(
       "bad_request:api",
       "Only active open questions can be resolved"

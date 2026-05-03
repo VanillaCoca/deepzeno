@@ -404,10 +404,10 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
   function handleStartBlank() {
     startMutation(async () => {
       try {
-        const { projectId } = await createBlankProject();
+        const { projectId, topicId } = await createBlankProject();
         resetModalState();
         setOpen(false);
-        router.push(`/chat/new?projectId=${projectId}`);
+        router.push(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
         router.refresh();
       } catch (error) {
         console.error("Create blank project failed", error);
@@ -425,10 +425,10 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
 
     startMutation(async () => {
       try {
-        const { projectId } = await confirmExtraction(payload);
+        const { projectId, topicId } = await confirmExtraction(payload);
         resetModalState();
         setOpen(false);
-        router.push(`/chat/new?projectId=${projectId}`);
+        router.push(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
         router.refresh();
       } catch (error) {
         console.error("Confirm extraction failed", error);
@@ -477,6 +477,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                 <p className="text-sm text-destructive">{state.error}</p>
               ) : null}
               <Textarea
+                className="min-h-32 max-h-[320px] overflow-y-auto"
                 onChange={(event) =>
                   dispatch({
                     type: "set_input",
