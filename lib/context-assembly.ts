@@ -114,7 +114,8 @@ export async function assembleContext(topicId: string, _projectId: string) {
   );
   const edges = allEdges.filter(
     (edge: WorkspaceEdge) =>
-      decisionIds.has(edge.sourceDecisionId) && decisionIds.has(edge.targetDecisionId)
+      decisionIds.has(edge.sourceDecisionId) &&
+      decisionIds.has(edge.targetDecisionId)
   );
 
   if (decisions.length === 0) {
@@ -152,7 +153,9 @@ export async function assembleContext(topicId: string, _projectId: string) {
     );
 
     if (leftKind !== rightKind) {
-      return (leftKind >= 0 ? leftKind : 999) - (rightKind >= 0 ? rightKind : 999);
+      return (
+        (leftKind >= 0 ? leftKind : 999) - (rightKind >= 0 ? rightKind : 999)
+      );
     }
 
     return right.createdAt.localeCompare(left.createdAt);

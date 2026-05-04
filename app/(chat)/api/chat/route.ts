@@ -36,6 +36,7 @@ import {
 import type { DBMessage } from "@/lib/db/schema";
 import { extractDecisions } from "@/lib/decision-extraction";
 import { ChatbotError } from "@/lib/errors";
+import { persistInlineIRMarkersForMessages } from "@/lib/ir/inline-markers";
 import { buildDecisionContextBlock } from "@/lib/prompting";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage } from "@/lib/types";
@@ -362,8 +363,20 @@ export async function POST(request: Request) {
       },
       generateId: generateUUID,
       onFinish: async ({ messages: finishedMessages }) => {
+        const inlineMarkerResult = shouldInjectWorkspaceContext
+          ? await persistInlineIRMarkersForMessages({
+              conversationId,
+              messages: finishedMessages as ChatMessage[],
+              projectId,
+              topicId,
+              userId: session.user.id,
+            })
+          : null;
+        const finalMessages =
+          inlineMarkerResult?.messages ?? (finishedMessages as ChatMessage[]);
+
         if (isToolApprovalFlow) {
-          for (const finishedMsg of finishedMessages) {
+          for (const finishedMsg of finalMessages) {
             const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
             if (existingMsg) {
               await updateMessage({
@@ -385,9 +398,9 @@ export async function POST(request: Request) {
               });
             }
           }
-        } else if (finishedMessages.length > 0) {
+        } else if (finalMessages.length > 0) {
           await saveMessages({
-            messages: finishedMessages.map((currentMessage) => ({
+            messages: finalMessages.map((currentMessage) => ({
               id: currentMessage.id,
               role: currentMessage.role,
               parts: currentMessage.parts,
@@ -398,7 +411,7 @@ export async function POST(request: Request) {
           });
         }
 
-        const workspaceMessages = finishedMessages
+        const workspaceMessages = finalMessages
           .filter(
             (currentMessage) =>
               currentMessage.role === "assistant" ||
@@ -419,7 +432,7 @@ export async function POST(request: Request) {
 
         await saveWorkspaceMessages(workspaceMessages);
 
-        const assistantMessages = finishedMessages.filter(
+        const assistantMessages = finalMessages.filter(
           (currentMessage) =>
             currentMessage.role === "assistant" &&
             getTextFromMessage(currentMessage).trim().length > 0

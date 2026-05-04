@@ -8,8 +8,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://chat.vercel.ai"),
-  title: "Zeno V1",
-  description: "Zeno workspace built on top of the AI SDK chatbot template.",
+  title: "ZENO V1",
+  description: "ZENO workspace built on top of the AI SDK chatbot template.",
 };
 
 export const viewport = {

@@ -10,8 +10,13 @@ import {
 import { fetcher } from "@/lib/utils";
 import type { WorkspaceCandidateDecision } from "@/lib/workspace/types";
 
-function buildLabel(candidates: WorkspaceCandidateDecision[], agentName: string) {
-  const pending = candidates.filter((candidate) => candidate.status === "pending");
+function buildLabel(
+  candidates: WorkspaceCandidateDecision[],
+  agentName: string
+) {
+  const pending = candidates.filter(
+    (candidate) => candidate.status === "pending"
+  );
   const accepted = candidates.filter(
     (candidate) => candidate.status === "accepted"
   );
@@ -100,7 +105,9 @@ export function AgentCandidateHint({
       }))
       .filter(({ candidates }) => candidates.length > 0)
       .sort((left, right) =>
-        right.candidates[0].createdAt.localeCompare(left.candidates[0].createdAt)
+        right.candidates[0].createdAt.localeCompare(
+          left.candidates[0].createdAt
+        )
       );
   }, [data?.candidates]);
 
@@ -149,7 +156,10 @@ export function AgentCandidateHint({
               <div className="overflow-hidden">
                 <div className="flex flex-col gap-2 border-t border-amber-500/15 px-3 py-3">
                   {candidates.map((candidate) => (
-                    <div className="rounded-xl bg-background/70 px-3 py-2" key={candidate.id}>
+                    <div
+                      className="rounded-xl bg-background/70 px-3 py-2"
+                      key={candidate.id}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <p className="truncate text-sm font-medium text-foreground">
                           {candidate.proposedTitle ?? "Untitled candidate"}

@@ -1,12 +1,49 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
   createConfirmedTestUser,
   createSupabaseE2EClient,
   deleteTestUser,
+  hasModelProviderE2EConfig,
   hasSupabaseE2EConfig,
   signInThroughLoginPage,
 } from "../helpers";
+
+const hasPlaywrightMockModel = Boolean(
+  process.env.PLAYWRIGHT ||
+    process.env.PLAYWRIGHT_TEST_BASE_URL ||
+    process.env.CI_PLAYWRIGHT
+);
+
+async function createTopicViaApi(page: Page, label: string) {
+  const bootstrapResponse = await page.request.get("/api/workspace/bootstrap");
+  expect(bootstrapResponse.ok()).toBeTruthy();
+
+  const bootstrapPayload = (await bootstrapResponse.json()) as {
+    workspace: { activeProjectId: string };
+  };
+  const topicResponse = await page.request.post("/api/workspace/topics", {
+    data: {
+      projectId: bootstrapPayload.workspace.activeProjectId,
+      label,
+    },
+  });
+  expect(topicResponse.ok()).toBeTruthy();
+
+  const topicPayload = (await topicResponse.json()) as {
+    workspace: {
+      activeProjectId: string;
+      activeTopicId: string;
+      currentConversationId: string;
+    };
+  };
+
+  return {
+    conversationId: topicPayload.workspace.currentConversationId,
+    projectId: topicPayload.workspace.activeProjectId,
+    topicId: topicPayload.workspace.activeTopicId,
+  };
+}
 
 test.describe("Workspace IR panel flow", () => {
   test.skip(
@@ -35,30 +72,7 @@ test.describe("Workspace IR panel flow", () => {
   }) => {
     const suffix = Date.now().toString().slice(-6);
     const topicLabel = `IR ${suffix}`;
-    const bootstrapResponse = await page.request.get(
-      "/api/workspace/bootstrap"
-    );
-    expect(bootstrapResponse.ok()).toBeTruthy();
-
-    const bootstrapPayload = (await bootstrapResponse.json()) as {
-      workspace: { activeProjectId: string };
-    };
-    const topicResponse = await page.request.post("/api/workspace/topics", {
-      data: {
-        projectId: bootstrapPayload.workspace.activeProjectId,
-        label: topicLabel,
-      },
-    });
-    expect(topicResponse.ok()).toBeTruthy();
-
-    const topicPayload = (await topicResponse.json()) as {
-      workspace: {
-        activeProjectId: string;
-        activeTopicId: string;
-      };
-    };
-    const projectId = topicPayload.workspace.activeProjectId;
-    const topicId = topicPayload.workspace.activeTopicId;
+    const { projectId, topicId } = await createTopicViaApi(page, topicLabel);
     const draftResponse = await page.request.post("/api/ir/draft", {
       data: {
         project_id: projectId,
@@ -79,8 +93,37 @@ test.describe("Workspace IR panel flow", () => {
 
     expect(draftResponse.ok()).toBeTruthy();
 
+    const ideaResponse = await page.request.post("/api/ir/draft", {
+      data: {
+        project_id: projectId,
+        topic_id: topicId,
+        kind: "hypothesis",
+        title: "Bilingual sweep accuracy needs a separate eval set",
+        content: "This is a lower-confidence idea from sweep.",
+        rationale: "It should stay ambient until promoted.",
+        source_layer: "sweep",
+        created_by: "ai",
+        initial_status: "idea",
+        extraction_confidence: 0.62,
+      },
+    });
+    expect(ideaResponse.ok()).toBeTruthy();
+
     await page.goto(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
     await expect(page.getByTestId("ir-panel")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Ideas \(1\)/ })
+    ).toBeVisible();
+    await expect(
+      page.getByText("Bilingual sweep accuracy needs a separate eval set")
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: /Ideas \(1\)/ }).click();
+    await expect(page.getByTestId("ir-ideas-zone")).toContainText(
+      "Bilingual sweep accuracy needs a separate eval set"
+    );
+    await expect(
+      page.getByRole("button", { name: /Candidates \(1\)/ })
+    ).toBeVisible();
     await expect(page.getByTestId("ir-candidates-zone")).toContainText(
       "V1 uses Supabase IR tables"
     );
@@ -100,6 +143,76 @@ test.describe("Workspace IR panel flow", () => {
       "V1 uses Supabase IR tables",
       { timeout: 10_000 }
     );
+  });
+
+  test("uses the ZENO logo as the project-selection escape hatch", async ({
+    page,
+  }) => {
+    await expect(
+      page.getByRole("link", { name: "Back to project selection" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { exact: true, name: "New Project" })
+    ).toHaveCount(0);
+    await expect(page.locator("select")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Back to project selection" }).click();
+    await expect(page).toHaveURL("/");
+    await expect(
+      page.getByRole("button", { name: /New project/i })
+    ).toBeVisible();
+  });
+
+  test("persists AI inline IR markers as pending candidates", async ({
+    page,
+  }) => {
+    test.skip(
+      !(hasModelProviderE2EConfig && hasPlaywrightMockModel),
+      "Set PLAYWRIGHT=True and at least one model provider env var to exercise the deterministic inline-marker mock."
+    );
+
+    const suffix = Date.now().toString().slice(-6);
+    const { projectId, topicId } = await createTopicViaApi(
+      page,
+      `Inline ${suffix}`
+    );
+    const preflightResponse = await page.request.get(
+      `/api/ir?project_id=${projectId}&topic_id=${topicId}&status=pending`
+    );
+
+    if (preflightResponse.status() === 503) {
+      test.skip(true, "IR migrations are not applied in this test database.");
+    }
+
+    expect(preflightResponse.ok()).toBeTruthy();
+
+    await page.goto(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
+    await page
+      .getByTestId("multimodal-input")
+      .fill("inline marker test: we decided V1 excludes BYOK.");
+    await page.getByTestId("send-button").click();
+
+    await expect(
+      page.getByText("Inline marker test excludes BYOK")
+    ).toBeVisible({ timeout: 30_000 });
+
+    await expect
+      .poll(async () => {
+        const response = await page.request.get(
+          `/api/ir?project_id=${projectId}&topic_id=${topicId}&status=pending`
+        );
+
+        if (!response.ok()) {
+          return "";
+        }
+
+        const payload = (await response.json()) as {
+          nodes: Array<{ title: string }>;
+        };
+
+        return JSON.stringify(payload.nodes);
+      })
+      .toContain("Inline marker test excludes BYOK");
   });
 
   test("uses Explore new idea instead of the old clear action", async ({
@@ -123,32 +236,10 @@ test.describe("Workspace IR panel flow", () => {
     const suffix = Date.now().toString().slice(-6);
     const topicLabel = `Sweep ${suffix}`;
     const uniqueDecision = `candidate-only sweep ${suffix}`;
-    const bootstrapResponse = await page.request.get(
-      "/api/workspace/bootstrap"
+    const { conversationId, projectId, topicId } = await createTopicViaApi(
+      page,
+      topicLabel
     );
-    expect(bootstrapResponse.ok()).toBeTruthy();
-
-    const bootstrapPayload = (await bootstrapResponse.json()) as {
-      workspace: { activeProjectId: string };
-    };
-    const topicResponse = await page.request.post("/api/workspace/topics", {
-      data: {
-        projectId: bootstrapPayload.workspace.activeProjectId,
-        label: topicLabel,
-      },
-    });
-    expect(topicResponse.ok()).toBeTruthy();
-
-    const topicPayload = (await topicResponse.json()) as {
-      workspace: {
-        activeProjectId: string;
-        activeTopicId: string;
-        currentConversationId: string;
-      };
-    };
-    const projectId = topicPayload.workspace.activeProjectId;
-    const topicId = topicPayload.workspace.activeTopicId;
-    const conversationId = topicPayload.workspace.currentConversationId;
     const supabase = createSupabaseE2EClient();
     const { error } = await supabase.from("messages").insert({
       id: randomUUID(),

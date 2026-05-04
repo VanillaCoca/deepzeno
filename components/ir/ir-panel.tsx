@@ -15,7 +15,7 @@ import {
   ShieldAlertIcon,
   XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
@@ -307,6 +307,7 @@ export function IRPanel() {
   } = useWorkspace();
   const [ideasExpanded, setIdeasExpanded] = useState(false);
   const [candidatesExpanded, setCandidatesExpanded] = useState(true);
+  const [listPanePercent, setListPanePercent] = useState(55);
   const [truthMode, setTruthMode] = useState<TruthMode>("type");
   const [search, setSearch] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<
@@ -322,6 +323,7 @@ export function IRPanel() {
   const [draftRationale, setDraftRationale] = useState("");
   const [isMutating, setIsMutating] = useState(false);
   const [kindChoice, setKindChoice] = useState("plan:decision");
+  const panelRef = useRef<HTMLDivElement>(null);
   const { data: detail, mutate: mutateDetail } = useSWR<IRDetail>(
     irNodeKey(selectedNodeId),
     fetcher,
@@ -482,6 +484,31 @@ export function IRPanel() {
     );
   }
 
+  function handleDividerPointerDown(event: React.PointerEvent<HTMLElement>) {
+    const panel = panelRef.current;
+
+    if (!panel) {
+      return;
+    }
+
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+
+    function handlePointerMove(pointerEvent: PointerEvent) {
+      const nextPercent =
+        ((pointerEvent.clientY - rect.top) / Math.max(rect.height, 1)) * 100;
+      setListPanePercent(Math.min(72, Math.max(28, nextPercent)));
+    }
+
+    function handlePointerUp() {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp, { once: true });
+  }
+
   const relationModeNodes = useMemo(() => {
     if (!selectedNodeId) {
       return [];
@@ -505,12 +532,20 @@ export function IRPanel() {
   }, [filteredTruth, selectedNodeId, truthEdges]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="ir-panel">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      data-testid="ir-panel"
+      ref={panelRef}
+    >
       <div className="border-b border-border/40 px-3 py-2 text-xs text-muted-foreground">
-        Since last visit: {candidates.length}c · {ideas.length} ideas
+        Since last visit: {candidates.length} ·{" "}
+        {candidates.length > 0 ? "1 ⚠" : "0 ⚠"}
       </div>
 
-      <div className="flex min-h-0 flex-[0_0_55%] flex-col overflow-y-auto px-3 py-2">
+      <div
+        className="flex min-h-0 flex-col overflow-y-auto px-3 py-2"
+        style={{ flexBasis: `${listPanePercent}%` }}
+      >
         <ZoneHeader
           count={ideas.length}
           expanded={ideasExpanded}
@@ -669,7 +704,21 @@ export function IRPanel() {
         </div>
       </div>
 
-      <div className="h-1 cursor-row-resize border-y border-border/40 bg-muted/60" />
+      <button
+        aria-label="Resize IR detail pane"
+        className="h-1 cursor-row-resize border-y border-border/40 bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp") {
+            setListPanePercent((current) => Math.max(28, current - 5));
+          }
+
+          if (event.key === "ArrowDown") {
+            setListPanePercent((current) => Math.min(72, current + 5));
+          }
+        }}
+        onPointerDown={handleDividerPointerDown}
+        type="button"
+      />
 
       <div
         className="flex min-h-[220px] flex-1 flex-col overflow-hidden"

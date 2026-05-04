@@ -36,7 +36,10 @@ export async function GET(request: Request) {
     return Response.json({ apiKeys });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return new ChatbotError("bad_request:api", "projectId is required").toResponse();
+      return new ChatbotError(
+        "bad_request:api",
+        "projectId is required"
+      ).toResponse();
     }
 
     if (error instanceof ChatbotError) {

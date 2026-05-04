@@ -1,5 +1,5 @@
 /**
- * Zeno MCP route
+ * ZENO MCP route
  *
  * V1 boundary: external agents may only READ confirmed truth and WRITE
  * candidate_decisions through submit_candidate. They must never mutate
@@ -8,9 +8,7 @@
 
 import { z } from "zod";
 import { ChatbotError } from "@/lib/errors";
-import {
-  authenticateProjectApiKey,
-} from "@/lib/mcp/api-keys";
+import { authenticateProjectApiKey } from "@/lib/mcp/api-keys";
 import {
   getMcpDecision,
   getMcpProjectContext,
@@ -244,7 +242,10 @@ async function handleToolCall(
   const apiKey = await authenticateProjectApiKey(token);
 
   if (!apiKey) {
-    throw new ChatbotError("unauthorized:chat", "API key is invalid or revoked");
+    throw new ChatbotError(
+      "unauthorized:chat",
+      "API key is invalid or revoked"
+    );
   }
 
   switch (name) {
@@ -338,7 +339,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
   if (payload.jsonrpc !== "2.0") {
     return jsonRpcError(id, {
-      code: -32600,
+      code: -32_600,
       message: "Invalid JSON-RPC payload",
       status: 400,
     });
@@ -348,7 +349,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
   if (!method) {
     return jsonRpcError(id, {
-      code: -32600,
+      code: -32_600,
       message: "Missing JSON-RPC method",
       status: 400,
     });
@@ -359,7 +360,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!token) {
       return jsonRpcError(id, {
-        code: -32001,
+        code: -32_001,
         message: "Missing API key",
         status: 401,
       });
@@ -369,7 +370,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!apiKey) {
       return jsonRpcError(id, {
-        code: -32001,
+        code: -32_001,
         message: "API key is invalid or revoked",
         status: 401,
       });
@@ -407,7 +408,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!token) {
       return jsonRpcError(id, {
-        code: -32001,
+        code: -32_001,
         message: "Missing API key",
         status: 401,
       });
@@ -417,7 +418,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!apiKey) {
       return jsonRpcError(id, {
-        code: -32001,
+        code: -32_001,
         message: "API key is invalid or revoked",
         status: 401,
       });
@@ -433,7 +434,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!token) {
       return jsonRpcError(id, {
-        code: -32001,
+        code: -32_001,
         message: "Missing API key",
         status: 401,
       });
@@ -444,7 +445,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!name) {
       return jsonRpcError(id, {
-        code: -32602,
+        code: -32_602,
         message: "Missing tool name",
         status: 400,
       });
@@ -459,7 +460,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
 
     if (!result) {
       return jsonRpcError(id, {
-        code: -32601,
+        code: -32_601,
         message: `Unknown tool: ${name}`,
         status: 404,
       });
@@ -469,7 +470,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
   }
 
   return jsonRpcError(id, {
-    code: -32601,
+    code: -32_601,
     message: `Method not found: ${method}`,
     status: 404,
   });
@@ -482,7 +483,7 @@ export async function POST(request: Request) {
     if (Array.isArray(body)) {
       if (body.length === 0) {
         return jsonRpcError(null, {
-          code: -32600,
+          code: -32_600,
           message: "Batch requests must not be empty",
           status: 400,
         });
@@ -510,7 +511,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return jsonRpcError(null, {
-        code: -32602,
+        code: -32_602,
         message: "Invalid MCP tool arguments",
         data: error.flatten(),
         status: 400,
@@ -521,10 +522,10 @@ export async function POST(request: Request) {
       return jsonRpcError(null, {
         code:
           error.statusCode === 401
-            ? -32001
+            ? -32_001
             : error.statusCode === 403
-              ? -32003
-              : -32000,
+              ? -32_003
+              : -32_000,
         message: error.cause ? String(error.cause) : error.message,
         status: error.statusCode,
       });
@@ -532,7 +533,7 @@ export async function POST(request: Request) {
 
     console.error("MCP request failed", error);
     return jsonRpcError(null, {
-      code: -32603,
+      code: -32_603,
       message: "Internal MCP server error",
       status: 500,
     });

@@ -1,10 +1,10 @@
 import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import {
+  getTopicByIdForUser,
   listCandidatesByMessageId,
   listCandidatesByTopicId,
   listPendingCandidatesByTopicId,
-  getTopicByIdForUser,
 } from "@/lib/workspace/queries";
 import { getTopicTruthSnapshot } from "@/lib/workspace/service";
 

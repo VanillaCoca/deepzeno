@@ -469,7 +469,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                 Start with what you have
               </DialogTitle>
               <DialogDescription>
-                Paste notes, drop a pitch deck, or describe the project. Zeno
+                Paste notes, drop a pitch deck, or describe the project. ZENO
                 extracts goals, constraints, and open questions for you to
                 confirm.
               </DialogDescription>
@@ -611,7 +611,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                     )}
 
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Zeno grouped {totalDecisionCount} decisions into{" "}
+                      ZENO grouped {totalDecisionCount} decisions into{" "}
                       <span className="font-medium text-foreground">
                         {review.topics.length}{" "}
                         {review.topics.length === 1 ? "topic" : "topics"}

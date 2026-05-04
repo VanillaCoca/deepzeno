@@ -48,7 +48,7 @@ function getSourceLabel(candidate: WorkspaceCandidateDecision) {
   }
 
   if (candidate.source === "zeno_extraction") {
-    return "Zeno extraction";
+    return "ZENO extraction";
   }
 
   return candidate.source.replaceAll("_", " ");

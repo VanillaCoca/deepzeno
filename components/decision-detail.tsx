@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import {
   getDecisionKindBadgeLabel,
-  getDecisionKindLabel,
   getDecisionKindTone,
 } from "@/lib/decision-kinds";
 import { cn } from "@/lib/utils";
@@ -34,7 +33,9 @@ function buildRelationLabel(
   }
 
   if (edge.type === "resolved_by") {
-    return direction === "outgoing" ? `resolves → ${title}` : `resolved by ${title}`;
+    return direction === "outgoing"
+      ? `resolves → ${title}`
+      : `resolved by ${title}`;
   }
 
   return null;
@@ -138,7 +139,8 @@ export function DecisionDetail({
     while (cursorId && !seen.has(cursorId)) {
       seen.add(cursorId);
       const supersedesEdge = edges.find(
-        (edge) => edge.type === "supersedes" && edge.sourceDecisionId === cursorId
+        (edge) =>
+          edge.type === "supersedes" && edge.sourceDecisionId === cursorId
       );
 
       if (!supersedesEdge) {
@@ -166,7 +168,8 @@ export function DecisionDetail({
 
   const currentDecision = decision;
   const isOpenQuestion =
-    currentDecision.kind === "open_question" && currentDecision.status === "active";
+    currentDecision.kind === "open_question" &&
+    currentDecision.status === "active";
 
   async function handleInjectContext() {
     const success = await bringDecisionToSandbox({
@@ -268,13 +271,18 @@ export function DecisionDetail({
 
         <section className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={getDecisionKindTone(decision.kind)} variant="outline">
+            <Badge
+              className={getDecisionKindTone(decision.kind)}
+              variant="outline"
+            >
               {getDecisionKindBadgeLabel(decision.kind)}
             </Badge>
             <Badge variant="secondary">active</Badge>
             <Badge variant="outline">{decision.weight}</Badge>
           </div>
-          <p className="text-sm leading-6 text-foreground">{decision.content}</p>
+          <p className="text-sm leading-6 text-foreground">
+            {decision.content}
+          </p>
         </section>
 
         <section className="flex flex-col gap-2">
@@ -432,7 +440,9 @@ export function DecisionDetail({
             <div
               className={cn(
                 "grid transition-all duration-200 ease-out",
-                historyOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-70"
+                historyOpen
+                  ? "grid-rows-[1fr] opacity-100"
+                  : "grid-rows-[0fr] opacity-70"
               )}
             >
               <div className="overflow-hidden">
@@ -460,8 +470,8 @@ export function DecisionDetail({
                           <div>
                             <p className="text-sm font-medium text-foreground">
                               v{versionHistory.length - index} ·{" "}
-                              {new Date(version.createdAt).toLocaleDateString()} ·{" "}
-                              {summary}
+                              {new Date(version.createdAt).toLocaleDateString()}{" "}
+                              · {summary}
                             </p>
                           </div>
                           <ChevronDownIcon
@@ -490,7 +500,8 @@ export function DecisionDetail({
                                 </p>
                               )}
                               <p className="mt-3 text-xs text-muted-foreground">
-                                confirmed_in {new Date(version.createdAt).toLocaleString()}
+                                confirmed_in{" "}
+                                {new Date(version.createdAt).toLocaleString()}
                               </p>
                             </div>
                           </div>

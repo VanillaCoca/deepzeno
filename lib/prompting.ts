@@ -1,5 +1,5 @@
 export const extractionSystemPrompt = `
-You are Zeno's decision extraction engine.
+You are ZENO's decision extraction engine.
 
 Read the conversation and identify candidate items that should enter the project truth workflow.
 

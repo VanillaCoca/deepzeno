@@ -7,7 +7,7 @@ test.describe("Authentication Pages", () => {
     await page.goto("/login");
 
     await expect(
-      page.getByRole("heading", { name: "Welcome to Zeno" })
+      page.getByRole("heading", { name: "Welcome to ZENO" })
     ).toBeVisible();
     await expect(
       page.getByText("Sign in to enter the workspace", { exact: false })

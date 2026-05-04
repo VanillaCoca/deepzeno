@@ -3,12 +3,12 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { generateObject } from "ai";
 import { z } from "zod";
+import { getLanguageModel } from "@/lib/ai/providers";
 import {
+  type DecisionKind,
   decisionKindOrder,
   isDecisionKind,
-  type DecisionKind,
 } from "@/lib/decision-kinds";
-import { getLanguageModel } from "@/lib/ai/providers";
 import { serializeDecisionGraph } from "@/lib/decision-serializer";
 import { extractionSystemPrompt } from "@/lib/prompting";
 import {
@@ -24,10 +24,7 @@ const extractedCandidateSchema = z.object({
   proposed_title: z.string().min(1).max(160).nullable().optional(),
   proposed_content: z.string().min(1).max(4000),
   proposed_rationale: z.string().max(4000).nullable().optional(),
-  proposed_kind: z
-    .enum(decisionKindOrder)
-    .nullable()
-    .optional(),
+  proposed_kind: z.enum(decisionKindOrder).nullable().optional(),
   proposed_weight: z.enum(["anchor", "key", "normal"]).nullable().optional(),
   confidence: z.number().min(0).max(1).nullable().optional(),
   suggested_edges: z
@@ -215,9 +212,8 @@ function normalizeCandidates(
         relevantMessageIds: candidate.relevant_message_ids,
       };
     })
-    .filter(
-      (candidate): candidate is NonNullable<typeof candidate> =>
-        Boolean(candidate)
+    .filter((candidate): candidate is NonNullable<typeof candidate> =>
+      Boolean(candidate)
     )
     .filter((candidate) => candidate.proposedContent.length > 0);
 }

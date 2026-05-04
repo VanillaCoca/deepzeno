@@ -81,8 +81,8 @@ test.describe("Project extraction API", () => {
     expectValidExtraction(pantry);
     expectValidExtraction(grant);
     expect(pantry).not.toEqual(grant);
-    expect(pantry.projectName).not.toBe("Zeno V1");
-    expect(grant.projectName).not.toBe("Zeno V1");
+    expect(pantry.projectName).not.toBe("ZENO V1");
+    expect(grant.projectName).not.toBe("ZENO V1");
     expect(collectExtractionText(pantry)).toMatch(
       /pantry|barcode|scanner|payments/
     );

@@ -26,7 +26,7 @@ export function Preview() {
             What can I help with?
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Ask a question, write code, or explore ideas.
+            Ask a question, clarify choices, or explore ideas.
           </p>
         </div>
       </div>

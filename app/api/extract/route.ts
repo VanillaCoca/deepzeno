@@ -41,14 +41,14 @@ type RawExtractionResult = z.infer<typeof extractionResultSchema>;
 const MODEL_TIMEOUT_MS = 15_000;
 
 function buildExtractionSystemPrompt() {
-  return `You are Zeno's project bootstrap extraction worker.
+  return `You are ZENO's project bootstrap extraction worker.
 
 The user is creating a project from notes or a prompt. Extract only durable project memory that the user can review before it becomes truth.
 
 Rules:
 - Return JSON only. No markdown fences, no commentary.
 - Shape: {"projectName":"...","topics":[{"name":"...","decisions":[{"type":"goal|constraint|hypothesis|open_question|plan|principle|rejection","content":"..."}]}]}
-- Infer a short projectName from the input. Do not use "Zeno V1" unless the user actually wrote that.
+- Infer a short projectName from the input. Do not use "ZENO V1" unless the user actually wrote that.
 - Group related decisions into concise topic names.
 - Extract user-stated goals, constraints, plans/tasks, hypotheses, principles, open questions, and explicit rejections.
 - Use rejection only when the user explicitly decides not to pursue an option.

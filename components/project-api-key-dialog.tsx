@@ -1,6 +1,12 @@
 "use client";
 
-import { CheckIcon, CopyIcon, KeyRoundIcon, Loader2Icon, Trash2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  CopyIcon,
+  KeyRoundIcon,
+  Loader2Icon,
+  Trash2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -80,7 +86,9 @@ export function ProjectApiKeyDialog({
           throw new Error("Failed to load API keys");
         }
 
-        const payload = (await response.json()) as { apiKeys: WorkspaceApiKey[] };
+        const payload = (await response.json()) as {
+          apiKeys: WorkspaceApiKey[];
+        };
 
         if (!cancelled) {
           setApiKeys(payload.apiKeys);
@@ -138,7 +146,9 @@ export function ProjectApiKeyDialog({
       setApiKeys(payload.apiKeys);
       setCreatedKey(payload.createdKey);
       setLabel("");
-      toast.success("API key generated. Copy it now — it won't be shown again.");
+      toast.success(
+        "API key generated. Copy it now — it won't be shown again."
+      );
     } catch (error) {
       console.error(error);
       toast.error("Failed to create API key.");
@@ -237,7 +247,9 @@ export function ProjectApiKeyDialog({
         <div className="space-y-5">
           <div className="rounded-2xl border border-border/60 bg-muted/35 p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{projectName ?? "Current project"}</Badge>
+              <Badge variant="outline">
+                {projectName ?? "Current project"}
+              </Badge>
               <Badge variant="secondary">MCP endpoint</Badge>
             </div>
             <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center">
@@ -267,7 +279,10 @@ export function ProjectApiKeyDialog({
                 placeholder="Key label (optional, e.g. Claude Code · Laptop)"
                 value={label}
               />
-              <Button disabled={isSubmitting || !projectId} onClick={handleCreateKey}>
+              <Button
+                disabled={isSubmitting || !projectId}
+                onClick={handleCreateKey}
+              >
                 {isSubmitting ? (
                   <Loader2Icon className="size-4 animate-spin" />
                 ) : (
@@ -294,7 +309,10 @@ export function ProjectApiKeyDialog({
                     close this dialog.
                   </p>
                 </div>
-                <Badge className="bg-emerald-500/10 text-emerald-700" variant="outline">
+                <Badge
+                  className="bg-emerald-500/10 text-emerald-700"
+                  variant="outline"
+                >
                   shown once
                 </Badge>
               </div>
@@ -316,7 +334,9 @@ export function ProjectApiKeyDialog({
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-foreground">Existing keys</p>
+              <p className="text-sm font-semibold text-foreground">
+                Existing keys
+              </p>
               <Badge variant="outline">{apiKeys.length}</Badge>
             </div>
 
@@ -341,7 +361,9 @@ export function ProjectApiKeyDialog({
                           <p className="text-sm font-medium text-foreground">
                             {apiKey.label ?? "Untitled key"}
                           </p>
-                          <Badge variant={apiKey.revokedAt ? "outline" : "secondary"}>
+                          <Badge
+                            variant={apiKey.revokedAt ? "outline" : "secondary"}
+                          >
                             {apiKey.revokedAt ? "Revoked" : "Active"}
                           </Badge>
                         </div>
@@ -374,8 +396,8 @@ export function ProjectApiKeyDialog({
 
         <DialogFooter className="sm:justify-start">
           <p className="text-xs text-muted-foreground">
-            Revoked keys return 401 immediately. Each key is bound to exactly one
-            project.
+            Revoked keys return 401 immediately. Each key is bound to exactly
+            one project.
           </p>
         </DialogFooter>
       </DialogContent>

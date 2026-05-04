@@ -24,7 +24,7 @@ function HomepageShell({ children }: { children: React.ReactNode }) {
     <main className="min-h-dvh bg-background">
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6 py-10">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-base font-medium">Zeno</span>
+          <span className="text-base font-medium">ZENO</span>
           <CreateProjectModal>
             <Button size="sm">+ New project</Button>
           </CreateProjectModal>
