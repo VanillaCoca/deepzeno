@@ -5,6 +5,19 @@ import { requireAuth } from "@/app/(auth)/auth";
 import { CreateProjectModal } from "@/components/create-project-modal";
 import { Button } from "@/components/ui/button";
 import { listProjectSummariesByUserId } from "@/lib/workspace/queries";
+import type { WorkspaceProjectSummary } from "@/lib/workspace/types";
+
+function buildWorkspaceHref(project: WorkspaceProjectSummary) {
+  const params = new URLSearchParams({
+    projectId: project.id,
+  });
+
+  if (project.primaryTopicId) {
+    params.set("topicId", project.primaryTopicId);
+  }
+
+  return `/chat/new?${params.toString()}`;
+}
 
 function HomepageShell({ children }: { children: React.ReactNode }) {
   return (
@@ -68,7 +81,7 @@ async function HomepageContent() {
       {projects.map((project) => (
         <Link
           className="cursor-pointer rounded-lg border border-border bg-background p-4 transition-colors hover:bg-muted/30"
-          href={`/chat/new?projectId=${project.id}`}
+          href={buildWorkspaceHref(project)}
           key={project.id}
         >
           <div className="flex items-start justify-between gap-4">

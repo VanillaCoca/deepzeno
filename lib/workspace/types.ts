@@ -9,6 +9,7 @@ export type WorkspaceProject = {
 };
 
 export type WorkspaceProjectSummary = WorkspaceProject & {
+  primaryTopicId: string | null;
   topicCount: number;
 };
 

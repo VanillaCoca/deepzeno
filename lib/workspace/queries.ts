@@ -443,23 +443,40 @@ export async function listProjectSummariesByUserId(
   const topicRows = await ensureResult(
     client
       .from("topics")
-      .select("project_id")
+      .select("*")
       .in(
         "project_id",
         projects.map((project: WorkspaceProject) => project.id)
-      ),
+      )
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
     "Failed to count project topics"
   );
 
   const topicCounts = new Map<string, number>();
+  const primaryTopicIds = new Map<string, string>();
+  const primaryTopicArchivedStates = new Map<string, boolean>();
 
   for (const row of topicRows ?? []) {
-    const projectId = String((row as DatabaseRecord).project_id);
+    const topic = mapTopic(row as DatabaseRecord);
+    const projectId = topic.projectId;
     topicCounts.set(projectId, (topicCounts.get(projectId) ?? 0) + 1);
+
+    const currentPrimaryIsArchived =
+      primaryTopicArchivedStates.get(projectId) ?? true;
+
+    if (
+      !primaryTopicIds.has(projectId) ||
+      (currentPrimaryIsArchived && !topic.archivedAt)
+    ) {
+      primaryTopicIds.set(projectId, topic.id);
+      primaryTopicArchivedStates.set(projectId, Boolean(topic.archivedAt));
+    }
   }
 
   return projects.map((project: WorkspaceProject) => ({
     ...project,
+    primaryTopicId: primaryTopicIds.get(project.id) ?? null,
     topicCount: topicCounts.get(project.id) ?? 0,
   }));
 }

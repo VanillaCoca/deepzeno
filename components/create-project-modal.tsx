@@ -420,6 +420,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
     const payload = buildConfirmPayload();
 
     if (!payload) {
+      toast.error(
+        "Select at least one extracted item before creating the workspace."
+      );
       return;
     }
 
@@ -460,8 +463,8 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         {state.stage === "input" && (
-          <div className="space-y-5">
-            <DialogHeader className="space-y-2">
+          <div className="flex max-h-[calc(85dvh-3rem)] flex-col gap-5">
+            <DialogHeader className="shrink-0 space-y-2">
               <DialogTitle className="text-lg font-medium">
                 Start with what you have
               </DialogTitle>
@@ -472,12 +475,12 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3">
+            <div className="min-h-0 space-y-3">
               {state.error ? (
                 <p className="text-sm text-destructive">{state.error}</p>
               ) : null}
               <Textarea
-                className="min-h-32 max-h-[320px] overflow-y-auto"
+                className="min-h-32 max-h-[40dvh] resize-none overflow-y-auto sm:max-h-[320px]"
                 onChange={(event) =>
                   dispatch({
                     type: "set_input",
@@ -490,7 +493,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
               />
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <input className="hidden" ref={fileInputRef} type="file" />
                 <Button
@@ -506,13 +509,17 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
 
               <div className="flex items-center justify-end gap-2">
                 <Button
+                  aria-busy={isMutating}
                   disabled={isMutating}
                   onClick={handleStartBlank}
                   size="sm"
                   type="button"
                   variant="secondary"
                 >
-                  Start blank
+                  {isMutating ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : null}
+                  {isMutating ? "Creating workspace..." : "Start blank"}
                 </Button>
                 <Button
                   className="bg-foreground text-background hover:bg-foreground/90"
@@ -558,12 +565,16 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                       ← Back
                     </Button>
                     <Button
+                      aria-busy={isMutating}
                       disabled={isMutating}
                       onClick={handleStartBlank}
                       size="sm"
                       type="button"
                     >
-                      Start blank →
+                      {isMutating ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : null}
+                      {isMutating ? "Creating workspace..." : "Start blank →"}
                     </Button>
                   </div>
                 </div>
@@ -742,6 +753,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
             {extractionEmpty ? null : (
               <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                 <Button
+                  disabled={isMutating}
                   onClick={() => dispatch({ type: "back_to_input" })}
                   size="sm"
                   type="button"
@@ -751,13 +763,21 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                 </Button>
 
                 <Button
+                  aria-busy={isMutating}
                   className="bg-foreground text-background hover:bg-foreground/90"
                   disabled={checkedCount === 0 || isMutating}
                   onClick={handleConfirm}
                   size="sm"
                   type="button"
                 >
-                  Confirm {checkedCount} in {nonEmptyTopicCount} topics →
+                  {isMutating ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : null}
+                  {isMutating
+                    ? "Creating workspace..."
+                    : checkedCount === 0
+                      ? "Select at least one item"
+                      : `Confirm ${checkedCount} in ${nonEmptyTopicCount} topics →`}
                 </Button>
               </div>
             )}
