@@ -780,7 +780,7 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
           </Button>
         </DialogTrigger>
         <DialogContent
-          className="max-h-[90dvh] max-w-[min(1120px,calc(100vw-2rem))] gap-0 overflow-hidden rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] p-0"
+          className="h-[min(820px,calc(100dvh-2rem))] w-[min(1120px,calc(100vw-2rem))] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]"
           showCloseButton={!isConfirming}
         >
           <DialogHeader className="border-b border-[var(--ir-border-default)] px-5 py-4">
@@ -793,8 +793,8 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
             </div>
           </DialogHeader>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] overflow-hidden">
-            <div className="border-r border-[var(--ir-border-default)] p-4">
+          <div className="grid min-h-0 grid-cols-[420px_minmax(0,1fr)] overflow-hidden">
+            <div className="min-h-0 overflow-auto border-r border-[var(--ir-border-default)] p-4">
               <input
                 accept=".md,text/markdown,text/plain"
                 className="hidden"
@@ -823,7 +823,7 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
                 </Button>
               </div>
               <Textarea
-                className="min-h-[460px] resize-none rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] text-sm focus-visible:ring-0"
+                className="h-[calc(100%-3.25rem)] min-h-[520px] resize-none rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] text-sm focus-visible:ring-0"
                 onChange={(event) => setSourceDocument(event.target.value)}
                 placeholder="Paste markdown here..."
                 value={sourceDocument}
@@ -841,7 +841,7 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
               ) : null}
             </div>
 
-            <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <div className="flex items-center justify-between gap-3 border-b border-[var(--ir-border-default)] px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-[var(--ir-text-primary)]">
@@ -883,7 +883,7 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
                 )}
               </div>
 
-              <DialogFooter className="border-t border-[var(--ir-border-default)] px-4 py-3">
+              <DialogFooter className="shrink-0 flex-row flex-wrap justify-end border-t border-[var(--ir-border-default)] px-4 py-3">
                 {reviewTruthIds ? (
                   <>
                     <Button
