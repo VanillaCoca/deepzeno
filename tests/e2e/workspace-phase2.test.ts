@@ -294,8 +294,25 @@ test.describe("Workspace IR panel flow", () => {
           nodes: Array<{ title: string; content: string | null }>;
         };
 
-        return JSON.stringify(payload.nodes);
+        return JSON.stringify(payload.nodes).toLowerCase();
       })
-      .toContain(uniqueDecision);
+      .toContain("pending candidates");
+    await expect
+      .poll(async () => {
+        const pendingResponse = await page.request.get(
+          `/api/ir?project_id=${projectId}&topic_id=${topicId}&status=pending`
+        );
+
+        if (!pendingResponse.ok()) {
+          return "";
+        }
+
+        const payload = (await pendingResponse.json()) as {
+          nodes: Array<{ title: string; content: string | null }>;
+        };
+
+        return JSON.stringify(payload.nodes).toLowerCase();
+      })
+      .toContain("never active truth");
   });
 });

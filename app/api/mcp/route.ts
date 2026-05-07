@@ -15,10 +15,13 @@ import {
   createMcpEdge,
   deleteMcpEdge,
   getMcpDecision,
+  getMcpIRNode,
   getMcpProjectContext,
+  getMcpTopicContext,
   listMcpDecisions,
   listMcpTopics,
   resolveMcpOpenQuestion,
+  searchMcpIR,
   submitMcpCandidate,
   supersedeMcpDecision,
   updateMcpDecision,
@@ -37,6 +40,7 @@ const protocolVersion = "2025-03-26";
 
 const listTopicsSchema = z.object({
   project_id: z.string().uuid(),
+  status: z.string().optional(),
 });
 
 const listDecisionsSchema = z.object({
@@ -53,6 +57,21 @@ const getDecisionSchema = z.object({
 const getProjectContextSchema = z.object({
   project_id: z.string().uuid(),
   topic_id: z.string().uuid().optional(),
+});
+
+const getTopicContextSchema = z.object({
+  topic_id: z.string().uuid(),
+  include_relation_closure: z.boolean().optional().default(true),
+});
+
+const searchIRSchema = z.object({
+  project_id: z.string().uuid(),
+  query: z.string().trim().min(1).max(200),
+  topic_id: z.string().uuid().optional(),
+});
+
+const getIRNodeSchema = z.object({
+  node_id: z.string().trim().min(1),
 });
 
 const submitCandidateSchema = z.object({
@@ -260,11 +279,13 @@ function getToolDefinitions() {
   return [
     {
       name: "list_topics",
-      description: "List topics for the authenticated project.",
+      description:
+        "List judgment topics for the authenticated project, optionally filtered by lifecycle status.",
       inputSchema: {
         type: "object",
         properties: {
           project_id: { type: "string", format: "uuid" },
+          status: { type: "string" },
         },
         required: ["project_id"],
         additionalProperties: false,
@@ -327,7 +348,7 @@ function getToolDefinitions() {
     {
       name: "get_project_context",
       description:
-        "Return project truth, active open questions, rejections, and serialized context for one project or topic.",
+        "Return the project-wide IR context from decided/executing judgment topics, topic relations, active IR nodes, and IR edges.",
       inputSchema: {
         type: "object",
         properties: {
@@ -335,6 +356,47 @@ function getToolDefinitions() {
           topic_id: { type: "string", format: "uuid" },
         },
         required: ["project_id"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "get_topic_context",
+      description:
+        "Return active IR for one judgment topic, optionally including upstream topic relation closure.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          topic_id: { type: "string", format: "uuid" },
+          include_relation_closure: { type: "boolean" },
+        },
+        required: ["topic_id"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "search_ir",
+      description:
+        "Search IR nodes in the authenticated project, optionally scoped to one judgment topic.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project_id: { type: "string", format: "uuid" },
+          query: { type: "string" },
+          topic_id: { type: "string", format: "uuid" },
+        },
+        required: ["project_id", "query"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "get_ir_node",
+      description: "Load one IR node by id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          node_id: { type: "string" },
+        },
+        required: ["node_id"],
         additionalProperties: false,
       },
     },
@@ -503,7 +565,7 @@ function getToolDefinitions() {
     {
       name: "create_edge",
       description:
-        "Create a relationship edge between two decisions in the same project and topic.",
+        "Create a relationship edge between two decisions in the same project.",
       inputSchema: {
         type: "object",
         properties: {
@@ -575,6 +637,7 @@ async function handleToolCall(
         await listMcpTopics({
           apiKey,
           projectId: input.project_id,
+          status: input.status,
         })
       );
     }
@@ -630,6 +693,36 @@ async function handleToolCall(
           apiKey,
           projectId: input.project_id,
           topicId: input.topic_id,
+        })
+      );
+    }
+    case "get_topic_context": {
+      const input = getTopicContextSchema.parse(args ?? {});
+      return toolResult(
+        await getMcpTopicContext({
+          apiKey,
+          topicId: input.topic_id,
+          includeRelationClosure: input.include_relation_closure,
+        })
+      );
+    }
+    case "search_ir": {
+      const input = searchIRSchema.parse(args ?? {});
+      return toolResult(
+        await searchMcpIR({
+          apiKey,
+          projectId: input.project_id,
+          query: input.query,
+          topicId: input.topic_id,
+        })
+      );
+    }
+    case "get_ir_node": {
+      const input = getIRNodeSchema.parse(args ?? {});
+      return toolResult(
+        await getMcpIRNode({
+          apiKey,
+          nodeId: input.node_id,
         })
       );
     }

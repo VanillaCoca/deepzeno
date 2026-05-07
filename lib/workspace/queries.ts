@@ -7,6 +7,8 @@ import { ChatbotError } from "@/lib/errors";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   PendingCandidateCounts,
+  TopicRelationType,
+  TopicStatus,
   WorkspaceCandidateDecision,
   WorkspaceConversation,
   WorkspaceDecision,
@@ -15,7 +17,9 @@ import type {
   WorkspaceProject,
   WorkspaceProjectSummary,
   WorkspaceTopic,
+  WorkspaceTopicRelation,
 } from "./types";
+import { isTopicRelationType, isTopicStatus } from "./types";
 
 type DatabaseRecord = Record<string, unknown>;
 
@@ -55,6 +59,13 @@ type InsertCandidateDecision = {
   source?: string;
   sourceMetadata?: Record<string, unknown> | null;
   externalEvidence?: string | null;
+};
+
+type InsertTopicRelation = {
+  projectId: string;
+  fromTopicId: string;
+  toTopicId: string;
+  relationType: TopicRelationType;
 };
 
 type InsertDecision = {
@@ -259,6 +270,16 @@ function toNumber(value: unknown, fallback = 0) {
   return typeof value === "number" ? value : Number(value ?? fallback);
 }
 
+function toTopicStatus(value: unknown): TopicStatus {
+  const status = typeof value === "string" ? value : "exploring";
+  return isTopicStatus(status) ? status : "exploring";
+}
+
+function toTopicRelationType(value: unknown): TopicRelationType {
+  const relationType = typeof value === "string" ? value : "depends_on";
+  return isTopicRelationType(relationType) ? relationType : "depends_on";
+}
+
 function toStringArray(value: unknown): string[] | null {
   return Array.isArray(value) ? value.map(String) : null;
 }
@@ -307,9 +328,26 @@ function mapTopic(row: DatabaseRecord): WorkspaceTopic {
     projectId: String(row.project_id),
     label: String(row.label),
     isGeneral: toBoolean(row.is_general),
+    status: toTopicStatus(row.status),
+    description: toNullableString(row.description),
     defaultModelId: toNullableString(row.default_model_id),
     archivedAt: toNullableString(row.archived_at),
+    decidedAt: toNullableString(row.decided_at),
+    executingAt: toNullableString(row.executing_at),
+    supersededAt: toNullableString(row.superseded_at),
+    dismissedAt: toNullableString(row.dismissed_at),
     position: toNumber(row.position),
+    createdAt: toIsoString(row.created_at),
+  };
+}
+
+function mapTopicRelation(row: DatabaseRecord): WorkspaceTopicRelation {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    fromTopicId: String(row.from_topic_id),
+    toTopicId: String(row.to_topic_id),
+    relationType: toTopicRelationType(row.relation_type),
     createdAt: toIsoString(row.created_at),
   };
 }
@@ -575,6 +613,20 @@ export async function listTopicsByProjectId(projectId: string) {
   return sortTopics((rows ?? []).map((row: DatabaseRecord) => mapTopic(row)));
 }
 
+export async function listTopicRelationsByProjectId(projectId: string) {
+  const client = getClient();
+  const rows = await ensureResult(
+    client
+      .from("topic_relations")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: true }),
+    "Failed to list topic relations"
+  );
+
+  return (rows ?? []).map((row: DatabaseRecord) => mapTopicRelation(row));
+}
+
 export async function getTopicByIdForUser(topicId: string, userId: string) {
   const client = getClient();
   const row = await ensureResult(
@@ -622,12 +674,16 @@ export async function createTopicForProject({
   projectId,
   label,
   isGeneral = false,
+  description = null,
   position,
+  status = "exploring",
 }: {
   projectId: string;
   label: string;
   isGeneral?: boolean;
+  description?: string | null;
   position?: number;
+  status?: TopicStatus;
 }) {
   const client = getClient();
   let nextPosition = position;
@@ -657,6 +713,8 @@ export async function createTopicForProject({
         project_id: projectId,
         label,
         is_general: isGeneral,
+        status,
+        description,
         position: isGeneral ? 0 : nextPosition,
       })
       .select("*")
@@ -669,12 +727,76 @@ export async function createTopicForProject({
         projectId,
         label,
         isGeneral,
+        status,
+        description,
         position: isGeneral ? 0 : nextPosition,
       },
     }
   );
 
   return mapTopic(row as DatabaseRecord);
+}
+
+export async function updateTopicStatusById({
+  topicId,
+  status,
+  description,
+}: {
+  topicId: string;
+  status: TopicStatus;
+  description?: string | null;
+}) {
+  const patch: Record<string, unknown> = { status };
+  const now = new Date().toISOString();
+
+  if (description !== undefined) {
+    patch.description = description;
+  }
+
+  if (status === "decided") {
+    patch.decided_at = now;
+  } else if (status === "executing") {
+    patch.executing_at = now;
+  } else if (status === "superseded") {
+    patch.superseded_at = now;
+  } else if (status === "dismissed") {
+    patch.dismissed_at = now;
+  }
+
+  const row = await ensureResult(
+    getClient()
+      .from("topics")
+      .update(patch)
+      .eq("id", topicId)
+      .select("*")
+      .single(),
+    "Failed to update topic status"
+  );
+
+  return mapTopic(row as DatabaseRecord);
+}
+
+export async function insertTopicRelation(input: InsertTopicRelation) {
+  const row = await ensureResult(
+    getClient()
+      .from("topic_relations")
+      .insert({
+        project_id: input.projectId,
+        from_topic_id: input.fromTopicId,
+        to_topic_id: input.toTopicId,
+        relation_type: input.relationType,
+      })
+      .select("*")
+      .single(),
+    "Failed to create topic relation",
+    {
+      operation: "create_topic_relation",
+      table: "topic_relations",
+      payload: input,
+    }
+  );
+
+  return mapTopicRelation(row as DatabaseRecord);
 }
 
 export async function archiveTopicById(topicId: string) {

@@ -14,16 +14,21 @@ import {
   insertDecision,
   insertDecisionLog,
   insertEdge,
+  insertTopicRelation,
   listConversationsByTopicId,
   listDecisionsByTopicId,
   listEdgesByTopicId,
   listPendingCandidatesByTopicId,
   listProjectsByUserId,
+  listTopicRelationsByProjectId,
   listTopicsByProjectId,
   listWorkspaceMessagesByIds,
   updateDecisionStatus,
+  updateTopicStatusById,
 } from "./queries";
 import type {
+  TopicRelationType,
+  TopicStatus,
   WorkspaceBootstrap,
   WorkspaceConversation,
   WorkspaceMessageRecord,
@@ -317,10 +322,12 @@ export async function createTopicWithConversation({
   userId,
   projectId,
   label,
+  description = null,
 }: {
   userId: string;
   projectId: string;
   label: string;
+  description?: string | null;
 }) {
   const project = await getProjectByIdForUser(projectId, userId);
 
@@ -331,6 +338,7 @@ export async function createTopicWithConversation({
   const topic = await createTopicForProject({
     projectId,
     label,
+    description,
   });
 
   const conversation = await createConversation({
@@ -342,6 +350,94 @@ export async function createTopicWithConversation({
     topic,
     conversation,
   };
+}
+
+export async function updateTopicStatusForUser({
+  userId,
+  topicId,
+  status,
+  description,
+}: {
+  userId: string;
+  topicId: string;
+  status: TopicStatus;
+  description?: string | null;
+}) {
+  const topic = await getTopicByIdForUser(topicId, userId);
+
+  if (!topic) {
+    throw new ChatbotError("forbidden:chat", "Topic not found");
+  }
+
+  return updateTopicStatusById({ topicId, status, description });
+}
+
+export async function listTopicRelationsForUser({
+  userId,
+  projectId,
+}: {
+  userId: string;
+  projectId: string;
+}) {
+  const project = await getProjectByIdForUser(projectId, userId);
+
+  if (!project) {
+    throw new ChatbotError("forbidden:chat", "Project not found");
+  }
+
+  return listTopicRelationsByProjectId(projectId);
+}
+
+export async function createTopicRelationForUser({
+  userId,
+  projectId,
+  fromTopicId,
+  toTopicId,
+  relationType,
+}: {
+  userId: string;
+  projectId: string;
+  fromTopicId: string;
+  toTopicId: string;
+  relationType: TopicRelationType;
+}) {
+  if (fromTopicId === toTopicId) {
+    throw new ChatbotError("bad_request:api", "Topic relation cannot loop");
+  }
+
+  const [project, fromTopic, toTopic] = await Promise.all([
+    getProjectByIdForUser(projectId, userId),
+    getTopicByIdForUser(fromTopicId, userId),
+    getTopicByIdForUser(toTopicId, userId),
+  ]);
+
+  if (!(project && fromTopic && toTopic)) {
+    throw new ChatbotError("forbidden:chat", "Topic not found");
+  }
+
+  if (fromTopic.projectId !== projectId || toTopic.projectId !== projectId) {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Topic relation must stay inside one project"
+    );
+  }
+
+  const relation = await insertTopicRelation({
+    projectId,
+    fromTopicId,
+    toTopicId,
+    relationType,
+  });
+
+  const supersededTopic =
+    relationType === "supersedes"
+      ? await updateTopicStatusById({
+          topicId: toTopicId,
+          status: "superseded",
+        })
+      : null;
+
+  return { relation, supersededTopic };
 }
 
 export async function archiveTopicForUser({

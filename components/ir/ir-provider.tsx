@@ -12,7 +12,7 @@ import {
 } from "react";
 import useSWR, { type KeyedMutator } from "swr";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
-import { getIRListKey } from "@/lib/ir/client-keys";
+import { getIRListKey, getUnassignedIRListKey } from "@/lib/ir/client-keys";
 import type { IREdge, IRNode } from "@/lib/ir/types";
 import {
   createClient as createSupabaseClient,
@@ -30,6 +30,8 @@ type IRContextValue = {
   selectNode: (nodeId: string | null) => void;
   ideas: IRNode[];
   candidates: IRNode[];
+  unassignedIdeas: IRNode[];
+  unassignedCandidates: IRNode[];
   truth: IRNode[];
   truthEdges: IREdge[];
   isLoading: boolean;
@@ -69,6 +71,14 @@ export function IRProvider({ children }: { children: ReactNode }) {
     topicId: scopedTopicId,
     status: "active",
   });
+  const unassignedIdeaKey = getUnassignedIRListKey({
+    projectId: activeProjectId,
+    status: "idea",
+  });
+  const unassignedCandidateKey = getUnassignedIRListKey({
+    projectId: activeProjectId,
+    status: "pending",
+  });
   const {
     data: ideasPayload = EMPTY_PAYLOAD,
     isLoading: ideasLoading,
@@ -90,6 +100,22 @@ export function IRProvider({ children }: { children: ReactNode }) {
     isLoading: truthLoading,
     mutate: mutateTruth,
   } = useSWR<IRListPayload>(truthKey, fetcher, {
+    fallbackData: EMPTY_PAYLOAD,
+    revalidateOnFocus: false,
+  });
+  const {
+    data: unassignedIdeasPayload = EMPTY_PAYLOAD,
+    isLoading: unassignedIdeasLoading,
+    mutate: mutateUnassignedIdeas,
+  } = useSWR<IRListPayload>(unassignedIdeaKey, fetcher, {
+    fallbackData: EMPTY_PAYLOAD,
+    revalidateOnFocus: false,
+  });
+  const {
+    data: unassignedCandidatesPayload = EMPTY_PAYLOAD,
+    isLoading: unassignedCandidatesLoading,
+    mutate: mutateUnassignedCandidates,
+  } = useSWR<IRListPayload>(unassignedCandidateKey, fetcher, {
     fallbackData: EMPTY_PAYLOAD,
     revalidateOnFocus: false,
   });
@@ -126,9 +152,13 @@ export function IRProvider({ children }: { children: ReactNode }) {
           filter: `project_id=eq.${activeProjectId}`,
         },
         () => {
-          Promise.all([mutateIdeas(), mutateCandidates(), mutateTruth()]).catch(
-            console.error
-          );
+          Promise.all([
+            mutateIdeas(),
+            mutateCandidates(),
+            mutateTruth(),
+            mutateUnassignedIdeas(),
+            mutateUnassignedCandidates(),
+          ]).catch(console.error);
         }
       )
       .on(
@@ -148,11 +178,30 @@ export function IRProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel).catch(console.error);
     };
-  }, [activeProjectId, mutateCandidates, mutateIdeas, mutateTruth]);
+  }, [
+    activeProjectId,
+    mutateCandidates,
+    mutateIdeas,
+    mutateTruth,
+    mutateUnassignedCandidates,
+    mutateUnassignedIdeas,
+  ]);
 
   const refreshIR = useCallback(async () => {
-    await Promise.all([mutateIdeas(), mutateCandidates(), mutateTruth()]);
-  }, [mutateCandidates, mutateIdeas, mutateTruth]);
+    await Promise.all([
+      mutateIdeas(),
+      mutateCandidates(),
+      mutateTruth(),
+      mutateUnassignedIdeas(),
+      mutateUnassignedCandidates(),
+    ]);
+  }, [
+    mutateCandidates,
+    mutateIdeas,
+    mutateTruth,
+    mutateUnassignedCandidates,
+    mutateUnassignedIdeas,
+  ]);
 
   const value = useMemo<IRContextValue>(
     () => ({
@@ -160,9 +209,16 @@ export function IRProvider({ children }: { children: ReactNode }) {
       selectNode: setSelectedNodeId,
       ideas: ideasPayload.nodes,
       candidates: candidatesPayload.nodes,
+      unassignedIdeas: unassignedIdeasPayload.nodes,
+      unassignedCandidates: unassignedCandidatesPayload.nodes,
       truth: truthPayload.nodes,
       truthEdges: truthPayload.edges,
-      isLoading: ideasLoading || candidatesLoading || truthLoading,
+      isLoading:
+        ideasLoading ||
+        candidatesLoading ||
+        truthLoading ||
+        unassignedIdeasLoading ||
+        unassignedCandidatesLoading,
       mutateIdeas,
       mutateCandidates,
       mutateTruth,
@@ -181,6 +237,10 @@ export function IRProvider({ children }: { children: ReactNode }) {
       truthLoading,
       truthPayload.edges,
       truthPayload.nodes,
+      unassignedCandidatesLoading,
+      unassignedCandidatesPayload.nodes,
+      unassignedIdeasLoading,
+      unassignedIdeasPayload.nodes,
     ]
   );
 

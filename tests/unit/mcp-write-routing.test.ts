@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isValidCodeAnchor } from "../../lib/decision-anchors";
-import { classifyWrite } from "../../lib/mcp/write-routing";
+import { isValidCodeAnchor } from "../../lib/decision-anchors.ts";
+import { classifyWrite } from "../../lib/mcp/write-routing.ts";
 
 describe("classifyWrite", () => {
   const highUserConfirmed = {

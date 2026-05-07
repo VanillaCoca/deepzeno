@@ -11,7 +11,8 @@ import { listIREdgesForProject, listIRNodesForUser } from "@/lib/ir/queries";
 
 const querySchema = z.object({
   project_id: z.string().uuid(),
-  topic_id: z.string().uuid().nullable().optional(),
+  topic_id: z.string().uuid().optional(),
+  unassigned: z.boolean().optional(),
   status: irStatusSchema.optional(),
   kind: irKindSchema.optional(),
   subtype: irSubtypeSchema.nullable().optional(),
@@ -29,7 +30,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const input = querySchema.parse({
       project_id: searchParams.get("project_id"),
-      topic_id: searchParams.get("topic_id"),
+      topic_id: searchParams.get("topic_id") ?? undefined,
+      unassigned: searchParams.get("unassigned") === "true",
       status: searchParams.get("status") ?? undefined,
       kind: searchParams.get("kind") ?? undefined,
       subtype: searchParams.get("subtype") ?? undefined,
@@ -39,6 +41,7 @@ export async function GET(request: Request) {
       userId: session.user.id,
       projectId: input.project_id,
       topicId: input.topic_id,
+      unassigned: input.unassigned,
       status: input.status,
       kind: input.kind,
       subtype: input.subtype,

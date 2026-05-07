@@ -388,15 +388,19 @@ export function IRPanel() {
     selectNode,
     selectedNodeId,
     truth,
+    unassignedCandidates,
+    unassignedIdeas,
   } = useIR();
   const {
     activeProjectId,
     activeTopicId,
     bringDecisionToSandbox,
     queueReferenceDraft,
+    topics,
   } = useWorkspace();
   const [ideasExpanded, setIdeasExpanded] = useState(false);
   const [candidatesExpanded, setCandidatesExpanded] = useState(true);
+  const [unassignedExpanded, setUnassignedExpanded] = useState(false);
   const [listPanePercent, setListPanePercent] = useState(55);
   const [reEntrySnapshot, setReEntrySnapshot] =
     useState<ReEntrySnapshot | null>(null);
@@ -414,6 +418,8 @@ export function IRPanel() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
   const [draftRationale, setDraftRationale] = useState("");
+  const [assignmentTopicId, setAssignmentTopicId] = useState("");
+  const [newTopicLabel, setNewTopicLabel] = useState("");
   const [isMutating, setIsMutating] = useState(false);
   const [kindChoice, setKindChoice] = useState("plan:decision");
   const panelRef = useRef<HTMLDivElement>(null);
@@ -424,9 +430,13 @@ export function IRPanel() {
   );
   const selectedNode =
     detail?.node ??
-    [...ideas, ...candidates, ...truth].find(
-      (node) => node.id === selectedNodeId
-    ) ??
+    [
+      ...ideas,
+      ...candidates,
+      ...unassignedCandidates,
+      ...unassignedIdeas,
+      ...truth,
+    ].find((node) => node.id === selectedNodeId) ??
     null;
   const filteredTruth = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -437,6 +447,41 @@ export function IRPanel() {
 
     return truth.filter((node) => nodeSearchText(node).includes(query));
   }, [search, truth]);
+  const unassignedPool = useMemo(
+    () => [...unassignedCandidates, ...unassignedIdeas],
+    [unassignedCandidates, unassignedIdeas]
+  );
+  const assignableTopics = useMemo(
+    () =>
+      topics.filter(
+        (topic) =>
+          !topic.isGeneral &&
+          !topic.archivedAt &&
+          topic.status !== "superseded" &&
+          topic.status !== "dismissed"
+      ),
+    [topics]
+  );
+
+  useEffect(() => {
+    if (unassignedPool.length > 0) {
+      setUnassignedExpanded(true);
+    }
+  }, [unassignedPool.length]);
+
+  useEffect(() => {
+    if (!selectedNode || selectedNode.topicId) {
+      return;
+    }
+
+    const preferred =
+      assignableTopics.find((topic) => topic.id === activeTopicId)?.id ??
+      assignableTopics[0]?.id ??
+      "";
+
+    setAssignmentTopicId(preferred);
+    setNewTopicLabel("");
+  }, [activeTopicId, assignableTopics, selectedNode]);
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -570,9 +615,16 @@ export function IRPanel() {
     }
 
     if (editMode === "confirm") {
+      const assignment = getAssignmentPayload(selectedNode);
+
+      if (!assignment) {
+        return;
+      }
+
       await runMutation(
         () =>
           postJSON<IRDetail>(`/api/ir/${selectedNode.id}/confirm`, {
+            ...assignment,
             edits: {
               title,
               content: draftContent.trim() || null,
@@ -644,7 +696,7 @@ export function IRPanel() {
           subtype: "task",
           title: `Next step for ${node.id}`,
           content: `Define the next concrete step for: ${node.title}`,
-          rationale: "Drafted from the active truth detail pane.",
+          rationale: "Drafted from the active IR detail pane.",
           source_layer: "manual",
           created_by: "user",
           initial_status: "pending",
@@ -652,6 +704,42 @@ export function IRPanel() {
         }),
       "Task candidate drafted."
     );
+  }
+
+  function getAssignmentPayload(node: IRNode) {
+    if (node.topicId) {
+      return {};
+    }
+
+    const createTopicLabel = newTopicLabel.trim();
+
+    if (createTopicLabel) {
+      return { create_topic_label: createTopicLabel };
+    }
+
+    if (assignmentTopicId) {
+      return { assign_to_topic_id: assignmentTopicId };
+    }
+
+    toast.error("Choose a judgment topic before confirming.");
+    return null;
+  }
+
+  async function handleConfirmNode(node: IRNode) {
+    const assignment = getAssignmentPayload(node);
+
+    if (!assignment) {
+      return;
+    }
+
+    await runMutation(
+      () =>
+        postJSON<IRDetail>(`/api/ir/${node.id}/confirm`, {
+          ...assignment,
+        }),
+      "Candidate confirmed."
+    );
+    setNewTopicLabel("");
   }
 
   function handleDividerPointerDown(event: React.PointerEvent<HTMLElement>) {
@@ -756,10 +844,33 @@ export function IRPanel() {
           </div>
         ) : null}
 
+        {unassignedPool.length > 0 ? (
+          <>
+            <ZoneHeader
+              count={unassignedPool.length}
+              expanded={unassignedExpanded}
+              label="Unassigned pool"
+              onToggle={() => setUnassignedExpanded((current) => !current)}
+            />
+            {unassignedExpanded ? (
+              <div className="mb-3" data-testid="ir-unassigned-zone">
+                {unassignedPool.map((node) => (
+                  <NodeButton
+                    key={node.id}
+                    node={node}
+                    onSelect={selectNode}
+                    selected={selectedNodeId === node.id}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
         <div className="sticky top-0 z-10 border-y border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-3 py-2">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[13px] font-medium text-[var(--ir-text-secondary)]">
-              Truth{" "}
+              IR graph{" "}
               <span className="text-[var(--ir-text-tertiary)]">
                 ({truth.length})
               </span>
@@ -1000,21 +1111,41 @@ export function IRPanel() {
                   ) ? (
                     <div className="flex w-full items-start gap-2 border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
                       <ShieldAlertIcon className="mt-0.5 size-3.5" />
-                      Confirming this will mark an older truth as superseded.
+                      Confirming this will mark an older IR node as superseded.
                     </div>
                   ) : null}
+                  {selectedNode.topicId ? null : (
+                    <div className="flex w-full flex-col gap-2 border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
+                      <p className="text-xs font-medium text-[var(--ir-text-primary)]">
+                        Assign before confirming
+                      </p>
+                      <select
+                        className="h-8 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-2 text-xs"
+                        onChange={(event) =>
+                          setAssignmentTopicId(event.target.value)
+                        }
+                        value={assignmentTopicId}
+                      >
+                        {assignableTopics.map((topic) => (
+                          <option key={topic.id} value={topic.id}>
+                            {topic.label}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        className="h-8 rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] text-xs focus-visible:ring-0"
+                        onChange={(event) =>
+                          setNewTopicLabel(event.target.value)
+                        }
+                        placeholder="Or create new judgment"
+                        value={newTopicLabel}
+                      />
+                    </div>
+                  )}
                   <Button
                     className="rounded border-[var(--ir-accent-blue-border)] bg-transparent text-[var(--ir-accent-blue)] hover:bg-[var(--ir-bg-hover)]"
                     disabled={isMutating}
-                    onClick={() =>
-                      runMutation(
-                        () =>
-                          postJSON<IRDetail>(
-                            `/api/ir/${selectedNode.id}/confirm`
-                          ),
-                        "Candidate confirmed."
-                      )
-                    }
+                    onClick={() => handleConfirmNode(selectedNode)}
                     size="sm"
                     variant="outline"
                   >
@@ -1109,7 +1240,7 @@ export function IRPanel() {
         ) : (
           <div className="flex h-full flex-col justify-center px-4 text-sm text-[var(--ir-text-tertiary)]">
             <p className="font-medium text-[var(--ir-text-primary)]">Detail</p>
-            <p>Select an idea, candidate, truth node, or inline reference.</p>
+            <p>Select an idea, candidate, IR node, or inline reference.</p>
           </div>
         )}
       </div>

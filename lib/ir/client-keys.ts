@@ -23,6 +23,26 @@ export function getIRListKey({
   return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir?${params.toString()}`;
 }
 
+export function getUnassignedIRListKey({
+  projectId,
+  status,
+}: {
+  projectId: string | null;
+  status: IRListStatus;
+}) {
+  if (!projectId) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    project_id: projectId,
+    status,
+    unassigned: "true",
+  });
+
+  return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir?${params.toString()}`;
+}
+
 export function isIRListKeyForScope({
   key,
   projectId,

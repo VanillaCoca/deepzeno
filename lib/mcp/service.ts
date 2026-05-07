@@ -1,10 +1,13 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import {
+  assembleContext,
+  assembleProjectContext,
+} from "@/lib/context-assembly";
 import type { CodeAnchor } from "@/lib/decision-anchors";
 import { normalizeCodeAnchors } from "@/lib/decision-anchors";
 import { type DecisionKind, isDecisionKind } from "@/lib/decision-kinds";
-import { serializeDecisionGraph } from "@/lib/decision-serializer";
 import { ChatbotError } from "@/lib/errors";
 import { classifyWrite } from "@/lib/mcp/write-routing";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -109,9 +112,59 @@ function mapTopic(row: DatabaseRecord) {
     project_id: String(row.project_id),
     label: String(row.label),
     is_general: Boolean(row.is_general),
+    status: String(row.status ?? "exploring"),
+    description: toNullableString(row.description),
     archived_at: toNullableString(row.archived_at),
+    decided_at: toNullableString(row.decided_at),
+    executing_at: toNullableString(row.executing_at),
+    superseded_at: toNullableString(row.superseded_at),
+    dismissed_at: toNullableString(row.dismissed_at),
     position: Number(row.position ?? 0),
     created_at: toIsoString(row.created_at),
+  };
+}
+
+function mapTopicRelation(row: DatabaseRecord) {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    from_topic_id: String(row.from_topic_id),
+    to_topic_id: String(row.to_topic_id),
+    relation_type: String(row.relation_type),
+    created_at: toIsoString(row.created_at),
+  };
+}
+
+function mapIRNode(row: DatabaseRecord) {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    topic_id: toNullableString(row.topic_id),
+    kind: String(row.kind),
+    subtype: toNullableString(row.subtype),
+    status: String(row.status),
+    title: String(row.title),
+    content: toNullableString(row.content),
+    rationale: toNullableString(row.rationale),
+    source_layer: toNullableString(row.source_layer),
+    created_by: String(row.created_by ?? "user"),
+    created_at: toIsoString(row.created_at),
+    confirmed_at: toNullableString(row.confirmed_at),
+    superseded_at: toNullableString(row.superseded_at),
+    superseded_by: toNullableString(row.superseded_by),
+  };
+}
+
+function mapIREdge(row: DatabaseRecord) {
+  return {
+    id: String(row.id),
+    project_id: String(row.project_id),
+    from_node: String(row.from_node),
+    to_node: String(row.to_node),
+    relation: String(row.relation),
+    status: String(row.status ?? "pending"),
+    created_at: toIsoString(row.created_at),
+    confirmed_at: toNullableString(row.confirmed_at),
   };
 }
 
@@ -577,17 +630,22 @@ function externalAgentContext(input: {
 export async function listMcpTopics({
   apiKey,
   projectId,
+  status,
 }: {
   apiKey: WorkspaceApiKey;
   projectId: string;
+  status?: string | null;
 }) {
   ensureProjectScope(apiKey, projectId);
 
   const client = getClient();
-  const { data, error } = await client
-    .from("topics")
-    .select("*")
-    .eq("project_id", projectId)
+  let query = client.from("topics").select("*").eq("project_id", projectId);
+
+  if (status?.trim()) {
+    query = query.eq("status", status.trim());
+  }
+
+  const { data, error } = await query
     .order("position", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -597,6 +655,175 @@ export async function listMcpTopics({
   }
 
   return ((data ?? []) as DatabaseRecord[]).map(mapTopic);
+}
+
+async function listMcpTopicRelations(projectId: string) {
+  const { data, error } = await getClient()
+    .from("topic_relations")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Failed to list topic relations", error);
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to list topic relations"
+    );
+  }
+
+  return ((data ?? []) as DatabaseRecord[]).map(mapTopicRelation);
+}
+
+async function listMcpIRNodes({
+  projectId,
+  topicId,
+  status = "active",
+  query: searchQuery,
+}: {
+  projectId: string;
+  topicId?: string | null;
+  status?: string | null;
+  query?: string | null;
+}) {
+  const client = getClient();
+  let query = client.from("ir_nodes").select("*").eq("project_id", projectId);
+
+  if (status?.trim()) {
+    query = query.eq("status", status.trim());
+  }
+
+  if (topicId) {
+    query = query.eq("topic_id", topicId);
+  }
+
+  if (searchQuery?.trim()) {
+    const term = searchQuery.trim().replaceAll("%", "\\%");
+    query = query.or(
+      `title.ilike.%${term}%,content.ilike.%${term}%,rationale.ilike.%${term}%`
+    );
+  }
+
+  const { data, error } = await query.order("created_at", {
+    ascending: false,
+  });
+
+  if (error) {
+    console.error("Failed to list IR nodes", error);
+    throw new ChatbotError("bad_request:database", "Failed to list IR nodes");
+  }
+
+  return ((data ?? []) as DatabaseRecord[]).map(mapIRNode);
+}
+
+async function listMcpIREdgesForNodes(projectId: string, nodeIds: string[]) {
+  if (nodeIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await getClient()
+    .from("ir_edges")
+    .select("*")
+    .eq("project_id", projectId)
+    .eq("status", "active")
+    .in("from_node", nodeIds)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Failed to list IR edges", error);
+    throw new ChatbotError("bad_request:database", "Failed to list IR edges");
+  }
+
+  const nodeIdSet = new Set(nodeIds);
+  return ((data ?? []) as DatabaseRecord[])
+    .map(mapIREdge)
+    .filter((edge) => nodeIdSet.has(edge.to_node));
+}
+
+export async function getMcpIRNode({
+  apiKey,
+  nodeId,
+}: {
+  apiKey: WorkspaceApiKey;
+  nodeId: string;
+}) {
+  const { data, error } = await getClient()
+    .from("ir_nodes")
+    .select("*")
+    .eq("id", nodeId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to load IR node", error);
+    throw new ChatbotError("bad_request:database", "Failed to load IR node");
+  }
+
+  if (!data) {
+    throw new ChatbotError("not_found:chat", "IR node not found");
+  }
+
+  const node = mapIRNode(data as DatabaseRecord);
+  ensureProjectScope(apiKey, node.project_id);
+
+  return node;
+}
+
+export async function searchMcpIR({
+  apiKey,
+  projectId,
+  query,
+  topicId,
+}: {
+  apiKey: WorkspaceApiKey;
+  projectId: string;
+  query: string;
+  topicId?: string | null;
+}) {
+  ensureProjectScope(apiKey, projectId);
+
+  if (topicId) {
+    await ensureTopicInProject({ topicId, projectId });
+  }
+
+  return listMcpIRNodes({
+    projectId,
+    topicId,
+    status: null,
+    query,
+  });
+}
+
+export async function getMcpTopicContext({
+  apiKey,
+  topicId,
+  includeRelationClosure = true,
+}: {
+  apiKey: WorkspaceApiKey;
+  topicId: string;
+  includeRelationClosure?: boolean;
+}) {
+  const topic = await ensureTopicInProject({
+    topicId,
+    projectId: apiKey.projectId,
+  });
+  const nodes = await listMcpIRNodes({
+    projectId: topic.project_id,
+    topicId,
+    status: "active",
+  });
+  const edges = await listMcpIREdgesForNodes(
+    topic.project_id,
+    nodes.map((node) => node.id)
+  );
+
+  return {
+    topic,
+    ir_nodes: nodes,
+    ir_edges: edges,
+    serialized_context: includeRelationClosure
+      ? await assembleContext(topicId, topic.project_id)
+      : null,
+  };
 }
 
 export async function listMcpDecisions({
@@ -685,80 +912,53 @@ export async function getMcpProjectContext({
 }) {
   ensureProjectScope(apiKey, projectId);
 
-  const [topics, decisions, edges] = await Promise.all([
-    listMcpTopics({ apiKey, projectId }),
-    listMcpDecisions({
+  if (topicId) {
+    return getMcpTopicContext({
       apiKey,
-      projectId,
       topicId,
-      status: "active",
-    }),
-    (async () => {
-      const client = getClient();
-      let query = client.from("edges").select("*").eq("project_id", projectId);
+      includeRelationClosure: true,
+    });
+  }
 
-      if (topicId) {
-        await ensureTopicInProject({ topicId, projectId });
-        query = query.eq("topic_id", topicId);
-      }
-
-      const { data, error } = await query.order("created_at", {
-        ascending: true,
-      });
-
-      if (error) {
-        console.error("Failed to list edges", error);
-        throw new ChatbotError("bad_request:database", "Failed to list edges");
-      }
-
-      return ((data ?? []) as DatabaseRecord[]).map(mapEdge);
-    })(),
+  const [topics, topicRelations] = await Promise.all([
+    listMcpTopics({ apiKey, projectId }),
+    listMcpTopicRelations(projectId),
   ]);
-
-  const activeOpenQuestions = decisions.filter(
-    (decision) => decision.kind === "open_question"
-  );
-  const activeRejections = decisions.filter(
-    (decision) => decision.kind === "rejection"
+  const activeTopicIds = topics
+    .filter(
+      (topic) =>
+        !topic.is_general &&
+        !topic.archived_at &&
+        (topic.status === "decided" || topic.status === "executing")
+    )
+    .map((topic) => topic.id);
+  const nodes =
+    activeTopicIds.length > 0
+      ? (
+          await Promise.all(
+            activeTopicIds.map((activeTopicId) =>
+              listMcpIRNodes({
+                projectId,
+                topicId: activeTopicId,
+                status: "active",
+              })
+            )
+          )
+        ).flat()
+      : [];
+  const edges = await listMcpIREdgesForNodes(
+    projectId,
+    nodes.map((node) => node.id)
   );
 
   return {
     project_id: projectId,
-    topic_id: topicId ?? null,
+    topic_id: null,
     topics,
-    decisions,
-    open_questions: activeOpenQuestions,
-    rejections: activeRejections,
-    edges,
-    serialized_graph: serializeDecisionGraph(
-      decisions.map((decision) => ({
-        id: decision.id,
-        projectId: decision.project_id,
-        topicId: decision.topic_id,
-        title: decision.title,
-        content: decision.content,
-        rationale: decision.rationale,
-        kind: decision.kind,
-        weight: decision.weight,
-        status: decision.status,
-        sensitivity: "normal",
-        relevantMessageIds: decision.relevant_message_ids,
-        codeAnchors: decision.code_anchors,
-        createdFromMessageId: decision.created_from_message_id,
-        confirmedByUserId: decision.confirmed_by_user_id,
-        createdAt: decision.created_at,
-        updatedAt: decision.updated_at,
-      })),
-      edges.map((edge) => ({
-        id: edge.id,
-        projectId: edge.project_id,
-        topicId: edge.topic_id,
-        sourceDecisionId: edge.source_decision_id,
-        targetDecisionId: edge.target_decision_id,
-        type: edge.type,
-        createdAt: edge.created_at,
-      }))
-    ),
+    topic_relations: topicRelations,
+    ir_nodes: nodes,
+    ir_edges: edges,
+    serialized_context: await assembleProjectContext(projectId),
   };
 }
 
@@ -1485,14 +1685,10 @@ export async function createMcpEdge({
     getDecisionRow(targetDecisionId),
   ]);
 
-  if (
-    source.project_id !== projectId ||
-    target.project_id !== projectId ||
-    source.topic_id !== target.topic_id
-  ) {
+  if (source.project_id !== projectId || target.project_id !== projectId) {
     throw new ChatbotError(
       "forbidden:chat",
-      "Decisions must belong to the same project and topic"
+      "Decisions must belong to the same project"
     );
   }
 

@@ -1,6 +1,7 @@
-import type { InferSelectModel } from "drizzle-orm";
+import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   foreignKey,
   integer,
   json,
@@ -10,6 +11,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -139,8 +141,14 @@ export const topic = pgTable("topics", {
     .references(() => project.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
   isGeneral: boolean("is_general").notNull().default(false),
+  status: text("status").notNull().default("exploring"),
+  description: text("description"),
   defaultModelId: text("default_model_id"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  executingAt: timestamp("executing_at", { withTimezone: true }),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
   position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -148,6 +156,39 @@ export const topic = pgTable("topics", {
 });
 
 export type Topic = InferSelectModel<typeof topic>;
+
+export const topicRelation = pgTable(
+  "topic_relations",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
+    fromTopicId: uuid("from_topic_id")
+      .notNull()
+      .references(() => topic.id, { onDelete: "cascade" }),
+    toTopicId: uuid("to_topic_id")
+      .notNull()
+      .references(() => topic.id, { onDelete: "cascade" }),
+    relationType: text("relation_type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    noSelfLoop: check(
+      "topic_relations_no_self_loop",
+      sql`${table.fromTopicId} <> ${table.toTopicId}`
+    ),
+    uniqueRelation: uniqueIndex("topic_relations_unique_relation").on(
+      table.fromTopicId,
+      table.toTopicId,
+      table.relationType
+    ),
+  })
+);
+
+export type TopicRelation = InferSelectModel<typeof topicRelation>;
 
 export const projectUserViewState = pgTable(
   "project_user_view_state",

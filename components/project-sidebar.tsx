@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   Layers3Icon,
   LogOutIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SparklesIcon,
 } from "lucide-react";
@@ -21,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Sidebar,
@@ -42,6 +49,10 @@ import {
 } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
+function getTopicStatusLabel(status: string) {
+  return status.replace("_", " ");
+}
+
 export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
   const router = useRouter();
   const {
@@ -58,6 +69,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [topicDialogOpen, setTopicDialogOpen] = useState(false);
   const [topicLabel, setTopicLabel] = useState("");
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   const activeTopics = useMemo(
     () => topics.filter((topic) => !topic.archivedAt),
@@ -136,7 +148,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
         <SidebarContent className="px-2 py-4">
           <SidebarGroup>
             <SidebarGroupLabel className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/60">
-              Topics
+              Judgments
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -169,6 +181,11 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                                   {pendingCount}
                                 </span>
                               )}
+                              {!topic.isGeneral && (
+                                <span className="rounded-full border border-sidebar-border/60 px-2 py-0.5 text-[10px] capitalize text-sidebar-foreground/55">
+                                  {getTopicStatusLabel(topic.status)}
+                                </span>
+                              )}
                               {topic.isGeneral && (
                                 <span className="rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-sidebar-accent-foreground">
                                   General
@@ -179,16 +196,28 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                         </SidebarMenuButton>
 
                         {!topic.isGeneral && (
-                          <Button
-                            className="h-9 rounded-xl px-2"
-                            onClick={() => {
-                              archiveTopic(topic.id).catch(console.error);
-                            }}
-                            size="sm"
-                            variant="ghost"
-                          >
-                            <ArchiveIcon className="size-4" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                aria-label={`More actions for ${topic.label}`}
+                                className="h-9 rounded-xl px-2 text-sidebar-foreground/55 hover:text-sidebar-foreground"
+                                size="sm"
+                                variant="ghost"
+                              >
+                                <MoreHorizontalIcon className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" side="right">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  archiveTopic(topic.id).catch(console.error);
+                                }}
+                              >
+                                <ArchiveIcon className="size-4" />
+                                Archive
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                     </SidebarMenuItem>
@@ -204,7 +233,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                 variant="outline"
               >
                 <PlusIcon className="size-4" />
-                New Topic
+                New judgment
               </Button>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -222,48 +251,50 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
             </SidebarGroupContent>
           </SidebarGroup>
 
-          <SidebarGroup>
-            <SidebarGroupLabel className="px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/60">
-              Archived
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {archivedTopics.length === 0 ? (
-                  <SidebarMenuItem>
-                    <div className="rounded-xl border border-dashed border-sidebar-border/60 px-3 py-3 text-xs text-sidebar-foreground/60">
-                      Archived topics will appear here.
-                    </div>
-                  </SidebarMenuItem>
-                ) : (
-                  archivedTopics.map((topic) => (
-                    <SidebarMenuItem key={topic.id}>
-                      <SidebarMenuButton
-                        className={cn(
-                          "h-auto rounded-xl border border-sidebar-border/60 bg-sidebar text-sidebar-foreground/75 hover:bg-sidebar-accent",
-                          topic.id === activeTopicId &&
-                            "bg-sidebar-accent text-sidebar-accent-foreground"
-                        )}
-                        data-topic-label={topic.label}
-                        onClick={() => {
-                          selectTopic(topic.id).catch(console.error);
-                        }}
-                      >
-                        <ArchiveIcon className="size-4" />
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                          <span className="truncate font-medium">
-                            {topic.label}
-                          </span>
-                          <span className="text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/45">
-                            Read only
-                          </span>
-                        </div>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {archivedTopics.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupContent className="px-2">
+                <Button
+                  className="h-8 w-full justify-start rounded-lg px-2 text-sidebar-foreground/50 hover:text-sidebar-foreground"
+                  onClick={() => setArchivedOpen((current) => !current)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <ArchiveIcon className="size-3.5" />
+                  Archived ({archivedTopics.length})
+                </Button>
+                {archivedOpen ? (
+                  <SidebarMenu className="mt-1">
+                    {archivedTopics.map((topic) => (
+                      <SidebarMenuItem key={topic.id}>
+                        <SidebarMenuButton
+                          className={cn(
+                            "h-auto rounded-xl border border-sidebar-border/50 bg-sidebar text-sidebar-foreground/65 hover:bg-sidebar-accent",
+                            topic.id === activeTopicId &&
+                              "bg-sidebar-accent text-sidebar-accent-foreground"
+                          )}
+                          data-topic-label={topic.label}
+                          onClick={() => {
+                            selectTopic(topic.id).catch(console.error);
+                          }}
+                        >
+                          <ArchiveIcon className="size-4" />
+                          <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                            <span className="truncate font-medium">
+                              {topic.label}
+                            </span>
+                            <span className="text-[10px] uppercase tracking-[0.12em] text-sidebar-foreground/45">
+                              Read only
+                            </span>
+                          </div>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                ) : null}
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
         </SidebarContent>
 
         <SidebarFooter className="border-t border-sidebar-border/60 px-4 py-4">
@@ -296,15 +327,14 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
       <Dialog onOpenChange={setTopicDialogOpen} open={topicDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Topic</DialogTitle>
+            <DialogTitle>Create Judgment</DialogTitle>
             <DialogDescription>
-              General stays pinned on top. New topics open on their latest
-              segment.
+              Start a blank judgment unit for a specific decision or question.
             </DialogDescription>
           </DialogHeader>
           <Input
             onChange={(event) => setTopicLabel(event.target.value)}
-            placeholder="Topic label"
+            placeholder="Judgment question"
             value={topicLabel}
           />
           <DialogFooter>

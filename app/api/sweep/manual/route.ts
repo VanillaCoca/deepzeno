@@ -16,7 +16,7 @@ const sweepSchema = z.object({
   blocking: z.boolean().default(false),
 });
 
-const BLOCKING_MODEL_SOFT_TIMEOUT_MS = 2500;
+const BLOCKING_MODEL_SOFT_TIMEOUT_MS = 30_000;
 const QUEUED_MODEL_SOFT_TIMEOUT_MS = 12_000;
 
 class SweepTimeoutError extends Error {}
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     });
 
     if (body.blocking) {
-      const result = await withTimeout(sweepPromise, 10_000);
+      const result = await withTimeout(sweepPromise, 60_000);
 
       if (result.status === "failed") {
         return Response.json(

@@ -2,6 +2,34 @@ import type { CodeAnchor } from "@/lib/decision-anchors";
 
 export type PendingCandidateCounts = Record<string, number>;
 
+export const topicStatuses = [
+  "exploring",
+  "converging",
+  "decided",
+  "executing",
+  "superseded",
+  "dismissed",
+] as const;
+
+export type TopicStatus = (typeof topicStatuses)[number];
+
+export function isTopicStatus(value: string): value is TopicStatus {
+  return (topicStatuses as readonly string[]).includes(value);
+}
+
+export const topicRelationTypes = [
+  "supersedes",
+  "revisits",
+  "depends_on",
+  "contradicts",
+] as const;
+
+export type TopicRelationType = (typeof topicRelationTypes)[number];
+
+export function isTopicRelationType(value: string): value is TopicRelationType {
+  return (topicRelationTypes as readonly string[]).includes(value);
+}
+
 export type WorkspaceProject = {
   id: string;
   userId: string;
@@ -20,9 +48,24 @@ export type WorkspaceTopic = {
   projectId: string;
   label: string;
   isGeneral: boolean;
+  status: TopicStatus;
+  description: string | null;
   defaultModelId: string | null;
   archivedAt: string | null;
+  decidedAt: string | null;
+  executingAt: string | null;
+  supersededAt: string | null;
+  dismissedAt: string | null;
   position: number;
+  createdAt: string;
+};
+
+export type WorkspaceTopicRelation = {
+  id: string;
+  projectId: string;
+  fromTopicId: string;
+  toTopicId: string;
+  relationType: TopicRelationType;
   createdAt: string;
 };
 

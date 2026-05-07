@@ -59,7 +59,13 @@ const sweepItemSchema = z.object({
   source_text_span: z.string().max(4000).nullable().optional(),
   counterfactual: z.string().min(1).max(4000),
   confidence: z.number().min(0).max(1).nullable().optional(),
+  topic_route: z.string().nullable().optional(),
+  topicRoute: z.string().nullable().optional(),
+  suggested_topic_label: z.string().max(120).nullable().optional(),
+  suggestedTopicLabel: z.string().max(120).nullable().optional(),
   relations: z.array(sweepRelationSchema).default([]),
+  topic_relations: z.array(z.record(z.string(), z.unknown())).default([]),
+  topicRelations: z.array(z.record(z.string(), z.unknown())).default([]),
   anchor_relation_hint: z
     .object({
       relation: z.string().min(1),
@@ -285,6 +291,12 @@ Defensive parsing of inputs (read first):
 
 Core rules:
 - AI can only produce candidates or ideas.
+- Topic is a judgment unit, not a broad category or thread. Current topic is only the current judgment boundary.
+- If an item clearly belongs in the current judgment, use "topic_route": "current_topic".
+- If an item is useful project memory but does not belong to the current judgment, use "topic_route": "unassigned_pool".
+- If an item should seed a new judgment topic, use "topic_route": "new_topic_seed" and provide "suggested_topic_label".
+- You may suggest topic relations such as revisits, depends_on, contradicts, or supersedes, but the user decides whether to create them.
+- Never clone, copy, merge, fork, inherit, or transplant IR from one topic into another.
 - Prefer false negatives over false positives. If unsure, discard.
 - Extract semantically formed project memory, not casual brainstorming.
 - Every emitted item must trace to one source_turn_id from the provided conversation.
@@ -319,7 +331,10 @@ Output JSON exactly matching:
     "source_text_span": "exact source phrase when available",
     "counterfactual": "what would get worse if missing",
     "confidence": 0.0,
+    "topic_route": "current_topic|unassigned_pool|new_topic_seed",
+    "suggested_topic_label": "short judgment question if topic_route is new_topic_seed",
     "relations": [{ "relation": "supersedes|resolves|depends_on|implies|contradicts|refines", "to_node": "D2", "is_anchor_hint": false }],
+    "topic_relations": [{ "relation_type": "revisits|depends_on|contradicts|supersedes", "to_topic_id": "uuid", "reason": "why" }],
     "anchor_relation_hint": { "relation": "refines|contradicts|supersedes|depends_on", "reason": "why" } | null
   }],
   "medium_confidence": []
@@ -426,7 +441,11 @@ function heuristicExtract(
           classification.tier === "high"
             ? FALLBACK_CONFIDENCE.high
             : FALLBACK_CONFIDENCE.medium,
+        topic_route: "current_topic",
+        suggested_topic_label: null,
         relations: [],
+        topic_relations: [],
+        topicRelations: [],
         anchor_relation_hint: null,
       };
 
@@ -466,7 +485,7 @@ async function extractChunk({
         maxOutputTokens: 1400,
         maxRetries: 0,
         temperature: 0,
-        timeout: 8000,
+        timeout: Math.max(8000, modelSoftTimeoutMs + 5000),
       }),
       modelSoftTimeoutMs
     );
@@ -612,11 +631,16 @@ async function persistSweepItem({
   const confidence =
     item.confidence ??
     (tier === "high" ? FALLBACK_CONFIDENCE.high : FALLBACK_CONFIDENCE.medium);
+  const topicRoute = item.topicRoute ?? item.topic_route ?? "current_topic";
+  const routedTopicId =
+    topicRoute === "unassigned_pool" || topicRoute === "new_topic_seed"
+      ? null
+      : topicId;
 
   const node = await createIRNodeForUser({
     userId,
     projectId,
-    topicId,
+    topicId: routedTopicId,
     kind: normalized.kind,
     subtype: normalized.subtype,
     title,

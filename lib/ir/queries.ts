@@ -358,6 +358,7 @@ export async function listIRNodesForUser({
   userId,
   projectId,
   topicId,
+  unassigned = false,
   status,
   kind,
   subtype,
@@ -366,6 +367,7 @@ export async function listIRNodesForUser({
   userId: string;
   projectId: string;
   topicId?: string | null;
+  unassigned?: boolean;
   status?: IRStatus | null;
   kind?: IRKind | null;
   subtype?: IRPlanSubtype | null;
@@ -373,7 +375,7 @@ export async function listIRNodesForUser({
 }) {
   await assertProjectAccess(userId, projectId);
 
-  if (topicId) {
+  if (topicId && !unassigned) {
     await assertTopicAccess({ userId, projectId, topicId });
   }
 
@@ -388,7 +390,9 @@ export async function listIRNodesForUser({
     query = query.eq("status", "active");
   }
 
-  if (topicId) {
+  if (unassigned) {
+    query = query.is("topic_id", null);
+  } else if (topicId) {
     query = query.eq("topic_id", topicId);
   }
 
@@ -604,6 +608,13 @@ export async function createImportedIRNodesForUser({
       );
     }
 
+    if (row.final_status === "active" && !topicId) {
+      throw new ChatbotError(
+        "bad_request:api",
+        "Active IR must be assigned to a topic"
+      );
+    }
+
     const importGuard = validateImportedIRCreation({
       sourceLayer: "manual",
       createdBy: "user",
@@ -741,10 +752,12 @@ export async function promoteIRNodeForUser({
 export async function confirmIRNodeForUser({
   userId,
   id,
+  topicId,
   edits,
 }: {
   userId: string;
   id: string;
+  topicId?: string | null;
   edits?: Partial<
     Pick<
       IRNode,
@@ -758,6 +771,21 @@ export async function confirmIRNodeForUser({
     throw new IRConflictError("IR node is no longer confirmable.");
   }
 
+  const assignedTopicId = topicId ?? node.topicId;
+
+  if (!assignedTopicId) {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Unassigned IR must be assigned to a topic before confirmation"
+    );
+  }
+
+  await assertTopicAccess({
+    userId,
+    projectId: node.projectId,
+    topicId: assignedTopicId,
+  });
+
   const kind = edits?.kind ?? node.kind;
   const subtype = edits?.subtype ?? node.subtype;
 
@@ -770,6 +798,7 @@ export async function confirmIRNodeForUser({
     status: "active",
     confirmed_at: now,
     confirmed_by: userId,
+    topic_id: assignedTopicId,
     ...(edits?.title ? { title: edits.title.trim().slice(0, 200) } : {}),
     ...(edits?.content === undefined ? {} : { content: edits.content }),
     ...(edits?.rationale === undefined ? {} : { rationale: edits.rationale }),

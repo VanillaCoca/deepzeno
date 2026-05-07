@@ -38,9 +38,9 @@ import {
   updateMessage,
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
-import { extractDecisions } from "@/lib/decision-extraction";
 import { ChatbotError } from "@/lib/errors";
 import { persistInlineIRMarkersForMessages } from "@/lib/ir/inline-markers";
+import { runIRSweep } from "@/lib/ir/sweep";
 import { buildDecisionContextBlock } from "@/lib/prompting";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage } from "@/lib/types";
@@ -464,12 +464,11 @@ export async function POST(request: Request) {
 
         if (shouldInjectWorkspaceContext && lastAssistantMessage) {
           after(() => {
-            extractDecisions({
+            runIRSweep({
+              sweepId: generateId(),
+              userId: session.user.id,
               conversationId,
-              topicId,
               projectId,
-              messageId: lastAssistantMessage.id,
-              assistantModel: resolvedModel.providerModelId,
             }).catch(console.error);
           });
         }

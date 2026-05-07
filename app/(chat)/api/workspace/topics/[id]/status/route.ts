@@ -3,16 +3,19 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import {
   bootstrapWorkspace,
-  createTopicWithConversation,
+  updateTopicStatusForUser,
 } from "@/lib/workspace/service";
+import { topicStatuses } from "@/lib/workspace/types";
 
 const requestSchema = z.object({
-  projectId: z.string().uuid(),
-  label: z.string().trim().min(1).max(120),
+  status: z.enum(topicStatuses),
   description: z.string().trim().max(1000).nullable().optional(),
 });
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await auth();
 
@@ -20,31 +23,30 @@ export async function POST(request: Request) {
       return new ChatbotError("unauthorized:chat").toResponse();
     }
 
+    const { id } = await context.params;
     const body = requestSchema.parse(await request.json());
-    const bundle = await createTopicWithConversation({
+    const topic = await updateTopicStatusForUser({
       userId: session.user.id,
-      projectId: body.projectId,
-      label: body.label,
-      description: body.description ?? null,
+      topicId: id,
+      status: body.status,
+      description: body.description,
     });
-
     const workspace = await bootstrapWorkspace({
       userId: session.user.id,
       userEmail: session.user.email,
       selection: {
-        projectId: body.projectId,
-        topicId: bundle.topic.id,
-        conversationId: bundle.conversation.id,
+        projectId: topic.projectId,
+        topicId: topic.id,
       },
     });
 
-    return Response.json({ workspace });
+    return Response.json({ topic, workspace });
   } catch (error) {
     if (error instanceof ChatbotError) {
       return error.toResponse();
     }
 
-    console.error("Create topic failed", error);
+    console.error("Update topic status failed", error);
     return new ChatbotError("bad_request:api").toResponse();
   }
 }
