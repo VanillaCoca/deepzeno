@@ -30,6 +30,8 @@
 
 The legacy By Type view is **kept** as a secondary mode (§7), accessible via the view-mode toggle. Zero data churn — same `ir_nodes` + `ir_edges` rows render in either mode.
 
+**Layer scope.** v1.3 covers the **IR graph only** — relations between IR nodes via `ir_edges` (6 enum values). The orthogonal **topic graph** introduced in commit `3dc1cc3` (lifecycle status on `topics`, plus `topic_relations` with 4 enum values: `supersedes/revisits/depends_on/contradicts`) is **not** rendered in the truth tree. Topic-level visualization is out of scope here; see §4.5 for how topic state nonetheless affects IR-tree filtering.
+
 ---
 
 ## 1. Core principles for the tree
@@ -229,6 +231,33 @@ The 6-relation enum + DB CHECK + UNIQUE constraint mostly prevent cycles, but `c
 2. If a node appears again during traversal, render as a shadow with `(cycle)` annotation
 3. Log a warning (not an error — don't break the tree on bad data)
 
+### 4.5 Topic scope (interaction with topic lifecycle)
+
+The truth tree renders IR nodes from the **whole project**, not from a single topic. Cross-topic relations are perfectly valid and should appear in the tree like any other edge.
+
+That said, topic-level state filters which IRs are visible by default:
+
+| topic.status | topic.archivedAt | IRs in this topic render? |
+|---|---|---|
+| `exploring` / `converging` / `decided` / `executing` | null | **yes**, by default |
+| `superseded` | null | hidden by default; revealed via `[⚙] → Show superseded` (same toggle that reveals superseded IRs) |
+| `dismissed` | null | **never rendered** — treated as deleted from the user's perspective |
+| any | non-null (archived) | **never rendered** |
+
+`is_general` topic membership does not affect rendering (general-topic IRs render like any other).
+
+**Unassigned IRs** (rows where `topic_id IS NULL`) form a synthetic root labeled `Unassigned (N)` at the top of the tree, above all other roots. Inside this synthetic root, IRs are rendered with the same row format and edge connectors as elsewhere; if an unassigned IR has an edge to a topic-assigned IR, that edge crosses into the assigned subtree like any cross-topic edge. The synthetic root is collapsed by default but auto-expands on next render when N goes from 0 → ≥ 1 (matches the existing `unassignedExpanded` UX in `ir-panel.tsx`).
+
+**Why "whole project" not "active topic only".** v1.2's flat-by-kind list was already implicitly project-wide. Truth tree v1.3 keeps that scope so that decisions made in one topic remain visible while the user is conversing in another. If we ever need a "current-topic-only" filter, it belongs as a *filter chip* on the existing tree (§5.3), not a redesign.
+
+**What v1.3 explicitly does NOT do regarding topics:**
+
+- Does not group nodes by topic (no `▾ Topic A (5)` headers in tree mode — Type mode keeps its kind grouping)
+- Does not render `topic_relations` edges at all (those are a topic-graph concern, not an IR-graph concern)
+- Does not render topic lifecycle status badges next to IR rows (lifecycle lives on the topic, not on each IR)
+
+If a user wants to focus on one topic's IRs, they use the existing topic switcher in the project sidebar; it does **not** reshape the truth tree.
+
 ---
 
 ## 5. Interactions
@@ -426,7 +455,9 @@ Explicitly **not** addressed by this spec:
 
 - AI-suggested new edges (would need a "suggest" UI in Detail — defer to v1.5)
 - Edge rationale field (would need DB column on `ir_edges` — defer to v1.5)
-- Cross-topic relations (`topic_relations` table is implemented but UI is separate from truth tree)
+- **Topic graph rendering** — the `topic_relations` table (4 relation types: `supersedes/revisits/depends_on/contradicts`) is fully implemented at the data layer but its visualization is out of scope. A separate "Topic Explorer" view, possibly in the project sidebar, will own this. The truth tree shows IR-level relations only.
+- **Topic lifecycle indicators on IR rows** — `topic.status` (exploring/converging/decided/executing/superseded/dismissed) does not appear next to IR rows. Only the filtering rules in §4.5 apply.
+- **Topic-grouped tree mode** — no "group by topic" view. If users want per-topic focus they use the existing topic switcher in the project sidebar.
 - Drag-and-drop reorder
 - Node deletion (only supersede + dismiss exist in V1)
 - Bulk operations on multiple selected nodes
