@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
+import { TruthTree } from "@/components/ir/truth-tree";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -388,6 +389,7 @@ export function IRPanel() {
     selectNode,
     selectedNodeId,
     truth,
+    truthEdges,
     unassignedCandidates,
     unassignedIdeas,
   } = useIR();
@@ -885,6 +887,28 @@ export function IRPanel() {
               value={search}
             />
           </div>
+        </div>
+
+        {/* === Truth Tree v1.3 preview (M2) ============================
+            Renders By-Relation DAG above the legacy By-Type list so we
+            can compare visual output side-by-side. Will replace the
+            list as default in a later milestone. */}
+        <div
+          className="border-b-2 border-dashed border-[var(--ir-border-default)] py-1"
+          data-testid="ir-truth-tree-preview"
+        >
+          <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-[var(--ir-text-tertiary)]">
+            <span>Truth Tree (preview · v1.3)</span>
+            <span className="font-mono normal-case">
+              {truth.length} active · {unassignedCandidates.length + unassignedIdeas.length} unassigned
+            </span>
+          </div>
+          <TruthTree
+            edges={truthEdges}
+            nodes={[...truth, ...unassignedCandidates, ...unassignedIdeas]}
+            onSelect={selectNode}
+            selectedNodeId={selectedNodeId}
+          />
         </div>
 
         <div className="py-2" data-testid="ir-truth-zone">

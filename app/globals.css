@@ -102,8 +102,18 @@
   --ir-warning-bg: rgba(217, 119, 6, 0.1);
   --ir-warning-stripe: #d97706;
 
-  --ir-right-panel-width: 480px;
-  --ir-right-panel-min-width: 360px;
+  /* Truth tree v1.3 — kind pill + edge label colors (light mode) */
+  --ir-glyph-goal: #15803d;
+  --ir-glyph-decision: #1d4ed8;
+  --ir-glyph-constraint: #b45309;
+  --ir-glyph-principle: #0f766e;
+  --ir-glyph-hypothesis: #7c3aed;
+  --ir-glyph-question: #b45309;
+  --ir-glyph-rejection: #b91c1c;
+  --ir-edge-contradicts: #dc2626;
+
+  --ir-right-panel-width: 540px;
+  --ir-right-panel-min-width: 440px;
 
   --ir-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", monospace;
 
@@ -165,6 +175,16 @@
 
   --ir-border-default: rgba(255, 255, 255, 0.08);
   --ir-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Truth tree v1.3 — kind pill + edge label colors (dark mode, brighter) */
+  --ir-glyph-goal: #4ade80;
+  --ir-glyph-decision: #60a5fa;
+  --ir-glyph-constraint: #fbbf24;
+  --ir-glyph-principle: #2dd4bf;
+  --ir-glyph-hypothesis: #c084fc;
+  --ir-glyph-question: #facc15;
+  --ir-glyph-rejection: #f87171;
+  --ir-edge-contradicts: #ef4444;
 
   --shadow-card:
     inset 0 1px 0 oklch(1 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.2),

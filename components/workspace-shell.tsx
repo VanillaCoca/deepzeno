@@ -20,9 +20,9 @@ import { ProjectSidebar } from "./project-sidebar";
 type RightPanelMode = "ir" | "agent-activity";
 type StoredRightPanelMode = RightPanelMode | "truth";
 
-const DEFAULT_RIGHT_PANEL_WIDTH = 480;
-const MIN_RIGHT_PANEL_WIDTH = 360;
-const MAX_RIGHT_PANEL_WIDTH = 640;
+const DEFAULT_RIGHT_PANEL_WIDTH = 540;
+const MIN_RIGHT_PANEL_WIDTH = 440;
+const MAX_RIGHT_PANEL_WIDTH = 720;
 
 function clampRightPanelWidth(width: number) {
   return Math.min(
