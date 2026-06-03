@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import type { IREdge, IRNode, IRRelation } from "@/lib/ir/types";
+import type { IREdge, IRNode } from "@/lib/ir/types";
 import { RELATION_PRIORITY, TREE_SHAPE_RELATIONS } from "./glyphs";
 
 export type TruthTreeData = {
@@ -84,10 +84,12 @@ export function buildTruthTreeData(
     if (!parentId || !childId) {
       continue;
     }
-    if (!incomingByChild.has(childId)) {
-      incomingByChild.set(childId, []);
+    let childIncoming = incomingByChild.get(childId);
+    if (!childIncoming) {
+      childIncoming = [];
+      incomingByChild.set(childId, childIncoming);
     }
-    incomingByChild.get(childId)!.push({ edge, parentId });
+    childIncoming.push({ edge, parentId });
   }
 
   // Pick primary parent for each child
@@ -108,11 +110,14 @@ export function buildTruthTreeData(
   for (const [childId, incoming] of incomingByChild) {
     const primary = primaryParentOf.get(childId);
     for (const { parentId } of incoming) {
-      const target = parentId === primary ? primaryChildrenOf : shadowChildrenOf;
-      if (!target.has(parentId)) {
-        target.set(parentId, []);
+      const target =
+        parentId === primary ? primaryChildrenOf : shadowChildrenOf;
+      let childIds = target.get(parentId);
+      if (!childIds) {
+        childIds = [];
+        target.set(parentId, childIds);
       }
-      target.get(parentId)!.push(childId);
+      childIds.push(childId);
     }
   }
 
@@ -125,7 +130,7 @@ export function buildTruthTreeData(
         return a.localeCompare(b);
       }
       const cmp = na.createdAt.localeCompare(nb.createdAt);
-      return cmp !== 0 ? cmp : a.localeCompare(b);
+      return cmp === 0 ? a.localeCompare(b) : cmp;
     });
   for (const list of primaryChildrenOf.values()) {
     sortChildren(list);
@@ -184,9 +189,10 @@ export function buildTruthTreeData(
  * `from`/`to` in the DB are not always parent/child — `depends_on` flips
  * because "A depends_on B" means B is upstream (parent) of A.
  */
-function parentChildOf(
-  edge: IREdge
-): { parentId: string | null; childId: string | null } {
+function parentChildOf(edge: IREdge): {
+  parentId: string | null;
+  childId: string | null;
+} {
   const { fromNode: a, toNode: b, relation } = edge;
   switch (relation) {
     case "implies":
@@ -250,7 +256,7 @@ function sortRoots(rootIds: string[], nodeById: Map<string, IRNode>): void {
       return oa - ob;
     }
     const cmp = na.createdAt.localeCompare(nb.createdAt);
-    return cmp !== 0 ? cmp : a.localeCompare(b);
+    return cmp === 0 ? a.localeCompare(b) : cmp;
   });
 }
 
@@ -265,5 +271,5 @@ export function useTruthTreeData(
   return useMemo(() => buildTruthTreeData(nodes, edges), [nodes, edges]);
 }
 
-// Re-export relation type for convenience in consumer modules
-export type { IRRelation };
+// Re-export relation type for convenience in consumer modules.
+export type { IRRelation } from "@/lib/ir/types";

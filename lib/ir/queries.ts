@@ -719,7 +719,7 @@ export async function promoteIRNodeForUser({
 }) {
   const node = await getIRNodeForUser({ id, userId });
 
-  if (!node || node.status !== "idea") {
+  if (node?.status !== "idea") {
     throw new ChatbotError("bad_request:api", "IR node is not an idea");
   }
 
@@ -985,7 +985,7 @@ export async function createSupersedingIRNodeForUser({
 }) {
   const source = await getIRNodeForUser({ id, userId });
 
-  if (!source || source.status !== "active") {
+  if (source?.status !== "active") {
     throw new ChatbotError(
       "bad_request:api",
       "Only active IR nodes can be superseded"

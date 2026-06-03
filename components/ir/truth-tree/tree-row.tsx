@@ -74,18 +74,29 @@ export function TreeRow({
     ? getEdgeRendering(edgeFromParent.relation, parentKind)
     : { kind: "default" as const };
   const edgeLabel =
-    edgeRendering.kind !== "default" ? edgeRendering.label : null;
+    edgeRendering.kind === "default" ? null : edgeRendering.label;
   const edgeColorVar = getEdgeLabelColorVar(edgeRendering);
+  const ancestorGuideSlots = ancestorHasMoreSiblings.reduce<
+    Array<{ hasMore: boolean; key: string }>
+  >((slots, hasMore) => {
+    const previousKey = slots.at(-1)?.key ?? node.id;
+    slots.push({
+      hasMore,
+      key: `${previousKey}:${hasMore ? "more" : "end"}`,
+    });
+    return slots;
+  }, []);
 
   return (
     <button
-      aria-selected={isSelected}
+      aria-pressed={isSelected}
       className={cn(
         "group relative flex h-7 w-full items-center gap-0 px-3",
         "border-l-2 border-transparent text-left",
         "hover:bg-[rgba(255,255,255,0.04)]",
         "transition-colors",
-        isSelected && "border-l-[var(--ir-text-primary)] bg-[rgba(255,255,255,0.02)]",
+        isSelected &&
+          "border-l-[var(--ir-text-primary)] bg-[rgba(255,255,255,0.02)]",
         node.status === "superseded" && "line-through"
       )}
       data-testid={`tree-row-${node.id}`}
@@ -95,9 +106,9 @@ export function TreeRow({
     >
       {/* === LEFT: structure (indent + connector + status) === */}
       <span className="flex shrink-0 items-center font-mono text-[13px] leading-none text-[var(--ir-text-tertiary)]">
-        {ancestorHasMoreSiblings.map((hasMore, i) => (
-          <span className="inline-block w-4 text-center" key={`anc-${i}`}>
-            {hasMore ? "│" : " "}
+        {ancestorGuideSlots.map((slot) => (
+          <span className="inline-block w-4 text-center" key={slot.key}>
+            {slot.hasMore ? "│" : " "}
           </span>
         ))}
         {depth > 0 && (
@@ -111,9 +122,7 @@ export function TreeRow({
       </span>
 
       {/* status dot — the only colored glyph in the row */}
-      <span
-        className="ml-2 mr-3 inline-block w-4 shrink-0 text-center text-[14px] leading-none text-[var(--ir-text-primary)]"
-      >
+      <span className="ml-2 mr-3 inline-block w-4 shrink-0 text-center text-[14px] leading-none text-[var(--ir-text-primary)]">
         {statusGlyph}
       </span>
 
@@ -134,14 +143,16 @@ export function TreeRow({
         {edgeLabel && (
           <span
             className="font-sans text-[11px] leading-none"
-            style={
-              edgeColorVar ? { color: `var(${edgeColorVar})` } : undefined
-            }
+            style={edgeColorVar ? { color: `var(${edgeColorVar})` } : undefined}
           >
             {edgeLabel}
-            {edgeRendering.kind === "resolves" && primaryParentShortId == null && (
-              <> {/* could append " Q1" if we threaded the parent id — left for M5 */} </>
-            )}
+            {edgeRendering.kind === "resolves" &&
+              primaryParentShortId == null && (
+                <>
+                  {" "}
+                  {/* could append " Q1" if we threaded the parent id — left for M5 */}{" "}
+                </>
+              )}
           </span>
         )}
 

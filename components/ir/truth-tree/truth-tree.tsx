@@ -13,7 +13,7 @@
 
 import type { IREdge, IRKind, IRNode } from "@/lib/ir/types";
 import { TreeRow } from "./tree-row";
-import { useTruthTreeData, type TruthTreeData } from "./use-truth-tree-data";
+import { type TruthTreeData, useTruthTreeData } from "./use-truth-tree-data";
 
 export type TruthTreeProps = {
   nodes: IRNode[];
@@ -48,8 +48,7 @@ export function TruthTree({
   const rows = flattenTree(data);
 
   const unassignedCount = data.unassignedRootIds.length;
-  const showUnassignedHeader =
-    unassignedCount > 0 || !hideEmptyUnassigned;
+  const showUnassignedHeader = unassignedCount > 0 || !hideEmptyUnassigned;
 
   if (rows.length === 0 && unassignedCount === 0) {
     return (
@@ -83,6 +82,7 @@ export function TruthTree({
       {unassignedRows.map((r) => (
         <TreeRow
           ancestorHasMoreSiblings={r.ancestorHasMoreSiblings}
+          depth={r.depth}
           edgeFromParent={r.edgeFromParent}
           isLastSibling={r.isLastSibling}
           isShadow={r.isShadow}
@@ -93,7 +93,6 @@ export function TruthTree({
           primaryParentShortId={r.primaryParentShortId}
           selectedNodeId={selectedNodeId}
           totalParentCount={r.totalParentCount}
-          depth={r.depth}
         />
       ))}
 
@@ -106,6 +105,7 @@ export function TruthTree({
       {assignedRows.map((r) => (
         <TreeRow
           ancestorHasMoreSiblings={r.ancestorHasMoreSiblings}
+          depth={r.depth}
           edgeFromParent={r.edgeFromParent}
           isLastSibling={r.isLastSibling}
           isShadow={r.isShadow}
@@ -116,7 +116,6 @@ export function TruthTree({
           primaryParentShortId={r.primaryParentShortId}
           selectedNodeId={selectedNodeId}
           totalParentCount={r.totalParentCount}
-          depth={r.depth}
         />
       ))}
     </div>
@@ -159,7 +158,8 @@ function flattenTree(data: TruthTreeData): RowRecord[] {
     const primaryParent = data.primaryParentOf.get(nodeId) ?? null;
     const primaryParentShortId =
       primaryParent && primaryParent !== parentId ? primaryParent : null;
-    const isShadow = alreadyVisited || (parentId !== null && parentId !== primaryParent);
+    const isShadow =
+      alreadyVisited || (parentId !== null && parentId !== primaryParent);
 
     result.push({
       key: `${parentId ?? "root"}→${nodeId}`,

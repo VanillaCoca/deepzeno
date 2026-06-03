@@ -9,7 +9,6 @@ import {
   MessageSquareTextIcon,
   PencilIcon,
   PlusIcon,
-  SearchIcon,
   ShieldAlertIcon,
   XIcon,
 } from "lucide-react";
@@ -17,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
-import { TruthTree } from "@/components/ir/truth-tree";
+import { TruthGraph } from "@/components/ir/truth-graph";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,42 +28,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
-import { decisionKindOrder, getDecisionKindLabel } from "@/lib/decision-kinds";
 import type { IRDetail, IREdge, IRKind, IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel } from "@/lib/ir/types";
 import { cn, fetcher } from "@/lib/utils";
 
 type EditMode = "confirm" | "supersede" | null;
-
-const TRUTH_GROUPS: Array<{
-  key: string;
-  kind: IRKind;
-  label: string;
-  defaultOpen: boolean;
-}> = decisionKindOrder.map((kind) => ({
-  key: kind,
-  kind: kind as IRKind,
-  label: getDecisionKindLabel(kind).toLowerCase(),
-  defaultOpen: true,
-}));
-
-function nodeMatchesGroup(node: IRNode, group: (typeof TRUTH_GROUPS)[number]) {
-  return node.kind === group.kind;
-}
-
-function nodeSearchText(node: IRNode) {
-  return [
-    node.id,
-    node.title,
-    node.content,
-    node.rationale,
-    node.kind,
-    node.subtype,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
 
 async function postJSON<T>(path: string, body?: Record<string, unknown>) {
   const response = await fetch(
@@ -408,14 +376,6 @@ export function IRPanel() {
     useState<ReEntrySnapshot | null>(null);
   const [reEntryDismissed, setReEntryDismissed] = useState(false);
   const [reEntryExpanded, setReEntryExpanded] = useState(false);
-  const [search, setSearch] = useState("");
-  const [collapsedGroups, setCollapsedGroups] = useState<
-    Record<string, boolean>
-  >(
-    Object.fromEntries(
-      TRUTH_GROUPS.map((group) => [group.key, !group.defaultOpen])
-    )
-  );
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
@@ -440,18 +400,13 @@ export function IRPanel() {
       ...truth,
     ].find((node) => node.id === selectedNodeId) ??
     null;
-  const filteredTruth = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) {
-      return truth;
-    }
-
-    return truth.filter((node) => nodeSearchText(node).includes(query));
-  }, [search, truth]);
   const unassignedPool = useMemo(
     () => [...unassignedCandidates, ...unassignedIdeas],
     [unassignedCandidates, unassignedIdeas]
+  );
+  const truthGraphTopics = useMemo(
+    () => topics.map((topic) => ({ id: topic.id, label: topic.label })),
+    [topics]
   );
   const assignableTopics = useMemo(
     () =>
@@ -872,92 +827,22 @@ export function IRPanel() {
         <div className="sticky top-0 z-10 border-y border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-3 py-2">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[13px] font-medium text-[var(--ir-text-secondary)]">
-              IR graph{" "}
+              Truth Graph{" "}
               <span className="text-[var(--ir-text-tertiary)]">
                 ({truth.length})
               </span>
             </p>
           </div>
-          <div className="relative">
-            <SearchIcon className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ir-text-tertiary)]" />
-            <Input
-              className="h-8 rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] pl-7 text-xs focus-visible:ring-0"
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search"
-              value={search}
-            />
-          </div>
-        </div>
-
-        {/* === Truth Tree v1.3 preview (M2) ============================
-            Renders By-Relation DAG above the legacy By-Type list so we
-            can compare visual output side-by-side. Will replace the
-            list as default in a later milestone. */}
-        <div
-          className="border-b-2 border-dashed border-[var(--ir-border-default)] py-1"
-          data-testid="ir-truth-tree-preview"
-        >
-          <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-[var(--ir-text-tertiary)]">
-            <span>Truth Tree (preview · v1.3)</span>
-            <span className="font-mono normal-case">
-              {truth.length} active · {unassignedCandidates.length + unassignedIdeas.length} unassigned
-            </span>
-          </div>
-          <TruthTree
-            edges={truthEdges}
-            nodes={[...truth, ...unassignedCandidates, ...unassignedIdeas]}
-            onSelect={selectNode}
-            selectedNodeId={selectedNodeId}
-          />
         </div>
 
         <div className="py-2" data-testid="ir-truth-zone">
-          {TRUTH_GROUPS.map((group) => {
-            const nodes = filteredTruth.filter((node) =>
-              nodeMatchesGroup(node, group)
-            );
-
-            if (nodes.length === 0) {
-              return null;
-            }
-
-            const collapsed = collapsedGroups[group.key] ?? false;
-
-            return (
-              <div key={group.key}>
-                <button
-                  className="flex h-8 w-full items-center gap-2 px-3.5 text-left text-[13px] font-medium text-[var(--ir-text-secondary)]"
-                  onClick={() =>
-                    setCollapsedGroups((current) => ({
-                      ...current,
-                      [group.key]: !collapsed,
-                    }))
-                  }
-                  type="button"
-                >
-                  {collapsed ? (
-                    <ChevronRightIcon className="size-3.5" />
-                  ) : (
-                    <ChevronDownIcon className="size-3.5" />
-                  )}
-                  <span>{group.label}</span>
-                  <span className="text-[var(--ir-text-tertiary)]">
-                    ({nodes.length})
-                  </span>
-                </button>
-                {collapsed
-                  ? null
-                  : nodes.map((node) => (
-                      <NodeButton
-                        key={node.id}
-                        node={node}
-                        onSelect={selectNode}
-                        selected={selectedNodeId === node.id}
-                      />
-                    ))}
-              </div>
-            );
-          })}
+          <TruthGraph
+            edges={truthEdges}
+            nodes={truth}
+            onSelect={selectNode}
+            selectedNodeId={selectedNodeId}
+            topics={truthGraphTopics}
+          />
         </div>
       </div>
 

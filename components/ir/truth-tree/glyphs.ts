@@ -43,11 +43,7 @@ export function getStatusGlyph(status: IRStatus): string {
 // Kind — code text only (no glyph), rendered as a right-aligned pill
 // ============================================================================
 
-type KindKey =
-  | IRKind
-  | "plan_decision"
-  | "plan_task"
-  | "plan_milestone";
+type KindKey = IRKind | "plan_decision" | "plan_task" | "plan_milestone";
 
 const KIND_CODE: Record<KindKey, string> = {
   goal: "goal",
@@ -134,9 +130,7 @@ export function getEdgeRendering(
   return { kind: "default" };
 }
 
-export function getEdgeLabelColorVar(
-  rendering: EdgeRendering
-): string | null {
+export function getEdgeLabelColorVar(rendering: EdgeRendering): string | null {
   switch (rendering.kind) {
     case "contradicts":
       return "--ir-edge-contradicts";
