@@ -67,7 +67,14 @@ export function WorkspaceShell({
             </div>
           </div>
 
-          <IRDrawer onClose={() => setDrawerOpen(false)} open={drawerOpen} />
+          <IRDrawer
+            onClose={() => setDrawerOpen(false)}
+            onNavigateToTruth={() => {
+              setView("truth-graph");
+              setDrawerOpen(false);
+            }}
+            open={drawerOpen}
+          />
         </IRProvider>
       </SidebarInset>
     </SidebarProvider>

@@ -246,9 +246,11 @@ function ReEntryBanner({
 export function IRDrawer({
   open,
   onClose,
+  onNavigateToTruth,
 }: {
   open: boolean;
   onClose: () => void;
+  onNavigateToTruth?: () => void;
 }) {
   const {
     candidates,
@@ -357,6 +359,14 @@ export function IRDrawer({
   }
 
   function handleReEntryGoTo(zone: "ideas" | "candidates" | "truth") {
+    // Truth nodes now live in the TruthGraphStage center view, not the drawer.
+    // Switch the workspace to the truth-graph view (which also closes the
+    // drawer) instead of scrolling to a zone that no longer exists.
+    if (zone === "truth") {
+      onNavigateToTruth?.();
+      return;
+    }
+
     if (zone === "ideas") {
       setIdeasExpanded(true);
     }
