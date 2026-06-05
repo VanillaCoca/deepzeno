@@ -8,10 +8,15 @@ function glyphWidth(ch: string, fontPx: number) {
 export function fitTitleToWidth(
   title: string,
   boxWidthPx: number,
-  fontPx: number
+  fontPx: number,
+  reserveText = ""
 ) {
   const normalized = title.replace(/\s+/g, " ").trim();
-  const budget = boxWidthPx - PADDING_PX;
+  const reserveWidth = [...reserveText].reduce(
+    (sum, ch) => sum + glyphWidth(ch, fontPx),
+    0
+  );
+  const budget = Math.max(0, boxWidthPx - PADDING_PX - reserveWidth);
   let used = 0;
   let out = "";
   for (const ch of normalized) {

@@ -283,7 +283,7 @@ function nodeLabel({
   const prefix = isRoot ? "▷ " : isSelected ? "✓ " : "";
   const suffix = node.kind === "open_question" ? " ?" : "";
 
-  return `${prefix}${fitTitleToWidth(node.title, OVERVIEW_NODE.width, 13)}${suffix}`;
+  return `${prefix}${fitTitleToWidth(node.title, OVERVIEW_NODE.width, 13, prefix + suffix)}${suffix}`;
 }
 
 function GraphNode({
@@ -323,7 +323,7 @@ function GraphNode({
   return (
     // biome-ignore lint/a11y/useSemanticElements: SVG graph nodes must remain in SVG coordinate space.
     <g
-      aria-label={title}
+      aria-label={node.title}
       className="cursor-pointer"
       data-testid={`truth-graph-node-${node.id}`}
       onClick={selectNode}
