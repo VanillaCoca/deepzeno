@@ -72,20 +72,25 @@ const CHAIN_NODE = { width: 218, height: 44 };
 const GRAPH_MIN_NODE_COUNT = 3;
 const CHAIN_EDGE_LABEL = "needs";
 
+// Overview groups nodes by Topic and draws no dependency lines by default
+// (rules §1.1). With no edges, a `layered` root would drop every topic into a
+// single layer and spread them along one horizontal row — an unreadable wide
+// strip. `rectpacking` instead packs the topic containers into a stable grid.
 const OVERVIEW_OPTIONS = {
-  "elk.algorithm": "layered",
-  "elk.direction": "DOWN",
-  "elk.spacing.nodeNode": "24",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "28",
+  "elk.algorithm": "rectpacking",
+  "elk.aspectRatio": "1.5",
+  "elk.spacing.nodeNode": "18",
   "elk.padding": "[top=8,left=8,bottom=8,right=8]",
-  "elk.hierarchyHandling": "INCLUDE_CHILDREN",
 };
 
+// Inside a topic there are no edges either, so `RIGHT` keeps every node in one
+// layer stacked vertically (a tidy single column) rather than a horizontal row.
+// considerModelOrder preserves the deterministic creation order from data.ts.
 const TOPIC_OPTIONS = {
   "elk.algorithm": "layered",
-  "elk.direction": "DOWN",
+  "elk.direction": "RIGHT",
   "elk.spacing.nodeNode": "10",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "12",
+  "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
   "elk.padding": "[top=32,left=12,bottom=12,right=12]",
 };
 
@@ -318,7 +323,7 @@ function GraphNode({
     // biome-ignore lint/a11y/useSemanticElements: SVG graph nodes must remain in SVG coordinate space.
     <g
       aria-label={title}
-      className="cursor-pointer transition-opacity duration-[280ms]"
+      className="cursor-pointer"
       data-testid={`truth-graph-node-${node.id}`}
       onClick={selectNode}
       onKeyDown={handleKeyDown}
@@ -328,6 +333,7 @@ function GraphNode({
           : "var(--z-focus-faint)"
       }
       role="button"
+      style={{ transition: "opacity var(--z-transition)" }}
       tabIndex={0}
     >
       {isDiamond(node) ? (
