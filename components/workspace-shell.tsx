@@ -1,24 +1,14 @@
 "use client";
 
-import {
-  ActivityIcon,
-  PanelRightCloseIcon,
-  PanelRightOpenIcon,
-  SquareKanbanIcon,
-} from "lucide-react";
+import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { IRPanel } from "@/components/ir/ir-panel";
 import { IRProvider } from "@/components/ir/ir-provider";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AgentActivityPanel } from "@/components/workspace/agent-activity-panel";
-import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { cn } from "@/lib/utils";
 import { ProjectSidebar } from "./project-sidebar";
-
-type RightPanelMode = "ir" | "agent-activity";
-type StoredRightPanelMode = RightPanelMode | "truth";
 
 const DEFAULT_RIGHT_PANEL_WIDTH = 540;
 const MIN_RIGHT_PANEL_WIDTH = 440;
@@ -48,22 +38,11 @@ export function WorkspaceShell({
     "right-panel-width",
     DEFAULT_RIGHT_PANEL_WIDTH
   );
-  const [rightPanelMode, setRightPanelMode] =
-    useLocalStorage<StoredRightPanelMode>("right-panel-mode", "ir");
   const [hasMounted, setHasMounted] = useState(false);
-  const { setSelectedDecisionId } = useWorkspace();
-  const activeRightPanelMode: RightPanelMode =
-    rightPanelMode === "agent-activity" ? "agent-activity" : "ir";
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
-
-  useEffect(() => {
-    if (rightPanelMode === "truth") {
-      setRightPanelMode("ir");
-    }
-  }, [rightPanelMode, setRightPanelMode]);
 
   const showRightPanel = hasMounted ? isRightPanelOpen : true;
   const panelWidth = hasMounted
@@ -95,14 +74,8 @@ export function WorkspaceShell({
     window.addEventListener("pointerup", handlePointerUp, { once: true });
   }
 
-  function openRightPanel(mode: RightPanelMode) {
-    setRightPanelMode(mode);
+  function openRightPanel() {
     setIsRightPanelOpen(true);
-  }
-
-  function handleViewDecision(decisionId: string) {
-    setSelectedDecisionId(decisionId);
-    openRightPanel("ir");
   }
 
   return (
@@ -136,41 +109,7 @@ export function WorkspaceShell({
                 onPointerDown={handlePanelResizePointerDown}
                 type="button"
               />
-              <div className="flex items-center justify-between border-b border-[var(--ir-border-default)] px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-subtle)] p-0.5">
-                    <Button
-                      aria-pressed={activeRightPanelMode === "ir"}
-                      className={cn(
-                        "h-7 rounded-md px-2 text-xs",
-                        activeRightPanelMode === "ir"
-                          ? "bg-[var(--ir-bg-panel)] text-[var(--ir-text-primary)]"
-                          : "bg-transparent text-[var(--ir-text-tertiary)]"
-                      )}
-                      onClick={() => setRightPanelMode("ir")}
-                      size="xs"
-                      variant="ghost"
-                    >
-                      <SquareKanbanIcon className="size-3" />
-                      IR Panel
-                    </Button>
-                    <Button
-                      aria-pressed={activeRightPanelMode === "agent-activity"}
-                      className={cn(
-                        "h-7 rounded-md px-2 text-xs",
-                        activeRightPanelMode === "agent-activity"
-                          ? "bg-[var(--ir-bg-panel)] text-[var(--ir-text-primary)]"
-                          : "bg-transparent text-[var(--ir-text-tertiary)]"
-                      )}
-                      onClick={() => setRightPanelMode("agent-activity")}
-                      size="xs"
-                      variant="ghost"
-                    >
-                      <ActivityIcon className="size-3" />
-                      Agent Activity
-                    </Button>
-                  </div>
-                </div>
+              <div className="flex items-center justify-end border-b border-[var(--ir-border-default)] px-4 py-3">
                 <Button
                   className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
                   onClick={() => setIsRightPanelOpen(false)}
@@ -181,32 +120,19 @@ export function WorkspaceShell({
                 </Button>
               </div>
 
-              {activeRightPanelMode === "agent-activity" ? (
-                <AgentActivityPanel onViewDecision={handleViewDecision} />
-              ) : (
-                <IRPanel />
-              )}
+              <IRPanel />
             </aside>
 
             {!showRightPanel && (
               <div className="absolute right-4 top-4 z-30 hidden gap-2 xl:flex">
                 <Button
                   className="rounded border-[var(--ir-border-strong)] bg-[var(--ir-bg-panel)] hover:bg-[var(--ir-bg-hover)]"
-                  onClick={() => openRightPanel("ir")}
+                  onClick={() => openRightPanel()}
                   size="sm"
                   variant="outline"
                 >
                   <PanelRightOpenIcon className="size-4" />
                   IR Panel
-                </Button>
-                <Button
-                  className="rounded border-[var(--ir-border-strong)] bg-[var(--ir-bg-panel)] hover:bg-[var(--ir-bg-hover)]"
-                  onClick={() => openRightPanel("agent-activity")}
-                  size="sm"
-                  variant="outline"
-                >
-                  <ActivityIcon className="size-4" />
-                  Agent Activity
                 </Button>
               </div>
             )}
