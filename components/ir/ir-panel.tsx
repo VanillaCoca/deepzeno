@@ -340,7 +340,7 @@ export function IRPanel() {
     unassignedCandidates,
     unassignedIdeas,
   } = useIR();
-  const { activeProjectId, topics } = useWorkspace();
+  const { activeProjectId, queueReferenceDraft, topics } = useWorkspace();
   const [ideasExpanded, setIdeasExpanded] = useState(false);
   const [candidatesExpanded, setCandidatesExpanded] = useState(true);
   const [unassignedExpanded, setUnassignedExpanded] = useState(false);
@@ -438,6 +438,7 @@ export function IRPanel() {
     setReEntryDismissed(true);
 
     try {
+      // Fire-and-forget: no toast/isMutating gate (see useIRActions.runMutation for the gated path).
       await postJSON(`/api/projects/${activeProjectId}/re-entry/mark-seen`);
     } catch (error) {
       console.error("Failed to mark re-entry reviewed", error);
@@ -750,7 +751,7 @@ export function IRPanel() {
                   <Button
                     className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
                     onClick={() =>
-                      actions.queueReferenceDraft(
+                      queueReferenceDraft(
                         `> [${selectedNode.id}] ${selectedNode.title}\n> ${selectedNode.content ?? selectedNode.title}`
                       )
                     }
@@ -834,12 +835,7 @@ export function IRPanel() {
                   <Button
                     className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
                     disabled={actions.isMutating}
-                    onClick={() =>
-                      actions.runMutation(
-                        () => postJSON(`/api/ir/${selectedNode.id}/dismiss`),
-                        "Candidate ignored."
-                      )
-                    }
+                    onClick={() => actions.handleDismissCandidate(selectedNode)}
                     size="sm"
                     variant="outline"
                   >
@@ -853,12 +849,7 @@ export function IRPanel() {
                   <Button
                     className="rounded border-[var(--ir-accent-blue-border)] bg-transparent text-[var(--ir-accent-blue)] hover:bg-[var(--ir-bg-hover)]"
                     disabled={actions.isMutating}
-                    onClick={() =>
-                      actions.runMutation(
-                        () => postJSON(`/api/ir/${selectedNode.id}/promote`),
-                        "Idea promoted."
-                      )
-                    }
+                    onClick={() => actions.handlePromoteIdea(selectedNode)}
                     size="sm"
                     variant="outline"
                   >
@@ -868,12 +859,7 @@ export function IRPanel() {
                   <Button
                     className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
                     disabled={actions.isMutating}
-                    onClick={() =>
-                      actions.runMutation(
-                        () => postJSON(`/api/ir/${selectedNode.id}/dismiss`),
-                        "Idea dismissed."
-                      )
-                    }
+                    onClick={() => actions.handleDismissIdea(selectedNode)}
                     size="sm"
                     variant="outline"
                   >

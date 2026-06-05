@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { KeyedMutator } from "swr";
 import { useIR } from "@/components/ir/ir-provider";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRKind, IRNode } from "@/lib/ir/types";
@@ -32,16 +33,11 @@ export async function postJSON<T>(
 
 export function useIRActions(
   selectedNode: IRNode | null,
-  mutateDetail: () => Promise<unknown>
+  mutateDetail: KeyedMutator<IRDetail>
 ) {
   const { refreshIR, selectNode } = useIR();
-  const {
-    activeProjectId,
-    activeTopicId,
-    bringDecisionToSandbox,
-    queueReferenceDraft,
-    topics,
-  } = useWorkspace();
+  const { activeProjectId, activeTopicId, bringDecisionToSandbox, topics } =
+    useWorkspace();
 
   const [editMode, setEditMode] = useState<EditMode>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -171,9 +167,7 @@ export function useIRActions(
           }),
         "Candidate confirmed."
       );
-    }
-
-    if (editMode === "supersede") {
+    } else if (editMode === "supersede") {
       await runMutation(
         () =>
           postJSON<IRDetail>(`/api/ir/${selectedNode.id}/supersede`, {
@@ -261,6 +255,27 @@ export function useIRActions(
     setNewTopicLabel("");
   }
 
+  async function handleDismissCandidate(node: IRNode) {
+    await runMutation(
+      () => postJSON(`/api/ir/${node.id}/dismiss`),
+      "Candidate ignored."
+    );
+  }
+
+  async function handlePromoteIdea(node: IRNode) {
+    await runMutation(
+      () => postJSON(`/api/ir/${node.id}/promote`),
+      "Idea promoted."
+    );
+  }
+
+  async function handleDismissIdea(node: IRNode) {
+    await runMutation(
+      () => postJSON(`/api/ir/${node.id}/dismiss`),
+      "Idea dismissed."
+    );
+  }
+
   return {
     // state
     editMode,
@@ -288,7 +303,8 @@ export function useIRActions(
     handleBringToSandbox,
     handleCreateNextStep,
     handleConfirmNode,
-    // also expose queueReferenceDraft so ir-panel can use it via actions
-    queueReferenceDraft,
+    handleDismissCandidate,
+    handlePromoteIdea,
+    handleDismissIdea,
   };
 }
