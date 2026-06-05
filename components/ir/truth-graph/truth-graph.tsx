@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { fitTitleToWidth } from "@/lib/ir/fit-title";
 import type { IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel, truncateIRTitle } from "@/lib/ir/types";
 import { cn } from "@/lib/utils";
@@ -282,7 +283,7 @@ function nodeLabel({
   const prefix = isRoot ? "▷ " : isSelected ? "✓ " : "";
   const suffix = node.kind === "open_question" ? " ?" : "";
 
-  return `${prefix}${truncateIRTitle(node.title, 42)}${suffix}`;
+  return `${prefix}${fitTitleToWidth(node.title, OVERVIEW_NODE.width, 13)}${suffix}`;
 }
 
 function GraphNode({
