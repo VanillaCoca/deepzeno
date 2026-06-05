@@ -1,15 +1,10 @@
 "use client";
 
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  XIcon,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDownIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { getNodeTypeLabel, IRDetailPane } from "@/components/ir/ir-detail";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
-import { TruthGraph } from "@/components/ir/truth-graph";
 import { postJSON, useIRActions } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
@@ -248,54 +243,50 @@ function ReEntryBanner({
   );
 }
 
-export function IRPanel() {
+export function IRDrawer({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
   const {
     candidates,
     ideas,
     isLoading,
     selectNode,
     selectedNodeId,
-    truth,
-    truthEdges,
     unassignedCandidates,
     unassignedIdeas,
   } = useIR();
-  const { activeProjectId, topics } = useWorkspace();
+  const { activeProjectId } = useWorkspace();
   const [ideasExpanded, setIdeasExpanded] = useState(false);
   const [candidatesExpanded, setCandidatesExpanded] = useState(true);
   const [unassignedExpanded, setUnassignedExpanded] = useState(false);
-  const [listPanePercent, setListPanePercent] = useState(55);
   const [reEntrySnapshot, setReEntrySnapshot] =
     useState<ReEntrySnapshot | null>(null);
   const [reEntryDismissed, setReEntryDismissed] = useState(false);
   const [reEntryExpanded, setReEntryExpanded] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+
   const { data: detail, mutate: mutateDetail } = useSWR<IRDetail>(
     irNodeKey(selectedNodeId),
     fetcher,
     { revalidateOnFocus: false }
   );
-  const selectedNode =
-    detail?.node ??
-    [
-      ...ideas,
-      ...candidates,
-      ...unassignedCandidates,
-      ...unassignedIdeas,
-      ...truth,
-    ].find((node) => node.id === selectedNodeId) ??
-    null;
-
-  const actions = useIRActions(selectedNode, mutateDetail);
 
   const unassignedPool = useMemo(
     () => [...unassignedCandidates, ...unassignedIdeas],
     [unassignedCandidates, unassignedIdeas]
   );
-  const truthGraphTopics = useMemo(
-    () => topics.map((topic) => ({ id: topic.id, label: topic.label })),
-    [topics]
-  );
+
+  // The drawer's detail pane is scoped to NON-truth nodes (ideas/candidates/
+  // unassigned). Truth nodes selected from the stage share selectedNodeId but
+  // show their detail there, not here.
+  const selectedDrawerNode =
+    [...ideas, ...candidates, ...unassignedPool].find(
+      (node) => node.id === selectedNodeId
+    ) ?? null;
+  const actions = useIRActions(selectedDrawerNode, mutateDetail);
 
   useEffect(() => {
     if (unassignedPool.length > 0) {
@@ -381,119 +372,98 @@ export function IRPanel() {
     });
   }
 
-  function handleDividerPointerDown(event: React.PointerEvent<HTMLElement>) {
-    const panel = panelRef.current;
-
-    if (!panel) {
-      return;
-    }
-
-    event.preventDefault();
-    const rect = panel.getBoundingClientRect();
-
-    function handlePointerMove(pointerEvent: PointerEvent) {
-      const nextPercent =
-        ((pointerEvent.clientY - rect.top) / Math.max(rect.height, 1)) * 100;
-      setListPanePercent(Math.min(72, Math.max(28, nextPercent)));
-    }
-
-    function handlePointerUp() {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col bg-[var(--ir-bg-panel)] text-[var(--ir-text-primary)]"
-      data-testid="ir-panel"
-      ref={panelRef}
-    >
-      {shouldShowReEntry(reEntrySnapshot, reEntryDismissed) &&
-      reEntrySnapshot ? (
-        <ReEntryBanner
-          expanded={reEntryExpanded}
-          onDismiss={markReEntrySeen}
-          onGoTo={handleReEntryGoTo}
-          onToggleExpanded={() => setReEntryExpanded(true)}
-          snapshot={reEntrySnapshot}
+    <>
+      {open ? (
+        <button
+          aria-label="Close panel"
+          className="fixed inset-0 z-30 bg-black/20"
+          onClick={onClose}
+          type="button"
         />
       ) : null}
-
-      <div
-        className="flex min-h-0 flex-col overflow-y-auto px-0 py-2"
-        style={{ flexBasis: `${listPanePercent}%` }}
+      <aside
+        aria-hidden={!open}
+        className={cn(
+          "fixed inset-y-0 right-0 z-40 flex w-[420px] max-w-[90vw] flex-col border-l border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] shadow-xl transition-transform duration-200",
+          open ? "translate-x-0" : "translate-x-full"
+        )}
+        data-testid="ir-drawer"
       >
-        <ZoneHeader
-          count={ideas.length}
-          expanded={ideasExpanded}
-          label="Ideas"
-          onToggle={() => setIdeasExpanded((current) => !current)}
-        />
-        {ideasExpanded ? (
-          <div className="mb-2" data-testid="ir-ideas-zone">
-            {ideas.length === 0 && !isLoading ? (
-              <p className="px-3.5 py-2 text-sm text-[var(--ir-text-tertiary)]">
-                No ideas yet.
-              </p>
-            ) : null}
-            {ideas.slice(0, 10).map((node) => (
-              <NodeButton
-                key={node.id}
-                node={node}
-                onSelect={selectNode}
-                selected={selectedNodeId === node.id}
-              />
-            ))}
-            {ideas.length > 10 ? (
-              <button
-                className="px-3.5 py-2 text-xs text-[var(--ir-text-tertiary)]"
-                type="button"
-              >
-                + {ideas.length - 10} more
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        <header className="flex items-center justify-between border-b border-[var(--ir-border-default)] px-4 py-3">
+          <span className="text-sm font-medium text-[var(--ir-text-primary)]">
+            Ideas & Candidates
+          </span>
+          <Button
+            aria-label="Close"
+            className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
+            onClick={onClose}
+            size="icon-sm"
+            variant="outline"
+          >
+            <XIcon className="size-4" />
+          </Button>
+        </header>
 
-        <ZoneHeader
-          count={candidates.length}
-          expanded={candidatesExpanded}
-          label="Candidates"
-          onToggle={() => setCandidatesExpanded((current) => !current)}
-        />
-        {candidatesExpanded ? (
-          <div className="mb-3" data-testid="ir-candidates-zone">
-            {candidates.length === 0 && !isLoading ? (
-              <p className="px-3.5 py-2 text-sm text-[var(--ir-text-tertiary)]">
-                No pending candidates.
-              </p>
-            ) : null}
-            {candidates.map((node) => (
-              <NodeButton
-                key={node.id}
-                node={node}
-                onSelect={selectNode}
-                selected={selectedNodeId === node.id}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {unassignedPool.length > 0 ? (
-          <>
-            <ZoneHeader
-              count={unassignedPool.length}
-              expanded={unassignedExpanded}
-              label="Unassigned pool"
-              onToggle={() => setUnassignedExpanded((current) => !current)}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {shouldShowReEntry(reEntrySnapshot, reEntryDismissed) &&
+          reEntrySnapshot ? (
+            <ReEntryBanner
+              expanded={reEntryExpanded}
+              onDismiss={markReEntrySeen}
+              onGoTo={handleReEntryGoTo}
+              onToggleExpanded={() => setReEntryExpanded(true)}
+              snapshot={reEntrySnapshot}
             />
-            {unassignedExpanded ? (
-              <div className="mb-3" data-testid="ir-unassigned-zone">
-                {unassignedPool.map((node) => (
+          ) : null}
+
+          <div className="flex flex-col px-0 py-2">
+            <ZoneHeader
+              count={ideas.length}
+              expanded={ideasExpanded}
+              label="Ideas"
+              onToggle={() => setIdeasExpanded((current) => !current)}
+            />
+            {ideasExpanded ? (
+              <div className="mb-2" data-testid="ir-ideas-zone">
+                {ideas.length === 0 && !isLoading ? (
+                  <p className="px-3.5 py-2 text-sm text-[var(--ir-text-tertiary)]">
+                    No ideas yet.
+                  </p>
+                ) : null}
+                {ideas.slice(0, 10).map((node) => (
+                  <NodeButton
+                    key={node.id}
+                    node={node}
+                    onSelect={selectNode}
+                    selected={selectedNodeId === node.id}
+                  />
+                ))}
+                {ideas.length > 10 ? (
+                  <button
+                    className="px-3.5 py-2 text-xs text-[var(--ir-text-tertiary)]"
+                    type="button"
+                  >
+                    + {ideas.length - 10} more
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <ZoneHeader
+              count={candidates.length}
+              expanded={candidatesExpanded}
+              label="Candidates"
+              onToggle={() => setCandidatesExpanded((current) => !current)}
+            />
+            {candidatesExpanded ? (
+              <div className="mb-3" data-testid="ir-candidates-zone">
+                {candidates.length === 0 && !isLoading ? (
+                  <p className="px-3.5 py-2 text-sm text-[var(--ir-text-tertiary)]">
+                    No pending candidates.
+                  </p>
+                ) : null}
+                {candidates.map((node) => (
                   <NodeButton
                     key={node.id}
                     node={node}
@@ -503,52 +473,42 @@ export function IRPanel() {
                 ))}
               </div>
             ) : null}
-          </>
-        ) : null}
 
-        <div className="sticky top-0 z-10 border-y border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-3 py-2">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-[13px] font-medium text-[var(--ir-text-secondary)]">
-              Truth Graph{" "}
-              <span className="text-[var(--ir-text-tertiary)]">
-                ({truth.length})
-              </span>
-            </p>
+            {unassignedPool.length > 0 ? (
+              <>
+                <ZoneHeader
+                  count={unassignedPool.length}
+                  expanded={unassignedExpanded}
+                  label="Unassigned pool"
+                  onToggle={() => setUnassignedExpanded((current) => !current)}
+                />
+                {unassignedExpanded ? (
+                  <div className="mb-3" data-testid="ir-unassigned-zone">
+                    {unassignedPool.map((node) => (
+                      <NodeButton
+                        key={node.id}
+                        node={node}
+                        onSelect={selectNode}
+                        selected={selectedNodeId === node.id}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </div>
         </div>
 
-        <div className="py-2" data-testid="ir-truth-zone">
-          <TruthGraph
-            edges={truthEdges}
-            nodes={truth}
-            onSelect={selectNode}
-            selectedNodeId={selectedNodeId}
-            topics={truthGraphTopics}
-          />
-        </div>
-      </div>
-
-      <button
-        aria-label="Resize IR detail pane"
-        className="h-1 cursor-row-resize border-y border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] focus-visible:outline-none"
-        onKeyDown={(event) => {
-          if (event.key === "ArrowUp") {
-            setListPanePercent((current) => Math.max(28, current - 5));
-          }
-
-          if (event.key === "ArrowDown") {
-            setListPanePercent((current) => Math.min(72, current + 5));
-          }
-        }}
-        onPointerDown={handleDividerPointerDown}
-        type="button"
-      />
-
-      <IRDetailPane
-        actions={actions}
-        detail={detail}
-        selectedNode={selectedNode}
-      />
-    </div>
+        {selectedDrawerNode ? (
+          <div className="h-2/5 min-h-[220px] overflow-auto border-t border-[var(--ir-border-default)]">
+            <IRDetailPane
+              actions={actions}
+              detail={detail}
+              selectedNode={selectedDrawerNode}
+            />
+          </div>
+        ) : null}
+      </aside>
+    </>
   );
 }

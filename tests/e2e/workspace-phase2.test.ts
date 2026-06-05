@@ -112,20 +112,23 @@ test.describe("Workspace IR panel flow", () => {
     expect(ideaResponse.ok()).toBeTruthy();
 
     await page.goto(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
-    await expect(page.getByTestId("ir-panel")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /Ideas \(1\)/ })
-    ).toBeVisible();
+    // Ideas/Candidates now live in a slide-over drawer opened from the toolbar pill.
+    const drawerTrigger = page.getByTestId("ir-drawer-trigger");
+    await expect(drawerTrigger).toBeVisible();
+    await expect(drawerTrigger).toContainText("Ideas (1)");
+    await expect(drawerTrigger).toContainText("Candidates (1)");
     await expect(
       page.getByText("Bilingual sweep accuracy needs a separate eval set")
     ).toHaveCount(0);
-    await page.getByRole("button", { name: /Ideas \(1\)/ }).click();
+    await drawerTrigger.click();
+    await expect(page.getByTestId("ir-drawer")).toBeVisible();
+    await page
+      .getByTestId("ir-drawer")
+      .getByRole("button", { name: /Ideas \(1\)/ })
+      .click();
     await expect(page.getByTestId("ir-ideas-zone")).toContainText(
       "Bilingual sweep accuracy needs a separate eval set"
     );
-    await expect(
-      page.getByRole("button", { name: /Candidates \(1\)/ })
-    ).toBeVisible();
     await expect(page.getByTestId("ir-candidates-zone")).toContainText(
       "V1 uses Supabase IR tables"
     );
@@ -141,7 +144,9 @@ test.describe("Workspace IR panel flow", () => {
       .getByRole("button", { exact: true, name: "Confirm" })
       .click();
 
-    await expect(page.getByTestId("ir-truth-zone")).toContainText(
+    // Confirmed candidates become truth, surfaced in the Truth Graph stage.
+    await page.getByRole("radio", { name: "Truth Graph" }).click();
+    await expect(page.getByTestId("truth-graph-stage")).toContainText(
       "V1 uses Supabase IR tables",
       { timeout: 10_000 }
     );

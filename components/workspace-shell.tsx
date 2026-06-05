@@ -1,17 +1,15 @@
 "use client";
 
-import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { IRPanel } from "@/components/ir/ir-panel";
+import { IRDrawer } from "@/components/ir/ir-drawer";
 import { IRProvider, useIR } from "@/components/ir/ir-provider";
-import { Button } from "@/components/ui/button";
+import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   WorkspaceToolbar,
   type WorkspaceView,
 } from "@/components/workspace/workspace-toolbar";
-import { cn } from "@/lib/utils";
 import { ProjectSidebar } from "./project-sidebar";
 
 function ViewToolbar(props: {
@@ -31,17 +29,6 @@ function ViewToolbar(props: {
   );
 }
 
-const DEFAULT_RIGHT_PANEL_WIDTH = 540;
-const MIN_RIGHT_PANEL_WIDTH = 440;
-const MAX_RIGHT_PANEL_WIDTH = 720;
-
-function clampRightPanelWidth(width: number) {
-  return Math.min(
-    MAX_RIGHT_PANEL_WIDTH,
-    Math.max(MIN_RIGHT_PANEL_WIDTH, Math.round(width))
-  );
-}
-
 export function WorkspaceShell({
   children,
   defaultSidebarOpen,
@@ -51,59 +38,11 @@ export function WorkspaceShell({
   defaultSidebarOpen: boolean;
   userEmail: string | null;
 }) {
-  const [isRightPanelOpen, setIsRightPanelOpen] = useLocalStorage(
-    "right-panel-open",
-    true
-  );
-  const [rightPanelWidth, setRightPanelWidth] = useLocalStorage(
-    "right-panel-width",
-    DEFAULT_RIGHT_PANEL_WIDTH
-  );
   const [view, setView] = useLocalStorage<WorkspaceView>(
     "workspace-view",
     "conversation"
   );
-  // consumed by the IR drawer in the next task
-  const [_drawerOpen, setDrawerOpen] = useState(false);
-  const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  const showRightPanel = hasMounted ? isRightPanelOpen : true;
-  const panelWidth = hasMounted
-    ? clampRightPanelWidth(rightPanelWidth)
-    : DEFAULT_RIGHT_PANEL_WIDTH;
-
-  useEffect(() => {
-    if (hasMounted && rightPanelWidth !== panelWidth) {
-      setRightPanelWidth(panelWidth);
-    }
-  }, [hasMounted, panelWidth, rightPanelWidth, setRightPanelWidth]);
-
-  function handlePanelResizePointerDown(
-    event: React.PointerEvent<HTMLButtonElement>
-  ) {
-    event.preventDefault();
-
-    function handlePointerMove(pointerEvent: PointerEvent) {
-      const nextWidth = window.innerWidth - pointerEvent.clientX;
-      setRightPanelWidth(clampRightPanelWidth(nextWidth));
-    }
-
-    function handlePointerUp() {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp, { once: true });
-  }
-
-  function openRightPanel() {
-    setIsRightPanelOpen(true);
-  }
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <SidebarProvider
@@ -123,65 +62,12 @@ export function WorkspaceShell({
                 view={view}
               />
               <div className="min-h-0 flex-1 overflow-hidden">
-                {view === "truth-graph" ? (
-                  <div
-                    className="flex h-full items-center justify-center text-sm text-[var(--ir-text-tertiary)]"
-                    data-testid="truth-graph-stage-placeholder"
-                  >
-                    Truth Graph stage
-                  </div>
-                ) : (
-                  children
-                )}
+                {view === "truth-graph" ? <TruthGraphStage /> : children}
               </div>
             </div>
-
-            <aside
-              className={cn(
-                "relative hidden h-dvh min-h-0 shrink-0 border-l border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] xl:flex xl:flex-col",
-                !showRightPanel && "xl:hidden"
-              )}
-              data-testid="right-panel"
-              style={{
-                width: `${panelWidth}px`,
-                minWidth: "var(--ir-right-panel-min-width)",
-                maxWidth: `${MAX_RIGHT_PANEL_WIDTH}px`,
-              }}
-            >
-              <button
-                aria-label="Resize IR panel"
-                className="absolute left-0 top-0 h-full w-1 -translate-x-1/2 cursor-col-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ir-border-focus)]"
-                onPointerDown={handlePanelResizePointerDown}
-                type="button"
-              />
-              <div className="flex items-center justify-end border-b border-[var(--ir-border-default)] px-4 py-3">
-                <Button
-                  className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
-                  onClick={() => setIsRightPanelOpen(false)}
-                  size="icon-sm"
-                  variant="outline"
-                >
-                  <PanelRightCloseIcon className="size-4" />
-                </Button>
-              </div>
-
-              <IRPanel />
-            </aside>
-
-            {!showRightPanel && (
-              <div className="absolute right-4 top-4 z-30 hidden gap-2 xl:flex">
-                <Button
-                  className="rounded border-[var(--ir-border-strong)] bg-[var(--ir-bg-panel)] hover:bg-[var(--ir-bg-hover)]"
-                  onClick={() => openRightPanel()}
-                  size="sm"
-                  variant="outline"
-                >
-                  <PanelRightOpenIcon className="size-4" />
-                  IR Panel
-                </Button>
-              </div>
-            )}
           </div>
+
+          <IRDrawer onClose={() => setDrawerOpen(false)} open={drawerOpen} />
         </IRProvider>
       </SidebarInset>
     </SidebarProvider>
