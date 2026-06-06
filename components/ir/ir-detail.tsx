@@ -25,7 +25,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
-import { getIRTypeLabel } from "@/lib/ir/types";
 
 export function StatusBadge({ status }: { status: IRNode["status"] }) {
   return (
@@ -33,18 +32,6 @@ export function StatusBadge({ status }: { status: IRNode["status"] }) {
       {status}
     </span>
   );
-}
-
-export function getNodeTypeLabel(node: IRNode) {
-  if (node.kind === "plan") {
-    return node.subtype ?? "plan";
-  }
-
-  if (node.kind === "unclassified") {
-    return "?";
-  }
-
-  return node.kind.replace("_", " ");
 }
 
 function DetailRelationList({
@@ -128,11 +115,7 @@ export function IRDetailPane({
                 <h3 className="mt-1 break-words text-base font-medium leading-[1.35] text-[var(--ir-text-primary)]">
                   {selectedNode.title}
                 </h3>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--ir-text-tertiary)]">
-                  <span>
-                    {getIRTypeLabel(selectedNode.kind, selectedNode.subtype)}
-                  </span>
-                  <span>·</span>
+                <div className="mt-1">
                   <StatusBadge status={selectedNode.status} />
                 </div>
               </div>
