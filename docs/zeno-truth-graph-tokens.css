@@ -76,6 +76,7 @@
   --z-attention-soft: color-mix(in srgb, var(--z-attention) 12%, transparent);
   --z-candidate: #534ab7; /* 紫 = candidate (sandbox 暂存,未确认) */
   --z-candidate-text: #3c3489;
+  --z-candidate-soft: color-mix(in srgb, var(--z-candidate) 12%, transparent);
 
   /* ---- 节点尺寸 ---------------------------------------------------------- */
   --z-node-radius: 7px; /* decision 普通矩形圆角 */

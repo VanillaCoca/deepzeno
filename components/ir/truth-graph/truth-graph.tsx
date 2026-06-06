@@ -72,8 +72,8 @@ export type TruthGraphProps = {
   topics: TruthGraphTopic[];
 };
 
-const OVERVIEW_DIMS = { width: 168, baseFont: 13, padY: 9 };
-const CHAIN_DIMS = { width: 218, baseFont: 13, padY: 13 };
+const OVERVIEW_DIMS = { width: 200, baseFont: 13, padY: 10, padX: 13 };
+const CHAIN_DIMS = { width: 242, baseFont: 13, padY: 12, padX: 14 };
 const NODE_MAX_LINES = 4;
 const NODE_SHRINK_FONT = 11.5;
 
@@ -85,11 +85,13 @@ function nodeReserveText(node: IRNode) {
 
 function measureNode(
   node: IRNode,
-  dims: { width: number; baseFont: number; padY: number }
+  dims: { width: number; baseFont: number; padY: number; padX: number }
 ) {
   return fitNodeTitle({
     title: node.title,
-    width: dims.width,
+    // Reserve horizontal padding on both sides so left-aligned text never
+    // touches the node edges.
+    width: dims.width - dims.padX * 2,
     baseFont: dims.baseFont,
     reserveText: nodeReserveText(node),
     padY: dims.padY,
@@ -258,74 +260,71 @@ function nodeTone({
   isSelected: boolean;
   node: IRNode;
 }) {
+  // Borderless filled "chips" (Claude-style): identity comes from a soft
+  // background fill + text color, not a colored border. `stroke` is only used
+  // for the selected ring + focus outline. Color-blind redundancy (rules §4.7)
+  // is carried by non-color cues: strike-through (rejection), the "?" suffix
+  // (open question), and the ◇/○ stage glyphs (candidate/idea) added in GraphNode.
   if (node.status === "superseded" || node.kind === "rejection") {
     return {
+      fill: "var(--z-rejected-soft)",
       stroke: "var(--z-rejected)",
       text: "var(--z-rejected)",
       decoration: "line-through",
-      dash: "none",
     };
   }
 
   if (node.kind === "open_question") {
     return {
+      fill: "var(--z-attention-soft)",
       stroke: "var(--z-attention)",
       text: "var(--z-attention-text)",
       decoration: "none",
-      dash: "none",
     };
   }
 
-  // Stage identity for non-truth nodes (only present in "All" mode). Each stage
-  // gets a distinct color AND stroke pattern (dotted idea, dashed candidate) so
-  // the difference survives color-blindness (rules §4.7). Kept ahead of the
-  // selection/chain check so a selected candidate stays a candidate visually.
   if (node.status === "idea") {
     return {
+      fill: "var(--z-node-fill)",
       stroke: "var(--z-text-3)",
       text: "var(--z-text-3)",
       decoration: "none",
-      dash: "2 3",
     };
   }
 
   if (node.status === "pending") {
     return {
+      fill: "var(--z-candidate-soft)",
       stroke: "var(--z-candidate)",
       text: "var(--z-candidate-text)",
       decoration: "none",
-      dash: "5 4",
     };
   }
 
   if (isOnChain || isSelected) {
     return {
+      fill: "var(--z-confirmed-soft)",
       stroke: "var(--z-confirmed)",
       text: "var(--z-confirmed)",
       decoration: "none",
-      dash: "none",
     };
   }
 
   if (node.kind === "constraint" || node.kind === "hypothesis") {
     return {
+      fill: "var(--z-node-fill)",
       stroke: "var(--z-fact-stroke)",
       text: "var(--z-text-2)",
       decoration: "none",
-      dash: "none",
     };
   }
 
   return {
+    fill: "var(--z-node-fill)",
     stroke: "var(--z-node-stroke)",
     text: "var(--z-text)",
     decoration: "none",
-    dash: "none",
   };
-}
-
-function isDiamond(node: IRNode) {
-  return node.kind === "open_question";
 }
 
 function GraphNode({
@@ -351,13 +350,16 @@ function GraphNode({
     : "var(--z-stroke-w)";
   const dims = box.width >= CHAIN_DIMS.width ? CHAIN_DIMS : OVERVIEW_DIMS;
   const { lines, fontPx, lineHeight } = measureNode(node, dims);
-  const displayPrefix = isRoot ? "▷ " : isSelected ? "✓ " : "";
+  // Stage glyph gives candidates/ideas a non-color cue (color-blind safety).
+  const stageGlyph =
+    node.status === "pending" ? "◇ " : node.status === "idea" ? "○ " : "";
+  const displayPrefix = isRoot ? "▷ " : isSelected ? "✓ " : stageGlyph;
   const displaySuffix = node.kind === "open_question" ? " ?" : "";
   const renderLines = lines.map(
     (line, index) =>
       `${index === 0 ? displayPrefix : ""}${line}${index === lines.length - 1 ? displaySuffix : ""}`
   );
-  const cx = box.x + box.width / 2;
+  const leftX = box.x + dims.padX;
   const blockTop = box.y + (box.height - lines.length * lineHeight) / 2;
   const anchorLabel = isRoot ? "from here" : null;
   const selectNode = () => onSelect(node.id);
@@ -388,47 +390,37 @@ function GraphNode({
       style={{ transition: "opacity var(--z-transition)" }}
       tabIndex={0}
     >
-      {isDiamond(node) ? (
-        <polygon
-          fill="var(--z-node-fill)"
-          points={`${box.x + box.width / 2},${box.y} ${box.x + box.width},${box.y + box.height / 2} ${box.x + box.width / 2},${box.y + box.height} ${box.x},${box.y + box.height / 2}`}
-          stroke={tone.stroke}
-          strokeDasharray={tone.dash === "none" ? undefined : tone.dash}
-          strokeWidth={strokeWidth}
-        />
-      ) : (
-        <rect
-          fill="var(--z-node-fill)"
-          height={box.height}
-          rx={
-            isRoot
-              ? "var(--z-start-radius)"
-              : isSelected
-                ? "var(--z-node-radius-target)"
-                : "var(--z-node-radius)"
-          }
-          stroke={tone.stroke}
-          strokeDasharray={tone.dash === "none" ? undefined : tone.dash}
-          strokeWidth={strokeWidth}
-          width={box.width}
-          x={box.x}
-          y={box.y}
-        />
-      )}
+      <rect
+        fill={tone.fill}
+        height={box.height}
+        rx={
+          isRoot
+            ? "var(--z-start-radius)"
+            : isSelected
+              ? "var(--z-node-radius-target)"
+              : "var(--z-node-radius)"
+        }
+        // Borderless by default; the selected node keeps a ring for focus.
+        stroke={isSelected ? tone.stroke : "none"}
+        strokeWidth={strokeWidth}
+        width={box.width}
+        x={box.x}
+        y={box.y}
+      />
       <text
         dominantBaseline="central"
         fill={tone.text}
         fontFamily="var(--z-font-sans)"
         fontSize={fontPx}
         fontWeight={isSelected ? "600" : "500"}
-        textAnchor="middle"
+        textAnchor="start"
         textDecoration={tone.decoration}
       >
         {renderLines.map((line, index) => (
           <tspan
             // biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given title
             key={index}
-            x={cx}
+            x={leftX}
             y={blockTop + lineHeight / 2 + index * lineHeight}
           >
             {line}
@@ -842,8 +834,8 @@ export function TruthGraph({
                           fontFamily="var(--z-font-sans)"
                           fontSize="var(--z-font-edge)"
                           fontWeight="500"
-                          textAnchor="middle"
-                          x={labelPoint.x}
+                          textAnchor="start"
+                          x={labelPoint.x + 8}
                           y={labelPoint.y}
                         >
                           {CHAIN_EDGE_LABEL}
