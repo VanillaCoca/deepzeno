@@ -11,6 +11,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useIR } from "@/components/ir/ir-provider";
+import { kindPresentation } from "@/components/ir/kind-presentation";
 import type { useIRActions } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,8 +119,11 @@ export function IRDetailPane({
           <>
             <div className="flex items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-3">
               <div className="min-w-0">
-                <p className="font-[var(--ir-font-mono)] text-xs text-[var(--ir-text-secondary)]">
-                  {getNodeTypeLabel(selectedNode)} {selectedNode.id}
+                <p className="text-xs text-[var(--ir-text-secondary)]">
+                  {
+                    kindPresentation(selectedNode.kind, selectedNode.subtype)
+                      .label
+                  }
                 </p>
                 <h3 className="mt-1 break-words text-base font-medium leading-[1.35] text-[var(--ir-text-primary)]">
                   {selectedNode.title}

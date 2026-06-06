@@ -3,13 +3,23 @@
 import { ChevronDownIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { getNodeTypeLabel, IRDetailPane } from "@/components/ir/ir-detail";
+import { IRDetailPane } from "@/components/ir/ir-detail";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
+import { kindPresentation } from "@/components/ir/kind-presentation";
 import { postJSON, useIRActions } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
 import { cn, fetcher } from "@/lib/utils";
+
+function notePreview(node: IRNode): string | null {
+  const raw = node.rationale ?? node.content ?? "";
+  const text = raw.replace(/\s+/g, " ").trim();
+  if (!text || text.startsWith("{") || text.startsWith("[")) {
+    return null;
+  }
+  return text.length > 90 ? `${text.slice(0, 89)}…` : text;
+}
 
 function NodeButton({
   node,
@@ -20,40 +30,41 @@ function NodeButton({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
+  const { label, color } = kindPresentation(node.kind, node.subtype);
+  const preview = notePreview(node);
   return (
     <button
       className={cn(
-        "relative block w-full border-b border-[var(--ir-border-default)] px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--ir-bg-hover)]",
+        "relative block w-full border-b border-[var(--ir-border-default)] px-3.5 py-3 text-left transition-colors hover:bg-[var(--ir-bg-hover)]",
         selected &&
-          "bg-[var(--ir-bg-hover)] before:absolute before:left-0 before:top-0 before:h-full before:w-0.5 before:bg-[var(--ir-accent-blue)]"
+          "bg-[var(--ir-bg-hover)] before:absolute before:top-0 before:left-0 before:h-full before:w-0.5 before:bg-[var(--ir-accent-blue)]"
       )}
       onClick={() => onSelect(node.id)}
       title={node.title}
       type="button"
     >
-      <div className="flex items-center gap-2">
+      <span className="flex items-center gap-1.5 text-[11px] text-[var(--ir-text-tertiary)]">
         <span
-          className={cn(
-            "text-[11px] lowercase tracking-[0.02em] text-[var(--ir-text-tertiary)]",
-            node.kind === "unclassified" && "text-[var(--ir-warning-fg)]"
-          )}
-        >
-          {getNodeTypeLabel(node)}
-        </span>
-        <span className="font-[var(--ir-font-mono)] text-xs text-[var(--ir-text-secondary)]">
-          {node.id}
-        </span>
-      </div>
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+        {label}
+      </span>
       <div
         className={cn(
-          "ir-row-title mt-1 text-sm font-normal leading-[1.4] text-[var(--ir-text-primary)]",
+          "mt-1 text-[13.5px] leading-[1.4] text-[var(--ir-text-primary)]",
           node.status === "superseded" &&
             "text-[var(--ir-text-tertiary)] line-through",
-          node.status === "idea" && "text-[var(--ir-text-tertiary)]"
+          node.status === "idea" && "text-[var(--ir-text-secondary)]"
         )}
       >
         {node.title}
       </div>
+      {preview ? (
+        <div className="mt-1 truncate text-xs text-[var(--ir-text-tertiary)]">
+          {preview}
+        </div>
+      ) : null}
     </button>
   );
 }
