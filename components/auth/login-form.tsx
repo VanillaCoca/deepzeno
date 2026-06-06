@@ -162,7 +162,10 @@ export function LoginForm({
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label className="font-normal text-muted-foreground" htmlFor="password">
+          <Label
+            className="font-normal text-muted-foreground"
+            htmlFor="password"
+          >
             Password
           </Label>
           <Input
@@ -191,8 +194,8 @@ export function LoginForm({
 
       {!configured && (
         <p className="text-[13px] text-muted-foreground">
-          Add `NEXT_PUBLIC_SUPABASE_URL` and
-          `NEXT_PUBLIC_SUPABASE_ANON_KEY` to enable authentication.
+          Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
+          enable authentication.
         </p>
       )}
     </div>

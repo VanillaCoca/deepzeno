@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -7,8 +8,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://chat.vercel.ai"),
-  title: "Zeno V1",
-  description: "Zeno workspace built on top of the AI SDK chatbot template.",
+  title: "ZENO V1",
+  description: "ZENO workspace built on top of the AI SDK chatbot template.",
 };
 
 export const viewport = {
@@ -73,7 +74,17 @@ export default function RootLayout({
           disableTransitionOnChange
           enableSystem
         >
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            <Toaster
+              position="top-center"
+              theme="system"
+              toastOptions={{
+                className:
+                  "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
+              }}
+            />
+            {children}
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -9,6 +9,8 @@ const mockResponses: Record<string, string> = {
   default: "This is a mock response for testing.",
   weather: "The weather in San Francisco is sunny and 72°F.",
   greeting: "Hello! How can I help you today?",
+  inlineMarker:
+    "Understood. This is a scoped decision for review. [[ir:plan:decision|Inline marker test excludes BYOK|The user explicitly converged on this boundary for the test project.]]",
 };
 
 const mockUsage = {
@@ -23,6 +25,10 @@ function getResponseForPrompt(prompt: unknown): string {
 
   if (promptStr.includes("weather") || promptStr.includes("temperature")) {
     return mockResponses.weather;
+  }
+
+  if (promptStr.includes("inline marker test")) {
+    return mockResponses.inlineMarker;
   }
 
   if (

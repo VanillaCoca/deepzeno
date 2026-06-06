@@ -14,73 +14,109 @@
 
 :root {
   /* ---- 双色根 (Craft 双色推导的两个源) -------------------------------- */
-  --z-bg: #FFFFFF;            /* 背景 */
-  --z-fg: #1A1A1A;            /* 前景 (文字基色) */
+  --z-bg: #ffffff; /* 背景 */
+  --z-fg: #1a1a1a; /* 前景 (文字基色) */
 
   /* ---- 由双色推导的中性层次 (节点近透明,靠描边+文字定义) ------------- */
-  --z-node-fill:     color-mix(in srgb, var(--z-fg) 3%,  transparent); /* 节点填充: 近透明 */
-  --z-node-stroke:   color-mix(in srgb, var(--z-fg) 28%, transparent); /* decision 描边 */
-  --z-fact-stroke:   color-mix(in srgb, var(--z-fg) 14%, transparent); /* fact 描边 (更淡) */
-  --z-sup-stroke:    color-mix(in srgb, var(--z-fg) 12%, transparent); /* superseded 描边 */
-  --z-line:          color-mix(in srgb, var(--z-fg) 22%, transparent); /* 连接线 (退到背景) */
-  --z-arrow:         color-mix(in srgb, var(--z-fg) 54%, transparent); /* 箭头头 (前景) */
-  --z-edge-label:    color-mix(in srgb, var(--z-fg) 45%, transparent); /* 边标签 */
-  --z-text:          var(--z-fg);                                      /* 主文字 */
-  --z-text-2:        color-mix(in srgb, var(--z-fg) 60%, transparent); /* 次级文字 (fact 标签) */
-  --z-text-3:        color-mix(in srgb, var(--z-fg) 40%, transparent); /* 三级文字 (起点小字等) */
-  --z-topic-border:  color-mix(in srgb, var(--z-fg) 11%, transparent); /* Topic 容器极淡描边 */
+  --z-node-fill: color-mix(
+    in srgb,
+    var(--z-fg) 3%,
+    transparent
+  ); /* 节点填充: 近透明 */
+  --z-node-stroke: color-mix(
+    in srgb,
+    var(--z-fg) 28%,
+    transparent
+  ); /* decision 描边 */
+  --z-fact-stroke: color-mix(
+    in srgb,
+    var(--z-fg) 14%,
+    transparent
+  ); /* fact 描边 (更淡) */
+  --z-sup-stroke: color-mix(
+    in srgb,
+    var(--z-fg) 12%,
+    transparent
+  ); /* superseded 描边 */
+  --z-line: color-mix(
+    in srgb,
+    var(--z-fg) 22%,
+    transparent
+  ); /* 连接线 (退到背景) */
+  --z-arrow: color-mix(
+    in srgb,
+    var(--z-fg) 54%,
+    transparent
+  ); /* 箭头头 (前景) */
+  --z-edge-label: color-mix(in srgb, var(--z-fg) 45%, transparent); /* 边标签 */
+  --z-text: var(--z-fg); /* 主文字 */
+  --z-text-2: color-mix(
+    in srgb,
+    var(--z-fg) 60%,
+    transparent
+  ); /* 次级文字 (fact 标签) */
+  --z-text-3: color-mix(
+    in srgb,
+    var(--z-fg) 40%,
+    transparent
+  ); /* 三级文字 (起点小字等) */
+  --z-topic-border: color-mix(
+    in srgb,
+    var(--z-fg) 11%,
+    transparent
+  ); /* Topic 容器极淡描边 */
 
   /* ---- 语义色 (只在有语义差异时出现;含义唯一固定,见规则文档 §4.2) ----- */
-  --z-confirmed:      #3B6D11;  /* 绿 = 已确认/已采纳 (绝不表示「推荐」) */
+  --z-confirmed: #3b6d11; /* 绿 = 已确认/已采纳 (绝不表示「推荐」) */
   --z-confirmed-soft: color-mix(in srgb, var(--z-confirmed) 12%, transparent);
-  --z-rejected:       #A32D2D;  /* 红 = 已否决/已推翻/冲突 (绝不表示「避免建议」) */
-  --z-rejected-soft:  color-mix(in srgb, var(--z-rejected) 12%, transparent);
-  --z-attention:      #BA7517;  /* 琥珀 = 待决问题 (open) + 前提状态异常。「需关注/处理」 */
-  --z-attention-text: #854F0B;  /* 琥珀文字 (深一档,保证对比度) */
+  --z-rejected: #a32d2d; /* 红 = 已否决/已推翻/冲突 (绝不表示「避免建议」) */
+  --z-rejected-soft: color-mix(in srgb, var(--z-rejected) 12%, transparent);
+  --z-attention: #ba7517; /* 琥珀 = 待决问题 (open) + 前提状态异常。「需关注/处理」 */
+  --z-attention-text: #854f0b; /* 琥珀文字 (深一档,保证对比度) */
   --z-attention-soft: color-mix(in srgb, var(--z-attention) 12%, transparent);
-  --z-candidate:      #534AB7;  /* 紫 = candidate (sandbox 暂存,未确认) */
-  --z-candidate-text: #3C3489;
+  --z-candidate: #534ab7; /* 紫 = candidate (sandbox 暂存,未确认) */
+  --z-candidate-text: #3c3489;
 
   /* ---- 节点尺寸 ---------------------------------------------------------- */
-  --z-node-radius:        7px;   /* decision 普通矩形圆角 */
-  --z-node-radius-target: 9px;   /* 选中节点圆角 (略大) */
-  --z-node-height:        42px;
-  --z-node-pad-x:         12px;
-  --z-start-radius:       21px;  /* 起点胶囊 = node-height/2,做成全圆角 */
+  --z-node-radius: 7px; /* decision 普通矩形圆角 */
+  --z-node-radius-target: 9px; /* 选中节点圆角 (略大) */
+  --z-node-height: 42px;
+  --z-node-pad-x: 12px;
+  --z-start-radius: 21px; /* 起点胶囊 = node-height/2,做成全圆角 */
 
   /* ---- 描边宽度 ---------------------------------------------------------- */
-  --z-stroke-w:        1px;      /* 默认描边 */
-  --z-stroke-w-fact:   0.75px;   /* fact 更细 */
-  --z-stroke-w-target: 2px;      /* 选中节点加粗 */
+  --z-stroke-w: 1px; /* 默认描边 */
+  --z-stroke-w-fact: 0.75px; /* fact 更细 */
+  --z-stroke-w-target: 2px; /* 选中节点加粗 */
 
   /* ---- 连线 -------------------------------------------------------------- */
-  --z-line-w:         1px;       /* 普通依赖线 (背景化) */
-  --z-line-w-strong:  2px;       /* 链上高亮线 / 关键路径 */
-  --z-line-w-con:     1.3px;     /* 冲突线 */
-  --z-corner-radius:  6px;       /* 正交路由拐角小圆角 (非尖直角) */
-  --z-channel-gap:    15px;      /* 正交路由每条线的垂直轨道间距 */
-  --z-dash:           5 4;       /* 虚线: 弱关系/回退/前提未定 */
-  --z-dash-con:       3 3;       /* 冲突虚线 */
+  --z-line-w: 1px; /* 普通依赖线 (背景化) */
+  --z-line-w-strong: 2px; /* 链上高亮线 / 关键路径 */
+  --z-line-w-con: 1.3px; /* 冲突线 */
+  --z-corner-radius: 6px; /* 正交路由拐角小圆角 (非尖直角) */
+  --z-channel-gap: 15px; /* 正交路由每条线的垂直轨道间距 */
+  --z-dash: 5 4; /* 虚线: 弱关系/回退/前提未定 */
+  --z-dash-con: 3 3; /* 冲突虚线 */
 
   /* ---- 间距 / 布局 ------------------------------------------------------- */
-  --z-row-gap:        40px;      /* 单链层节点纵向间距 */
-  --z-topic-gap:      20px;      /* 全貌层 Topic 之间留白 (靠留白分隔,非边框) */
-  --z-tight-arrow-gap:44px;      /* tight 关系同行横向箭头间距 */
+  --z-row-gap: 40px; /* 单链层节点纵向间距 */
+  --z-topic-gap: 20px; /* 全貌层 Topic 之间留白 (靠留白分隔,非边框) */
+  --z-tight-arrow-gap: 44px; /* tight 关系同行横向箭头间距 */
 
   /* ---- 聚焦三级透明度 (CSS opacity,过渡而非重绘,见规则文档 §4.6) ------- */
-  --z-focus-full:    1;          /* 聚焦节点 */
-  --z-focus-related: 0.55;       /* 直接相关 (一跳) */
-  --z-focus-faint:   0.14;       /* 无关 (淡到极弱但不消失,保住空间记忆) */
-  --z-focus-edge-faint: 0.10;    /* 无关连线 */
-  --z-transition:    0.28s ease; /* 聚焦切换过渡时长 */
+  --z-focus-full: 1; /* 聚焦节点 */
+  --z-focus-related: 0.55; /* 直接相关 (一跳) */
+  --z-focus-faint: 0.14; /* 无关 (淡到极弱但不消失,保住空间记忆) */
+  --z-focus-edge-faint: 0.1; /* 无关连线 */
+  --z-transition: 0.28s ease; /* 聚焦切换过渡时长 */
 
   /* ---- 字号 -------------------------------------------------------------- */
-  --z-font-node:      13px;      /* 节点标题 */
-  --z-font-node-tgt:  13.5px;    /* 选中节点标题 */
-  --z-font-topic:     12px;      /* Topic 标题 */
-  --z-font-edge:      10.5px;    /* 边标签 */
-  --z-font-anchor:    10px;      /* 「从这里开始」「你选中的」小字 */
-  --z-font-badge:     11px;      /* 序号 ①② */
+  --z-font-node: 13px; /* 节点标题 */
+  --z-font-node-tgt: 13.5px; /* 选中节点标题 */
+  --z-font-topic: 12px; /* Topic 标题 */
+  --z-font-edge: 10.5px; /* 边标签 */
+  --z-font-anchor: 10px; /* 「从这里开始」「你选中的」小字 */
+  --z-font-badge: 11px; /* 序号 ①② */
 
   /* ---- 字体 (沿用产品既定;Zeno 视觉语言 = Claude Code 极简,等宽用于短码) - */
   --z-font-sans: var(--font-sans, system-ui, sans-serif);
@@ -92,15 +128,15 @@
    ============================================================================= */
 @media (prefers-color-scheme: dark) {
   :root {
-    --z-bg: #1A1A1A;
-    --z-fg: #ECECEC;
+    --z-bg: #1a1a1a;
+    --z-fg: #ececec;
     /* 语义色在深色下调亮一档,保持可读 */
-    --z-confirmed:      #6FA84A;
-    --z-rejected:       #D96B6B;
-    --z-attention:      #D4942F;
-    --z-attention-text: #E8B968;
-    --z-candidate:      #8B82E0;
-    --z-candidate-text: #A99FF0;
+    --z-confirmed: #6fa84a;
+    --z-rejected: #d96b6b;
+    --z-attention: #d4942f;
+    --z-attention-text: #e8b968;
+    --z-candidate: #8b82e0;
+    --z-candidate-text: #a99ff0;
   }
 }
 
@@ -112,5 +148,11 @@
      .z-confirmed → 除绿色外,建议加 ✓ 标记或 --z-stroke-w-target 加粗描边
    单纯设 color 而不加冗余信号 = 违反 §4.7,视觉验收不通过。
    ============================================================================= */
-.z-rejected  { color: var(--z-rejected);  text-decoration: line-through; }
-.z-confirmed { color: var(--z-confirmed); font-weight: 500; }
+.z-rejected {
+  color: var(--z-rejected);
+  text-decoration: line-through;
+}
+.z-confirmed {
+  color: var(--z-confirmed);
+  font-weight: 500;
+}

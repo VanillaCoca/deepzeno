@@ -4,8 +4,8 @@ import { sheetDocumentHandler } from "@/artifacts/sheet/server";
 import { textDocumentHandler } from "@/artifacts/text/server";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import { saveDocument } from "../db/queries";
-import type { AppSession } from "../supabase/types";
 import type { Document } from "../db/schema";
+import type { AppSession } from "../supabase/types";
 import type { ChatMessage } from "../types";
 
 export type SaveDocumentProps = {

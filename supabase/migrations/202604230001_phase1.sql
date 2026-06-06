@@ -147,6 +147,9 @@ create table if not exists public.candidate_decisions (
   content_hash text,
   resolved_at timestamptz,
   resolved_decision_id uuid references public.decisions(id),
+  source text not null default 'zeno_extraction',
+  source_metadata jsonb,
+  external_evidence text,
   created_at timestamptz not null default now()
 );
 
@@ -159,6 +162,23 @@ create table if not exists public.decision_log (
   metadata jsonb,
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id),
+  project_id uuid not null references public.projects(id) on delete cascade,
+  key_hash text not null unique,
+  key_prefix text not null,
+  label text,
+  last_used_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.candidate_decisions
+  add column if not exists source text not null default 'zeno_extraction',
+  add column if not exists source_metadata jsonb,
+  add column if not exists external_evidence text;
 
 create index if not exists projects_user_id_idx
   on public.projects (user_id);
@@ -181,6 +201,10 @@ create index if not exists candidate_decisions_topic_status_idx
 create index if not exists decision_log_decision_created_idx
   on public.decision_log (decision_id, created_at desc);
 
+create index if not exists api_keys_project_active_idx
+  on public.api_keys (project_id)
+  where revoked_at is null;
+
 drop trigger if exists set_projects_updated_at on public.projects;
 create trigger set_projects_updated_at
 before update on public.projects
@@ -201,6 +225,7 @@ alter table public.decisions enable row level security;
 alter table public.edges enable row level security;
 alter table public.candidate_decisions enable row level security;
 alter table public.decision_log enable row level security;
+alter table public.api_keys enable row level security;
 
 alter table public.projects force row level security;
 alter table public.topics force row level security;
@@ -210,6 +235,7 @@ alter table public.decisions force row level security;
 alter table public.edges force row level security;
 alter table public.candidate_decisions force row level security;
 alter table public.decision_log force row level security;
+alter table public.api_keys force row level security;
 
 drop policy if exists "projects_owner_all" on public.projects;
 create policy "projects_owner_all"
@@ -280,6 +306,14 @@ on public.decision_log
 for insert
 to authenticated
 with check (public.can_access_decision_log(decision_id, candidate_id));
+
+drop policy if exists "api_keys_owner_all" on public.api_keys;
+create policy "api_keys_owner_all"
+on public.api_keys
+for all
+to authenticated
+using (auth.uid() = user_id and public.owns_project(project_id))
+with check (auth.uid() = user_id and public.owns_project(project_id));
 
 revoke update, delete on public.decision_log from anon, authenticated;
 

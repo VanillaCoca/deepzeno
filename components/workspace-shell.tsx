@@ -1,12 +1,15 @@
 "use client";
 
-import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
-import { Toaster } from "sonner";
-import { Button } from "@/components/ui/button";
+import { IRDrawer } from "@/components/ir/ir-drawer";
+import { IRProvider } from "@/components/ir/ir-provider";
+import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+import {
+  WorkspaceHeader,
+  type WorkspaceView,
+} from "@/components/workspace/workspace-header";
 import { ProjectSidebar } from "./project-sidebar";
 
 export function WorkspaceShell({
@@ -18,17 +21,11 @@ export function WorkspaceShell({
   defaultSidebarOpen: boolean;
   userEmail: string | null;
 }) {
-  const [isTruthPanelOpen, setIsTruthPanelOpen] = useLocalStorage(
-    "truth-panel-open",
-    true
+  const [view, setView] = useLocalStorage<WorkspaceView>(
+    "workspace-view",
+    "conversation"
   );
-  const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  const showTruthPanel = hasMounted ? isTruthPanelOpen : true;
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <SidebarProvider
@@ -39,59 +36,29 @@ export function WorkspaceShell({
       <ProjectSidebar userEmail={userEmail} />
 
       <SidebarInset className="min-h-dvh bg-sidebar">
-        <Toaster
-          position="top-center"
-          theme="system"
-          toastOptions={{
-            className:
-              "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
-          }}
-        />
-
-        <div className="relative flex h-dvh min-w-0">
-          <div className="min-w-0 flex-1">{children}</div>
-
-          <aside
-            className={cn(
-              "hidden h-dvh w-[360px] shrink-0 border-l border-border/40 bg-muted/35 xl:flex xl:flex-col",
-              !showTruthPanel && "xl:hidden"
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Truth Panel
-                </p>
-                <p className="text-xs text-muted-foreground">Phase 2</p>
-              </div>
-              <Button
-                onClick={() => setIsTruthPanelOpen(false)}
-                size="icon-sm"
-                variant="ghost"
-              >
-                <PanelRightCloseIcon className="size-4" />
-              </Button>
-            </div>
-
-            <div className="flex flex-1 flex-col gap-4 p-4">
-              <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/70 px-6 text-center text-sm text-muted-foreground">
-                Truth Panel — Phase 2
+        <IRProvider>
+          <div className="relative flex h-dvh min-w-0">
+            <div className="relative flex min-w-0 flex-1 flex-col">
+              <WorkspaceHeader
+                onOpenDrawer={() => setDrawerOpen(true)}
+                onViewChange={setView}
+                view={view}
+              />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {view === "truth-graph" ? <TruthGraphStage /> : children}
               </div>
             </div>
-          </aside>
+          </div>
 
-          {!showTruthPanel && (
-            <Button
-              className="absolute right-4 top-4 z-30 hidden xl:inline-flex"
-              onClick={() => setIsTruthPanelOpen(true)}
-              size="sm"
-              variant="outline"
-            >
-              <PanelRightOpenIcon className="size-4" />
-              Truth Panel
-            </Button>
-          )}
-        </div>
+          <IRDrawer
+            onClose={() => setDrawerOpen(false)}
+            onNavigateToTruth={() => {
+              setView("truth-graph");
+              setDrawerOpen(false);
+            }}
+            open={drawerOpen}
+          />
+        </IRProvider>
       </SidebarInset>
     </SidebarProvider>
   );

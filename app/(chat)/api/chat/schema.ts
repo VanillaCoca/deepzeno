@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const textPartSchema = z.object({
   type: z.enum(["text"]),
-  text: z.string().min(1).max(50000),
+  text: z.string().min(1).max(50_000),
 });
 
 const filePartSchema = z.object({
@@ -32,6 +32,11 @@ export const postRequestBodySchema = z.object({
   messages: z.array(toolApprovalMessageSchema).optional(),
   selectedChatModel: z.string(),
   selectedVisibilityType: z.enum(["public", "private"]),
+  projectId: z.string().uuid(),
+  topicId: z.string().uuid(),
+  conversationId: z.string().uuid(),
+  restoredContextMessageIds: z.array(z.string().uuid()).optional(),
+  injectedDecisionContext: z.string().max(12_000).nullish(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

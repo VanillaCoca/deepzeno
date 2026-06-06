@@ -3,7 +3,7 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
-import { MessageContent, MessageResponse } from "../ai-elements/message";
+import { MessageContent } from "../ai-elements/message";
 import { Shimmer } from "../ai-elements/shimmer";
 import {
   Tool,
@@ -12,6 +12,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "../ai-elements/tool";
+import { IRMessageResponse } from "../ir/ir-message-response";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
@@ -123,7 +124,7 @@ const PurePreviewMessage = ({
           data-testid="message-content"
           key={key}
         >
-          <MessageResponse>{sanitizeText(part.text)}</MessageResponse>
+          <IRMessageResponse>{sanitizeText(part.text)}</IRMessageResponse>
         </MessageContent>
       );
     }
@@ -335,8 +336,10 @@ const PurePreviewMessage = ({
         "group/message w-full",
         !isAssistant && "animate-[fade-up_0.25s_cubic-bezier(0.22,1,0.36,1)]"
       )}
+      data-message-id={message.id}
       data-role={message.role}
       data-testid={`message-${message.role}`}
+      id={`message-${message.id}`}
     >
       <div
         className={cn(

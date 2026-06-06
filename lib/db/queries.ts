@@ -17,6 +17,8 @@ import postgres from "postgres";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
+import { isSupabaseAdminConfigured } from "../supabase/admin";
+import * as supabaseQueries from "./queries.supabase";
 import {
   type Chat,
   chat,
@@ -28,8 +30,6 @@ import {
   suggestion,
   vote,
 } from "./schema";
-import * as supabaseQueries from "./queries.supabase";
-import { isSupabaseAdminConfigured } from "../supabase/admin";
 
 const directClient = process.env.POSTGRES_URL
   ? postgres(process.env.POSTGRES_URL)

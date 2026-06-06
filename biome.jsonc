@@ -12,9 +12,11 @@
   "files": {
     "includes": [
       "**/*",
+      "!.vs",
       "!components/ai-elements",
       "!components/elements",
       "!components/ui",
+      "!docs/ZenoTruthGraph.reference.jsx",
       "!lib/utils.ts",
       "!hooks/use-mobile.ts"
     ]
@@ -49,6 +51,7 @@
       },
       "performance": {
         "noBarrelFile": "off",
+        "noNamespaceImport": "off",
         "useTopLevelRegex": "off"
       }
     }

@@ -7,11 +7,9 @@ import {
   ArrowUpIcon,
   BrainIcon,
   EyeIcon,
-  LockIcon,
+  PlusIcon,
   WrenchIcon,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -23,7 +21,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import {
   ModelSelector,
@@ -36,6 +34,14 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { IRBulkImportDialog } from "@/components/ir/ir-bulk-import-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
 import {
   type ChatModel,
   chatModels,
@@ -52,14 +58,13 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { Button } from "../ui/button";
-import { PaperclipIcon, StopIcon } from "./icons";
+import { StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
 import {
   type SlashCommand,
   SlashCommandMenu,
   slashCommands,
 } from "./slash-commands";
-import { SuggestedActions } from "./suggested-actions";
 import type { VisibilityType } from "./visibility-selector";
 
 function setCookie(name: string, value: string) {
@@ -68,26 +73,49 @@ function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}`;
 }
 
+function getSlashInvocation(value: string) {
+  const slashIndex = value.lastIndexOf("/");
+
+  if (slashIndex === -1) {
+    return null;
+  }
+
+  const before = value.slice(0, slashIndex);
+  const query = value.slice(slashIndex + 1);
+
+  if (slashIndex > 0 && !/\s$/.test(before)) {
+    return null;
+  }
+
+  if (/\s/.test(query)) {
+    return null;
+  }
+
+  return {
+    contentBeforeSlash: before.trimEnd(),
+    query,
+    slashIndex,
+  };
+}
+
 function PureMultimodalInput({
-  chatId,
   input,
   setInput,
   status,
   stop,
   attachments,
   setAttachments,
-  messages,
+  messages: _messages,
   setMessages,
   sendMessage,
   className,
-  selectedVisibilityType,
+  selectedVisibilityType: _selectedVisibilityType,
   selectedModelId,
   onModelChange,
   editingMessage,
   onCancelEdit,
   isLoading,
 }: {
-  chatId: string;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
   status: UseChatHelpers<ChatMessage>["status"];
@@ -107,11 +135,18 @@ function PureMultimodalInput({
   onCancelEdit?: () => void;
   isLoading?: boolean;
 }) {
-  const router = useRouter();
-  const { setTheme, resolvedTheme } = useTheme();
+  const {
+    activeProjectId,
+    activeTopicId,
+    currentConversationId,
+    consumeReferenceDraft,
+    referenceDraft,
+  } = useWorkspace();
+  const { mutate } = useSWRConfig();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
   const hasAutoFocused = useRef(false);
+  const [shouldHighlightInput, setShouldHighlightInput] = useState(false);
   useEffect(() => {
     if (!hasAutoFocused.current && width) {
       const timer = setTimeout(() => {
@@ -139,71 +174,130 @@ function PureMultimodalInput({
     setLocalStorageInput(input);
   }, [input, setLocalStorageInput]);
 
+  useEffect(() => {
+    if (!referenceDraft) {
+      return;
+    }
+
+    const draft = consumeReferenceDraft();
+    if (!draft) {
+      return;
+    }
+
+    const selectionStart = textareaRef.current?.selectionStart ?? input.length;
+    const selectionEnd = textareaRef.current?.selectionEnd ?? input.length;
+
+    setInput((current) => {
+      return `${current.slice(0, selectionStart)}${draft.text}${current.slice(selectionEnd)}`;
+    });
+    setShouldHighlightInput(true);
+    textareaRef.current?.focus();
+
+    requestAnimationFrame(() => {
+      const cursor = selectionStart + draft.text.length;
+      textareaRef.current?.setSelectionRange(cursor, cursor);
+    });
+
+    const timeout = window.setTimeout(() => {
+      setShouldHighlightInput(false);
+    }, 1000);
+
+    return () => window.clearTimeout(timeout);
+  }, [consumeReferenceDraft, input.length, referenceDraft, setInput]);
+
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = event.target.value;
     setInput(val);
 
-    if (val.startsWith("/") && !val.includes(" ")) {
+    const slashInvocation = getSlashInvocation(val);
+
+    if (slashInvocation) {
       setSlashOpen(true);
-      setSlashQuery(val.slice(1));
+      setSlashQuery(slashInvocation.query);
       setSlashIndex(0);
     } else {
       setSlashOpen(false);
     }
   };
 
-  const handleSlashSelect = (cmd: SlashCommand) => {
-    setSlashOpen(false);
+  function isSlashCommandDisabled(cmd: SlashCommand) {
+    const slashInvocation = getSlashInvocation(input);
+
+    return cmd.action === "save" && !slashInvocation?.contentBeforeSlash.trim();
+  }
+
+  async function saveInputAsCandidate(contentBeforeSlash: string) {
+    const content = contentBeforeSlash.trim();
+
+    if (!content) {
+      return;
+    }
+
+    if (!activeProjectId || !activeTopicId) {
+      toast.error("Workspace is still loading. Please try again in a moment.");
+      return;
+    }
+
+    const firstLine = content.split(/\r?\n/)[0] ?? "";
+    const title = firstLine.slice(0, 60).trim() || content.slice(0, 60).trim();
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir/draft`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: activeProjectId,
+          topic_id: activeTopicId,
+          kind: "unclassified",
+          title,
+          content,
+          source_layer: "manual",
+          created_by: "user",
+          initial_status: "pending",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.cause ?? payload?.message ?? "Save failed.");
+    }
+
     setInput("");
+    setLocalStorageInput("");
+    await mutate(
+      (key) => typeof key === "string" && key.includes("/api/ir?"),
+      undefined,
+      { revalidate: true }
+    );
+    toast.success("Saved as candidate.");
+  }
+
+  const handleSlashSelect = async (cmd: SlashCommand) => {
+    const slashInvocation = getSlashInvocation(input);
+
+    if (isSlashCommandDisabled(cmd)) {
+      return;
+    }
+
+    setSlashOpen(false);
+
     switch (cmd.action) {
-      case "new":
-        router.push("/");
-        break;
-      case "clear":
-        setMessages(() => []);
-        break;
-      case "rename":
-        toast("Rename is available from the sidebar chat menu.");
+      case "save":
+        try {
+          await saveInputAsCandidate(slashInvocation?.contentBeforeSlash ?? "");
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Save failed.");
+        }
         break;
       case "model": {
+        setInput(slashInvocation?.contentBeforeSlash ?? "");
         const modelBtn = document.querySelector<HTMLButtonElement>(
           "[data-testid='model-selector']"
         );
         modelBtn?.click();
         break;
       }
-      case "theme":
-        setTheme(resolvedTheme === "dark" ? "light" : "dark");
-        break;
-      case "delete":
-        toast("Delete this chat?", {
-          action: {
-            label: "Delete",
-            onClick: () => {
-              fetch(
-                `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/chat?id=${chatId}`,
-                { method: "DELETE" }
-              );
-              router.push("/");
-              toast.success("Chat deleted");
-            },
-          },
-        });
-        break;
-      case "purge":
-        toast("Delete all chats?", {
-          action: {
-            label: "Delete all",
-            onClick: () => {
-              fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/history`, {
-                method: "DELETE",
-              });
-              router.push("/");
-              toast.success("All chats deleted");
-            },
-          },
-        });
-        break;
       default:
         break;
     }
@@ -214,12 +308,20 @@ function PureMultimodalInput({
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
+  const isWorkspaceReady = Boolean(
+    activeProjectId && activeTopicId && currentConversationId
+  );
 
   const submitForm = useCallback(() => {
+    if (!isWorkspaceReady || !currentConversationId) {
+      toast.error("Workspace is still loading. Please try again in a moment.");
+      return;
+    }
+
     window.history.pushState(
       {},
       "",
-      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
+      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${currentConversationId}`
     );
 
     sendMessage({
@@ -253,7 +355,8 @@ function PureMultimodalInput({
     setAttachments,
     setLocalStorageInput,
     width,
-    chatId,
+    currentConversationId,
+    isWorkspaceReady,
   ]);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -386,18 +489,6 @@ function PureMultimodalInput({
         </div>
       )}
 
-      {!editingMessage &&
-        !isLoading &&
-        messages.length === 0 &&
-        attachments.length === 0 &&
-        uploadQueue.length === 0 && (
-          <SuggestedActions
-            chatId={chatId}
-            selectedVisibilityType={selectedVisibilityType}
-            sendMessage={sendMessage}
-          />
-        )}
-
       <input
         className="pointer-events-none fixed -top-4 -left-4 size-0.5 opacity-0"
         multiple
@@ -410,6 +501,7 @@ function PureMultimodalInput({
       <div className="relative">
         {slashOpen && (
           <SlashCommandMenu
+            isDisabled={isSlashCommandDisabled}
             onClose={() => setSlashOpen(false)}
             onSelect={handleSlashSelect}
             query={slashQuery}
@@ -419,14 +511,40 @@ function PureMultimodalInput({
       </div>
 
       <PromptInput
-        className="[&>div]:rounded-2xl [&>div]:border [&>div]:border-border/30 [&>div]:bg-card/70 [&>div]:shadow-[var(--shadow-composer)] [&>div]:transition-shadow [&>div]:duration-300 [&>div]:focus-within:shadow-[var(--shadow-composer-focus)]"
+        className={cn(
+          "[&>div]:rounded-2xl [&>div]:border [&>div]:border-border/30 [&>div]:bg-card/70 [&>div]:shadow-[var(--shadow-composer)] [&>div]:transition-shadow [&>div]:duration-300 [&>div]:focus-within:shadow-[var(--shadow-composer-focus)]",
+          shouldHighlightInput &&
+            "[&>div]:ring-2 [&>div]:ring-foreground/15 [&>div]:shadow-[var(--shadow-composer-focus)]"
+        )}
         onSubmit={() => {
-          if (input.startsWith("/")) {
-            const query = input.slice(1).trim();
-            const cmd = slashCommands.find((c) => c.name === query);
-            if (cmd) {
-              handleSlashSelect(cmd);
+          if (isLoading) {
+            toast.error(
+              "Workspace is still loading. Please try again in a moment."
+            );
+            return;
+          }
+          if (!isWorkspaceReady) {
+            toast.error(
+              "Workspace is still loading. Please try again in a moment."
+            );
+            return;
+          }
+          const slashInvocation = getSlashInvocation(input);
+          if (slashInvocation) {
+            const cmd = slashCommands.find(
+              (c) => c.name === slashInvocation.query
+            );
+            if (cmd && !isSlashCommandDisabled(cmd)) {
+              handleSlashSelect(cmd).catch(console.error);
+              return;
             }
+
+            if (cmd) {
+              return;
+            }
+          }
+
+          if (input.trim().startsWith("/")) {
             return;
           }
           if (!input.trim() && attachments.length === 0) {
@@ -475,6 +593,7 @@ function PureMultimodalInput({
         <PromptInputTextarea
           className="min-h-24 text-[13px] leading-relaxed px-4 pt-3.5 pb-1.5 placeholder:text-muted-foreground/35"
           data-testid="multimodal-input"
+          disabled={Boolean(isLoading)}
           onChange={handleInput}
           onKeyDown={(e) => {
             if (slashOpen) {
@@ -493,8 +612,9 @@ function PureMultimodalInput({
               }
               if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
-                if (filtered[slashIndex]) {
-                  handleSlashSelect(filtered[slashIndex]);
+                const command = filtered[slashIndex];
+                if (command && !isSlashCommandDisabled(command)) {
+                  handleSlashSelect(command).catch(console.error);
                 }
                 return;
               }
@@ -510,14 +630,18 @@ function PureMultimodalInput({
             }
           }}
           placeholder={
-            editingMessage ? "Edit your message..." : "Ask anything..."
+            isLoading
+              ? "Loading workspace..."
+              : editingMessage
+                ? "Edit your message..."
+                : "Ask anything..."
           }
           ref={textareaRef}
           value={input}
         />
         <PromptInputFooter className="px-3 pb-3">
           <PromptInputTools>
-            <AttachmentsButton
+            <ComposerPlusMenu
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
@@ -539,7 +663,12 @@ function PureMultimodalInput({
                   : "bg-muted text-muted-foreground/25 cursor-not-allowed"
               )}
               data-testid="send-button"
-              disabled={!input.trim() || uploadQueue.length > 0}
+              disabled={
+                !input.trim() ||
+                uploadQueue.length > 0 ||
+                Boolean(isLoading) ||
+                !isWorkspaceReady
+              }
               status={status}
               variant="secondary"
             >
@@ -584,7 +713,7 @@ export const MultimodalInput = memo(
   }
 );
 
-function PureAttachmentsButton({
+function ComposerPlusMenu({
   fileInputRef,
   status,
   selectedModelId,
@@ -593,6 +722,9 @@ function PureAttachmentsButton({
   status: UseChatHelpers<ChatMessage>["status"];
   selectedModelId: string;
 }) {
+  const { activeProjectId, activeTopic, activeTopicId } = useWorkspace();
+  const [importOpen, setImportOpen] = useState(false);
+
   const { data: modelsResponse } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
@@ -602,29 +734,46 @@ function PureAttachmentsButton({
   const caps: Record<string, ModelCapabilities> | undefined =
     modelsResponse?.capabilities ?? modelsResponse;
   const hasVision = caps?.[selectedModelId]?.vision ?? false;
+  const importDisabled =
+    !activeProjectId || !activeTopicId || Boolean(activeTopic?.archivedAt);
 
   return (
-    <Button
-      className={cn(
-        "h-7 w-7 rounded-lg border border-border/40 p-1 transition-colors",
-        hasVision
-          ? "text-foreground hover:border-border hover:text-foreground"
-          : "text-muted-foreground/30 cursor-not-allowed"
-      )}
-      data-testid="attachments-button"
-      disabled={status !== "ready" || !hasVision}
-      onClick={(event) => {
-        event.preventDefault();
-        fileInputRef.current?.click();
-      }}
-      variant="ghost"
-    >
-      <PaperclipIcon size={14} style={{ width: 14, height: 14 }} />
-    </Button>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            aria-label="Add attachment or import"
+            className="h-7 w-7 rounded-lg border border-border/40 p-1 text-muted-foreground hover:text-foreground"
+            data-testid="composer-plus"
+            variant="ghost"
+          >
+            <PlusIcon className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            disabled={status !== "ready" || !hasVision}
+            onSelect={() => fileInputRef.current?.click()}
+          >
+            Attach file
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={importDisabled}
+            onSelect={() => setImportOpen(true)}
+          >
+            Import decisions
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <IRBulkImportDialog
+        disabled={importDisabled}
+        hideTrigger
+        onOpenChange={setImportOpen}
+        open={importOpen}
+      />
+    </>
   );
 }
-
-const AttachmentsButton = memo(PureAttachmentsButton);
 
 function PureModelSelectorCompact({
   selectedModelId,
@@ -633,7 +782,9 @@ function PureModelSelectorCompact({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
 }) {
+  const { activeTopicId, refreshWorkspace } = useWorkspace();
   const [open, setOpen] = useState(false);
+  const selectingModelRef = useRef<string | null>(null);
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
@@ -649,6 +800,56 @@ function PureModelSelectorCompact({
     activeModels.find((m: ChatModel) => m.id === selectedModelId) ??
     activeModels.find((m: ChatModel) => m.id === DEFAULT_CHAT_MODEL) ??
     activeModels[0];
+
+  const handleModelSelect = useCallback(
+    (modelId: string) => {
+      if (selectingModelRef.current === modelId) {
+        return;
+      }
+
+      selectingModelRef.current = modelId;
+      onModelChange?.(modelId);
+      setCookie("chat-model", modelId);
+      setOpen(false);
+      setTimeout(() => {
+        document
+          .querySelector<HTMLTextAreaElement>(
+            "[data-testid='multimodal-input']"
+          )
+          ?.focus();
+      }, 50);
+
+      const savePreference = activeTopicId
+        ? fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/workspace/topics/${activeTopicId}/default-model`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ modelId }),
+            }
+          ).then((response) => {
+            if (!response.ok) {
+              throw new Error("Model preference was not saved.");
+            }
+            return refreshWorkspace();
+          })
+        : Promise.resolve();
+
+      savePreference
+        .catch((error) => {
+          console.error(error);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Model preference was not saved."
+          );
+        })
+        .finally(() => {
+          selectingModelRef.current = null;
+        });
+    },
+    [activeTopicId, onModelChange, refreshWorkspace]
+  );
 
   if (!selectedModel) {
     return null;
@@ -690,19 +891,10 @@ function PureModelSelectorCompact({
                       model.id === selectedModel.id &&
                         "border-b border-dashed border-foreground/50"
                     )}
+                    data-testid="model-selector-item"
                     key={model.id}
-                    onSelect={() => {
-                      onModelChange?.(model.id);
-                      setCookie("chat-model", model.id);
-                      setOpen(false);
-                      setTimeout(() => {
-                        document
-                          .querySelector<HTMLTextAreaElement>(
-                            "[data-testid='multimodal-input']"
-                          )
-                          ?.focus();
-                      }, 50);
-                    }}
+                    onClick={() => handleModelSelect(model.id)}
+                    onSelect={() => handleModelSelect(model.id)}
                     value={model.id}
                   >
                     <ModelSelectorLogo provider={model.provider} />

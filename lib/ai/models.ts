@@ -58,7 +58,8 @@ const modelCatalog: ChatModelDefinition[] = [
     name: "GPT-4.1",
     provider: "openai",
     providerLabel: "OpenAI",
-    description: "Reliable general-purpose model with strong instruction following.",
+    description:
+      "Reliable general-purpose model with strong instruction following.",
     capabilities: {
       tools: true,
       vision: true,
@@ -75,7 +76,7 @@ const modelCatalog: ChatModelDefinition[] = [
     providerLabel: "DashScope",
     description: "OpenAI-compatible model routed through DashScope.",
     capabilities: {
-      tools: true,
+      tools: false,
       vision: false,
       reasoning: false,
     },
@@ -96,9 +97,10 @@ const modelCatalog: ChatModelDefinition[] = [
     name: "DeepSeek",
     provider: "deepseek",
     providerLabel: "DeepSeek",
-    description: "DeepSeek's OpenAI-compatible chat model for coding and reasoning.",
+    description:
+      "DeepSeek's OpenAI-compatible chat model for coding and reasoning.",
     capabilities: {
-      tools: true,
+      tools: false,
       vision: false,
       reasoning: false,
     },
@@ -115,7 +117,8 @@ const modelCatalog: ChatModelDefinition[] = [
     name: "Kimi K2.5",
     provider: "moonshotai",
     providerLabel: "AI Gateway",
-    description: "Existing AI Gateway path retained for template compatibility.",
+    description:
+      "Existing AI Gateway path retained for template compatibility.",
     capabilities: {
       tools: true,
       vision: false,
@@ -145,7 +148,13 @@ function humanizeModelName(modelId: string) {
 }
 
 export const chatModels: ChatModel[] = modelCatalog.map(
-  ({ envKeys: _envKeys, resolveModelId: _resolveModelId, resolveName, staticModelId: _staticModelId, ...model }) => ({
+  ({
+    envKeys: _envKeys,
+    resolveModelId: _resolveModelId,
+    resolveName,
+    staticModelId: _staticModelId,
+    ...model
+  }) => ({
     ...model,
     name: resolveName ? resolveName({}) : model.name,
   })
@@ -155,14 +164,17 @@ function isConfigured(model: ChatModelDefinition, env: EnvLike) {
   return model.envKeys.every((key) => Boolean(env[key]));
 }
 
-function resolveModel(model: ChatModelDefinition, env: EnvLike): ResolvedChatModel | null {
+function resolveModel(
+  model: ChatModelDefinition,
+  env: EnvLike
+): ResolvedChatModel | null {
   if (!isConfigured(model, env)) {
     return null;
   }
 
   const providerModelId = model.resolveModelId
     ? model.resolveModelId(env)
-    : model.staticModelId ?? null;
+    : (model.staticModelId ?? null);
 
   if (!providerModelId) {
     return null;
@@ -175,7 +187,9 @@ function resolveModel(model: ChatModelDefinition, env: EnvLike): ResolvedChatMod
   };
 }
 
-export function getActiveModels(env: EnvLike = process.env): ResolvedChatModel[] {
+export function getActiveModels(
+  env: EnvLike = process.env
+): ResolvedChatModel[] {
   return modelCatalog
     .map((model) => resolveModel(model, env))
     .filter((model): model is ResolvedChatModel => Boolean(model));

@@ -1,81 +1,136 @@
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
+import {
+  createConfirmedTestUser,
+  deleteTestUser,
+  hasModelProviderE2EConfig,
+  hasSupabaseE2EConfig,
+  signInThroughLoginPage,
+} from "../helpers";
 
-const MODEL_BUTTON_REGEX = /Kimi|Codestral|Mistral|DeepSeek|GPT|Grok/i;
+type ModelsPayload = {
+  models: Array<{
+    id: string;
+    name: string;
+    providerLabel: string;
+  }>;
+  defaultModelId?: string;
+};
 
 test.describe("Model Selector", () => {
+  // biome-ignore lint/suspicious/noSkippedTests: these e2e cases require configured Supabase auth and at least one model provider
+  test.skip(
+    !hasSupabaseE2EConfig || !hasModelProviderE2EConfig,
+    "Supabase auth and at least one model provider must be configured for model selector e2e."
+  );
+
+  let user: Awaited<ReturnType<typeof createConfirmedTestUser>> | null = null;
+
   test.beforeEach(async ({ page }) => {
-    await page.goto("/");
+    user = await createConfirmedTestUser();
+    await signInThroughLoginPage(page, user);
+    await page.goto("/chat/new");
+    await expect(page.getByTestId("multimodal-input")).toBeVisible();
   });
 
-  test("displays a model button", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await expect(modelButton).toBeVisible();
+  test.afterEach(async () => {
+    if (user) {
+      await deleteTestUser(user.id);
+      user = null;
+    }
   });
 
-  test("opens model selector popover on click", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await modelButton.click();
+  async function getModelsPayload(request: APIRequestContext) {
+    const response = await request.get("/api/models");
+    expect(response.ok()).toBeTruthy();
+    return (await response.json()) as ModelsPayload;
+  }
 
+  test("displays the currently selected configured model", async ({
+    page,
+    request,
+  }) => {
+    const payload = await getModelsPayload(request);
+    expect(payload.models.length).toBeGreaterThan(0);
+
+    const expectedModel =
+      payload.models.find((model) => model.id === payload.defaultModelId) ??
+      payload.models[0];
+
+    await expect(page.getByTestId("model-selector")).toContainText(
+      expectedModel.name
+    );
+  });
+
+  test("opens the selector and shows provider groups from the active models API", async ({
+    page,
+    request,
+  }) => {
+    const payload = await getModelsPayload(request);
+    const providerGroups = [
+      ...new Set(payload.models.map((m) => m.providerLabel)),
+    ];
+
+    await page.getByTestId("model-selector").click();
     await expect(page.getByPlaceholder("Search models...")).toBeVisible();
+
+    for (const providerLabel of providerGroups) {
+      await expect(
+        page.getByText(providerLabel, { exact: true })
+      ).toBeVisible();
+    }
   });
 
-  test("can search for models", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await modelButton.click();
+  test("searches configured models without hardcoded template names", async ({
+    page,
+    request,
+  }) => {
+    const payload = await getModelsPayload(request);
+    const targetModel = payload.models[0];
+    const query = targetModel.name.split(/\s+/)[0] ?? targetModel.name;
 
-    const searchInput = page.getByPlaceholder("Search models...");
-    await searchInput.fill("Mistral");
-
-    await expect(page.getByText("Mistral Small").first()).toBeVisible();
-  });
-
-  test("can close model selector by clicking outside", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await modelButton.click();
-
-    await expect(page.getByPlaceholder("Search models...")).toBeVisible();
-
-    await page.keyboard.press("Escape");
-
-    await expect(page.getByPlaceholder("Search models...")).not.toBeVisible();
-  });
-
-  test("shows model provider groups", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await modelButton.click();
-
-    await expect(page.getByText("Mistral")).toBeVisible();
-    await expect(page.getByText("Moonshot")).toBeVisible();
-  });
-
-  test("can select a different model", async ({ page }) => {
-    const modelButton = page
-      .locator("button")
-      .filter({ hasText: MODEL_BUTTON_REGEX })
-      .first();
-    await modelButton.click();
-
-    await page.getByText("Mistral Small").first().click();
-
-    await expect(page.getByPlaceholder("Search models...")).not.toBeVisible();
+    await page.getByTestId("model-selector").click();
+    await page.getByPlaceholder("Search models...").fill(query);
 
     await expect(
-      page.locator("button").filter({ hasText: "Mistral Small" }).first()
+      page.getByText(targetModel.name, { exact: true })
     ).toBeVisible();
+  });
+
+  test("updates the selected model when another active model is chosen", async ({
+    page,
+    request,
+  }) => {
+    const payload = await getModelsPayload(request);
+    expect(payload.models.length).toBeGreaterThan(0);
+
+    if (payload.models.length === 1) {
+      await expect(page.getByTestId("model-selector")).toContainText(
+        payload.models[0].name
+      );
+      await page.reload();
+      await expect(page.getByTestId("model-selector")).toContainText(
+        payload.models[0].name
+      );
+      return;
+    }
+
+    const initialModel =
+      payload.models.find((model) => model.id === payload.defaultModelId) ??
+      payload.models[0];
+    const nextModel =
+      payload.models.find((model) => model.id !== initialModel.id) ??
+      payload.models[0];
+
+    await page.getByTestId("model-selector").click();
+    await page.getByText(nextModel.name, { exact: true }).click();
+
+    await expect(page.getByTestId("model-selector")).toContainText(
+      nextModel.name
+    );
+
+    await page.reload();
+    await expect(page.getByTestId("model-selector")).toContainText(
+      nextModel.name
+    );
   });
 });

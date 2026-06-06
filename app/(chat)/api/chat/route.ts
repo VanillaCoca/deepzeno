@@ -13,6 +13,7 @@ import { createResumableStreamContext } from "resumable-stream";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
 import {
+  getActiveModels,
   getCapabilities,
   resolveChatModelSelection,
 } from "@/lib/ai/models";
@@ -24,6 +25,7 @@ import { getWeather } from "@/lib/ai/tools/get-weather";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
+import { assembleContext } from "@/lib/context-assembly";
 import {
   createStreamId,
   deleteChatById,
@@ -37,13 +39,39 @@ import {
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
+import { persistInlineIRMarkersForMessages } from "@/lib/ir/inline-markers";
+import { runIRSweep } from "@/lib/ir/sweep";
+import { buildDecisionContextBlock } from "@/lib/prompting";
 import { checkIpRateLimit } from "@/lib/ratelimit";
 import type { ChatMessage } from "@/lib/types";
-import { convertToUIMessages, generateUUID } from "@/lib/utils";
+import {
+  convertToUIMessages,
+  generateUUID,
+  getTextFromMessage,
+} from "@/lib/utils";
+import { saveWorkspaceMessages } from "@/lib/workspace/queries";
+import {
+  ensureWorkspaceSelectionForUser,
+  getWorkspaceMessagesForSandbox,
+} from "@/lib/workspace/service";
+import type { WorkspaceMessageRecord } from "@/lib/workspace/types";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
 export const maxDuration = 60;
+
+function getMessageModelOverride(text: string) {
+  const match = text.match(/(?:^|\s)@([^\s]+)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const mentionedModel = match[1];
+  const activeModels = getActiveModels(process.env);
+
+  return activeModels.find((model) => model.id === mentionedModel)?.id ?? null;
+}
 
 function getStreamContext() {
   try {
@@ -60,37 +88,56 @@ export async function POST(request: Request) {
 
   try {
     const json = await request.json();
-    requestBody = postRequestBodySchema.parse(json);
-  } catch (_) {
+    const parsed = postRequestBodySchema.safeParse(json);
+
+    if (!parsed.success) {
+      console.error("Chat API request body validation failed", {
+        issues: parsed.error.issues,
+        body: json,
+      });
+      return new ChatbotError("bad_request:api").toResponse();
+    }
+
+    requestBody = parsed.data;
+  } catch (error) {
+    console.error("Chat API request body parsing failed", error);
     return new ChatbotError("bad_request:api").toResponse();
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType } =
-      requestBody;
+    const {
+      message,
+      messages,
+      selectedChatModel,
+      selectedVisibilityType,
+      projectId,
+      topicId,
+      conversationId,
+      restoredContextMessageIds = [],
+      injectedDecisionContext,
+    } = requestBody;
+    console.info("Chat API request received", {
+      selectedChatModel,
+      projectId,
+      topicId,
+      conversationId,
+      messageRole: message?.role ?? null,
+      messagesCount: messages?.length ?? 0,
+      restoredContextMessageIdsCount: restoredContextMessageIds.length,
+      hasInjectedDecisionContext: Boolean(injectedDecisionContext?.trim()),
+    });
+    const id = conversationId;
 
     const [, session] = await Promise.all([
-      checkBotId().catch(() => null),
+      process.env.NODE_ENV === "production"
+        ? checkBotId().catch(() => null)
+        : Promise.resolve(null),
       auth(),
     ]);
 
     if (!session?.user) {
       return new ChatbotError("unauthorized:chat").toResponse();
     }
-
-    const resolvedModel = resolveChatModelSelection(
-      selectedChatModel,
-      process.env
-    );
-
-    if (!resolvedModel) {
-      return new ChatbotError(
-        "bad_request:api",
-        "No AI model is configured. Add Anthropic, OpenAI, DeepSeek, DashScope, or AI Gateway environment variables."
-      ).toResponse();
-    }
-
-    const chatModel = resolvedModel.id;
 
     await checkIpRateLimit(ipAddress(request));
 
@@ -106,6 +153,39 @@ export async function POST(request: Request) {
     }
 
     const isToolApprovalFlow = Boolean(messages);
+
+    const workspaceSelection = await ensureWorkspaceSelectionForUser({
+      userId: session.user.id,
+      projectId,
+      topicId,
+      conversationId,
+    });
+    console.info("Chat API workspace selection ready", {
+      projectId: workspaceSelection.project.id,
+      topicId: workspaceSelection.topic.id,
+      conversationId: workspaceSelection.conversation.id,
+      isGeneralTopic: workspaceSelection.topic.isGeneral,
+      topicDefaultModelId: workspaceSelection.topic.defaultModelId,
+    });
+    const messageModelOverride = message?.role
+      ? getMessageModelOverride(getTextFromMessage(message))
+      : null;
+    const resolvedModel = resolveChatModelSelection(
+      messageModelOverride ??
+        workspaceSelection.topic.defaultModelId ??
+        selectedChatModel,
+      process.env
+    );
+
+    if (!resolvedModel) {
+      return new ChatbotError(
+        "bad_request:api",
+        "No AI model is configured. Add Anthropic, OpenAI, DeepSeek, DashScope, or AI Gateway environment variables."
+      ).toResponse();
+    }
+
+    const chatModel = resolvedModel.id;
+    const shouldInjectWorkspaceContext = !workspaceSelection.topic.isGeneral;
 
     const chat = await getChatById({ id });
     let messagesFromDb: DBMessage[] = [];
@@ -186,6 +266,18 @@ export async function POST(request: Request) {
           },
         ],
       });
+
+      await saveWorkspaceMessages([
+        {
+          id: message.id,
+          conversationId,
+          topicId,
+          projectId,
+          role: "user",
+          content: getTextFromMessage(message),
+          createdAt: new Date().toISOString(),
+        },
+      ]);
     }
 
     const modelCapabilities = getCapabilities(process.env);
@@ -194,25 +286,47 @@ export async function POST(request: Request) {
     const supportsTools = capabilities?.tools === true;
 
     const modelMessages = await convertToModelMessages(uiMessages);
+    const [decisionContext, restoredWorkspaceMessages] = await Promise.all([
+      shouldInjectWorkspaceContext
+        ? assembleContext(topicId, projectId)
+        : Promise.resolve(""),
+      restoredContextMessageIds.length > 0
+        ? getWorkspaceMessagesForSandbox({
+            userId: session.user.id,
+            messageIds: restoredContextMessageIds,
+          })
+        : Promise.resolve([]),
+    ]);
+    const restoredContextBlock =
+      restoredWorkspaceMessages.length > 0
+        ? `<restored_context>\n${restoredWorkspaceMessages
+            .map(
+              (currentMessage: WorkspaceMessageRecord) =>
+                `[${currentMessage.id}] ${currentMessage.role.toUpperCase()}: ${currentMessage.content}`
+            )
+            .join("\n")}\n</restored_context>`
+        : "";
+    const injectedDecisionContextBlock = injectedDecisionContext?.trim()
+      ? `<discussion_context>\n${injectedDecisionContext.trim()}\n</discussion_context>`
+      : "";
 
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
           model: getLanguageModel(chatModel),
-          system: systemPrompt({ requestHints, supportsTools }),
+          system: [
+            systemPrompt({ requestHints, supportsTools }),
+            shouldInjectWorkspaceContext
+              ? buildDecisionContextBlock(decisionContext)
+              : "",
+            restoredContextBlock,
+            injectedDecisionContextBlock,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           messages: modelMessages,
           stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            isReasoningModel && !supportsTools
-              ? []
-              : [
-                  "getWeather",
-                  "createDocument",
-                  "editDocument",
-                  "updateDocument",
-                  "requestSuggestions",
-                ],
           providerOptions: {
             ...(resolvedModel.gatewayOrder && {
               gateway: { order: resolvedModel.gatewayOrder },
@@ -221,25 +335,38 @@ export async function POST(request: Request) {
               openai: { reasoningEffort: resolvedModel.reasoningEffort },
             }),
           },
-          tools: {
-            getWeather,
-            createDocument: createDocument({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-            editDocument: editDocument({ dataStream, session }),
-            updateDocument: updateDocument({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-              modelId: chatModel,
-            }),
-          },
+          ...(supportsTools
+            ? {
+                experimental_activeTools: [
+                  "getWeather",
+                  "createDocument",
+                  "editDocument",
+                  "updateDocument",
+                  "requestSuggestions",
+                ],
+                tools: {
+                  getWeather,
+                  createDocument: createDocument({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                  editDocument: editDocument({ dataStream, session }),
+                  updateDocument: updateDocument({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                  requestSuggestions: requestSuggestions({
+                    session,
+                    dataStream,
+                    modelId: chatModel,
+                  }),
+                },
+              }
+            : {
+                experimental_activeTools: isReasoningModel ? [] : undefined,
+              }),
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
             functionId: "stream-text",
@@ -258,8 +385,20 @@ export async function POST(request: Request) {
       },
       generateId: generateUUID,
       onFinish: async ({ messages: finishedMessages }) => {
+        const inlineMarkerResult = shouldInjectWorkspaceContext
+          ? await persistInlineIRMarkersForMessages({
+              conversationId,
+              messages: finishedMessages as ChatMessage[],
+              projectId,
+              topicId,
+              userId: session.user.id,
+            })
+          : null;
+        const finalMessages =
+          inlineMarkerResult?.messages ?? (finishedMessages as ChatMessage[]);
+
         if (isToolApprovalFlow) {
-          for (const finishedMsg of finishedMessages) {
+          for (const finishedMsg of finalMessages) {
             const existingMsg = uiMessages.find((m) => m.id === finishedMsg.id);
             if (existingMsg) {
               await updateMessage({
@@ -281,9 +420,9 @@ export async function POST(request: Request) {
               });
             }
           }
-        } else if (finishedMessages.length > 0) {
+        } else if (finalMessages.length > 0) {
           await saveMessages({
-            messages: finishedMessages.map((currentMessage) => ({
+            messages: finalMessages.map((currentMessage) => ({
               id: currentMessage.id,
               role: currentMessage.role,
               parts: currentMessage.parts,
@@ -293,8 +432,49 @@ export async function POST(request: Request) {
             })),
           });
         }
+
+        const workspaceMessages = finalMessages
+          .filter(
+            (currentMessage) =>
+              currentMessage.role === "assistant" ||
+              currentMessage.role === "user" ||
+              currentMessage.role === "system"
+          )
+          .map((currentMessage) => ({
+            id: currentMessage.id,
+            conversationId,
+            topicId,
+            projectId,
+            role: currentMessage.role as "user" | "assistant" | "system",
+            content: getTextFromMessage(currentMessage),
+            model: currentMessage.role === "assistant" ? chatModel : null,
+            createdAt:
+              currentMessage.metadata?.createdAt ?? new Date().toISOString(),
+          }));
+
+        await saveWorkspaceMessages(workspaceMessages);
+
+        const assistantMessages = finalMessages.filter(
+          (currentMessage) =>
+            currentMessage.role === "assistant" &&
+            getTextFromMessage(currentMessage).trim().length > 0
+        );
+
+        const lastAssistantMessage = assistantMessages.at(-1);
+
+        if (shouldInjectWorkspaceContext && lastAssistantMessage) {
+          after(() => {
+            runIRSweep({
+              sweepId: generateId(),
+              userId: session.user.id,
+              conversationId,
+              projectId,
+            }).catch(console.error);
+          });
+        }
       },
       onError: (error) => {
+        console.error("Chat stream execution error", error);
         if (
           error instanceof Error &&
           error.message?.includes(
@@ -332,6 +512,10 @@ export async function POST(request: Request) {
     const vercelId = request.headers.get("x-vercel-id");
 
     if (error instanceof ChatbotError) {
+      console.error("Chat API handled error:", {
+        code: `${error.type}:${error.surface}`,
+        cause: error.cause,
+      });
       return error.toResponse();
     }
 
