@@ -102,7 +102,7 @@ function getClient(): any {
   return getSupabaseAdminClient() as any;
 }
 
-export async function saveChat({
+export function saveChat({
   id,
   userId,
   title,
@@ -115,7 +115,7 @@ export async function saveChat({
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Chat").insert({
       id,
       createdAt: new Date().toISOString(),
@@ -267,10 +267,10 @@ export async function getChatById({ id }: { id: string }) {
   }
 }
 
-export async function saveMessages({ messages }: { messages: DBMessage[] }) {
+export function saveMessages({ messages }: { messages: DBMessage[] }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Message_v2").insert(
       messages.map((message) => ({
         ...message,
@@ -281,7 +281,7 @@ export async function saveMessages({ messages }: { messages: DBMessage[] }) {
   );
 }
 
-export async function updateMessage({
+export function updateMessage({
   id,
   parts,
 }: {
@@ -290,7 +290,7 @@ export async function updateMessage({
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Message_v2").update({ parts }).eq("id", id),
     "Failed to update message"
   );
@@ -318,7 +318,7 @@ export async function getMessagesByChatId({ id }: { id: string }) {
   }
 }
 
-export async function voteMessage({
+export function voteMessage({
   chatId,
   messageId,
   type,
@@ -329,7 +329,7 @@ export async function voteMessage({
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Vote_v2").upsert(
       {
         chatId,
@@ -525,14 +525,14 @@ export async function deleteDocumentsByIdAfterTimestamp({
   }
 }
 
-export async function saveSuggestions({
+export function saveSuggestions({
   suggestions,
 }: {
   suggestions: Suggestion[];
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Suggestion").insert(
       suggestions.map((suggestion) => ({
         ...suggestion,
@@ -639,7 +639,7 @@ export async function deleteMessagesByChatIdAfterTimestamp({
   }
 }
 
-export async function updateChatVisibilityById({
+export function updateChatVisibilityById({
   chatId,
   visibility,
 }: {
@@ -648,7 +648,7 @@ export async function updateChatVisibilityById({
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Chat").update({ visibility }).eq("id", chatId),
     "Failed to update chat visibility by id"
   );
@@ -718,7 +718,7 @@ export async function getMessageCountByUserId({
   }
 }
 
-export async function createStreamId({
+export function createStreamId({
   streamId,
   chatId,
 }: {
@@ -727,7 +727,7 @@ export async function createStreamId({
 }) {
   const client = getClient();
 
-  return await ensureResult(
+  return ensureResult(
     client.from("Stream").insert({
       id: streamId,
       chatId,

@@ -3,12 +3,12 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { usePathname } from "next/navigation";
 import {
   createContext,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -21,10 +21,12 @@ import { useDataStream } from "@/components/chat/data-stream-provider";
 import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
+import { isIRListKeyForScope } from "@/lib/ir/client-keys";
 import type { ChatMessage } from "@/lib/types";
 import { fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 
@@ -51,29 +53,36 @@ type ActiveChatContextValue = {
 
 const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
 
-function extractChatId(pathname: string): string | null {
-  const match = pathname.match(/\/chat\/([^/]+)/);
-  return match ? match[1] : null;
-}
-
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const { setDataStream } = useDataStream();
   const { mutate } = useSWRConfig();
+  const {
+    activeProjectId,
+    activeTopic,
+    activeTopicId,
+    currentConversationId,
+    isArchivedTopicReadonly,
+    isLoading: isWorkspaceLoading,
+    consumeInjectedDecisionContext,
+  } = useWorkspace();
 
-  const chatIdFromUrl = extractChatId(pathname);
-  const isNewChat = !chatIdFromUrl;
-  const newChatIdRef = useRef(generateUUID());
-  const prevPathnameRef = useRef(pathname);
+  const fallbackChatIdRef = useRef(generateUUID());
+  const chatId = currentConversationId ?? fallbackChatIdRef.current;
+  const isWorkspaceReady = Boolean(
+    activeProjectId &&
+      activeTopicId &&
+      currentConversationId &&
+      !isWorkspaceLoading
+  );
 
-  if (isNewChat && prevPathnameRef.current !== pathname) {
-    newChatIdRef.current = generateUUID();
-  }
-  prevPathnameRef.current = pathname;
-
-  const chatId = chatIdFromUrl ?? newChatIdRef.current;
-
-  const [currentModelId, setCurrentModelId] = useState(DEFAULT_CHAT_MODEL);
+  const [currentModelId, setCurrentModelIdState] = useState(DEFAULT_CHAT_MODEL);
+  const [userDefaultModelId, setUserDefaultModelId] = useState<string | null>(
+    null
+  );
+  const setCurrentModelId = useCallback((id: string) => {
+    setCurrentModelIdState(id);
+    setUserDefaultModelId(id);
+  }, []);
   const currentModelIdRef = useRef(currentModelId);
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
@@ -86,12 +95,41 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       ?.split("=")[1];
 
     if (cookieModel) {
-      setCurrentModelId(decodeURIComponent(cookieModel));
+      const decodedModel = decodeURIComponent(cookieModel);
+      setUserDefaultModelId(decodedModel);
+      setCurrentModelIdState(decodedModel);
     }
   }, []);
 
   const [input, setInput] = useState("");
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
+  const activeTopicIdRef = useRef<string | null>(activeTopicId);
+  const activeTopicIsGeneralRef = useRef(Boolean(activeTopic?.isGeneral));
+
+  useEffect(() => {
+    activeTopicIdRef.current = activeTopicId;
+    activeTopicIsGeneralRef.current = Boolean(activeTopic?.isGeneral);
+  }, [activeTopic?.isGeneral, activeTopicId]);
+
+  function scheduleIRRefresh(projectId: string | null, topicId: string | null) {
+    if (!projectId || !topicId) {
+      return;
+    }
+
+    const delays = [1500, 4000, 7000];
+
+    for (const delay of delays) {
+      window.setTimeout(() => {
+        mutate((key) =>
+          isIRListKeyForScope({
+            key,
+            projectId,
+            topicId,
+          })
+        ).catch(console.error);
+      }, delay);
+    }
+  }
 
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
@@ -99,12 +137,18 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     { revalidateOnFocus: false, dedupingInterval: 3_600_000 }
   );
 
+  const preferredModelSeed =
+    activeTopic?.defaultModelId ??
+    userDefaultModelId ??
+    modelsData?.defaultModelId ??
+    DEFAULT_CHAT_MODEL;
+
   useEffect(() => {
     const availableModelIds = new Set<string>(
       (modelsData?.models ?? []).map((model: { id: string }) => model.id)
     );
     const defaultModelId = modelsData?.defaultModelId as string | undefined;
-    const candidates = [currentModelId, defaultModelId, DEFAULT_CHAT_MODEL];
+    const candidates = [preferredModelSeed, defaultModelId, DEFAULT_CHAT_MODEL];
     let preferredModelId: string | null = null;
 
     for (const candidate of candidates) {
@@ -122,24 +166,25 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       preferredModelId !== currentModelId &&
       (availableModelIds.size === 0 || availableModelIds.has(preferredModelId))
     ) {
-      setCurrentModelId(preferredModelId);
+      setCurrentModelIdState(preferredModelId);
     }
-  }, [currentModelId, modelsData?.defaultModelId, modelsData?.models]);
+  }, [
+    currentModelId,
+    modelsData?.defaultModelId,
+    modelsData?.models,
+    preferredModelSeed,
+  ]);
 
   const { data: chatData, isLoading } = useSWR(
-    isNewChat
-      ? null
-      : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages?chatId=${chatId}`,
+    isWorkspaceReady
+      ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/messages?chatId=${chatId}`
+      : null,
     fetcher,
     { revalidateOnFocus: false }
   );
 
-  const initialMessages: ChatMessage[] = isNewChat
-    ? []
-    : (chatData?.messages ?? []);
-  const visibility: VisibilityType = isNewChat
-    ? "private"
-    : (chatData?.visibility ?? "private");
+  const initialMessages: ChatMessage[] = chatData?.messages ?? [];
+  const visibility: VisibilityType = chatData?.visibility ?? "private";
 
   const {
     messages,
@@ -190,6 +235,12 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
               : { message: lastMessage }),
             selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibility,
+            projectId: activeProjectId,
+            topicId: activeTopicId,
+            conversationId: currentConversationId,
+            injectedDecisionContext: isToolApprovalContinuation
+              ? undefined
+              : consumeInjectedDecisionContext(),
             ...request.body,
           },
         };
@@ -200,6 +251,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     },
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
+
+      if (!activeTopicIsGeneralRef.current) {
+        scheduleIRRefresh(activeProjectId, activeTopicIdRef.current);
+      }
     },
     onError: (error) => {
       if (error.message?.includes("AI Gateway requires a valid credit card")) {
@@ -215,34 +270,38 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  const loadedChatIds = useRef(new Set<string>());
-
-  if (isNewChat && !loadedChatIds.current.has(newChatIdRef.current)) {
-    loadedChatIds.current.add(newChatIdRef.current);
-  }
-
-  useEffect(() => {
-    if (loadedChatIds.current.has(chatId)) {
-      return;
-    }
-    if (chatData?.messages) {
-      loadedChatIds.current.add(chatId);
-      setMessages(chatData.messages);
-    }
-  }, [chatId, chatData?.messages, setMessages]);
-
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
       prevChatIdRef.current = chatId;
-      if (isNewChat) {
-        setMessages([]);
-      }
+      setMessages([]);
     }
-  }, [chatId, isNewChat, setMessages]);
+  }, [chatId, setMessages]);
+
+  useEffect(() => {
+    if (chatData?.messages) {
+      setMessages(chatData.messages);
+    }
+  }, [chatData?.messages, setMessages]);
+
+  useEffect(() => {
+    if (!currentConversationId) {
+      return;
+    }
+
+    const nextPath = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${currentConversationId}`;
+
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, "", nextPath);
+    }
+  }, [currentConversationId]);
 
   const hasAppendedQueryRef = useRef(false);
   useEffect(() => {
+    if (!isWorkspaceReady) {
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const query = params.get("query");
     if (query && !hasAppendedQueryRef.current) {
@@ -257,16 +316,17 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         parts: [{ type: "text", text: query }],
       });
     }
-  }, [sendMessage, chatId]);
+  }, [sendMessage, chatId, isWorkspaceReady]);
 
   useAutoResume({
-    autoResume: !isNewChat && !!chatData,
+    autoResume: isWorkspaceReady && !!chatData,
     initialMessages,
     resumeStream,
     setMessages,
   });
 
-  const isReadonly = isNewChat ? false : (chatData?.isReadonly ?? false);
+  const isReadonly = isArchivedTopicReadonly || (chatData?.isReadonly ?? false);
+  const isChatLoading = isWorkspaceLoading || !isWorkspaceReady || isLoading;
 
   const { data: votes } = useSWR<Vote[]>(
     !isReadonly && messages.length >= 2
@@ -290,7 +350,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       setInput,
       visibilityType: visibility,
       isReadonly,
-      isLoading: !isNewChat && isLoading,
+      isLoading: isChatLoading,
       votes,
       currentModelId,
       setCurrentModelId,
@@ -309,10 +369,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       input,
       visibility,
       isReadonly,
-      isNewChat,
-      isLoading,
+      isChatLoading,
       votes,
       currentModelId,
+      setCurrentModelId,
       showCreditCardAlert,
     ]
   );

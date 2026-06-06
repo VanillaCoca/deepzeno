@@ -15,6 +15,27 @@
       "when": 1710000000001,
       "tag": "0001_zeno_phase1",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778025600000,
+      "tag": "0002_decision_code_anchors",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778025600001,
+      "tag": "0003_project_user_view_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778112000000,
+      "tag": "0004_topic_lifecycle",
+      "breakpoints": true
     }
   ]
 }

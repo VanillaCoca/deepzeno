@@ -4,7 +4,7 @@ import { LoginForm } from "@/components/auth/login-form";
 export default function Page() {
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Welcome to Zeno</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Welcome to ZENO</h1>
       <p className="text-sm text-muted-foreground">
         Sign in to enter the workspace, or create an account to get started.
       </p>

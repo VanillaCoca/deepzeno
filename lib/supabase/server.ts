@@ -25,6 +25,40 @@ function mapUser(user: {
   };
 }
 
+function decodeJwtPayload(token: string | null | undefined) {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "="
+    );
+    const payload = JSON.parse(
+      Buffer.from(padded, "base64").toString("utf8")
+    ) as {
+      sub?: string;
+      email?: string | null;
+      exp?: number;
+    };
+
+    if (payload.exp && payload.exp * 1000 <= Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export async function createClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -61,15 +95,19 @@ export async function auth(): Promise<AppSession | null> {
   }
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const claims = decodeJwtPayload(session?.access_token);
 
-  if (!user) {
+  if (!claims?.sub) {
     return null;
   }
 
   return {
-    user: mapUser(user),
+    user: mapUser({
+      id: claims.sub,
+      email: typeof claims.email === "string" ? claims.email : null,
+    }),
   };
 }
 

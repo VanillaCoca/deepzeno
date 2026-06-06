@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Suspense } from "react";
 import { DataStreamProvider } from "@/components/chat/data-stream-provider";
 import { ChatShell } from "@/components/chat/shell";
+import { WorkspaceProvider } from "@/components/workspace/workspace-provider";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { ActiveChatProvider } from "@/hooks/use-active-chat";
 import { auth } from "../(auth)/auth";
@@ -33,14 +34,16 @@ async function ProtectedWorkspace({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <WorkspaceShell
-      defaultSidebarOpen={isSidebarOpen}
-      userEmail={session.user.email}
-    >
-      <ActiveChatProvider>
-        <ChatShell />
-      </ActiveChatProvider>
-      {children}
-    </WorkspaceShell>
+    <WorkspaceProvider>
+      <WorkspaceShell
+        defaultSidebarOpen={isSidebarOpen}
+        userEmail={session.user.email}
+      >
+        <ActiveChatProvider>
+          <ChatShell />
+        </ActiveChatProvider>
+        {children}
+      </WorkspaceShell>
+    </WorkspaceProvider>
   );
 }

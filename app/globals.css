@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
+@import "../docs/zeno-truth-graph-tokens.css";
 
 @source "../node_modules/streamdown/dist/index.js";
 
@@ -80,6 +81,43 @@
   --sidebar-border: oklch(0.88 0 0);
   --sidebar-ring: oklch(0.5 0 0);
 
+  --ir-bg-app: #ffffff;
+  --ir-bg-panel: #fafafa;
+  --ir-bg-elevated: #f5f5f5;
+  --ir-bg-hover: rgba(0, 0, 0, 0.04);
+
+  --ir-text-primary: #1f1f1f;
+  --ir-text-secondary: #525252;
+  --ir-text-tertiary: #737373;
+
+  --ir-border-default: rgba(0, 0, 0, 0.08);
+  --ir-border-strong: rgba(0, 0, 0, 0.14);
+  --ir-border-focus: rgba(29, 78, 216, 0.5);
+
+  --ir-accent-blue: #1d4ed8;
+  --ir-accent-blue-hover: #2563eb;
+  --ir-accent-blue-bg: rgba(29, 78, 216, 0.12);
+  --ir-accent-blue-border: rgba(29, 78, 216, 0.4);
+
+  --ir-warning-fg: #d97706;
+  --ir-warning-bg: rgba(217, 119, 6, 0.1);
+  --ir-warning-stripe: #d97706;
+
+  /* Truth tree v1.3 — kind pill + edge label colors (light mode) */
+  --ir-glyph-goal: #15803d;
+  --ir-glyph-decision: #1d4ed8;
+  --ir-glyph-constraint: #b45309;
+  --ir-glyph-principle: #0f766e;
+  --ir-glyph-hypothesis: #7c3aed;
+  --ir-glyph-question: #b45309;
+  --ir-glyph-rejection: #b91c1c;
+  --ir-edge-contradicts: #dc2626;
+
+  --ir-right-panel-width: 540px;
+  --ir-right-panel-min-width: 440px;
+
+  --ir-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", monospace;
+
   --shadow-card: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
   --shadow-float:
     0 8px 24px -6px oklch(0 0 0 / 0.1), 0 2px 8px -2px oklch(0 0 0 / 0.04);
@@ -126,6 +164,28 @@
   --sidebar-accent-foreground: oklch(0.94 0 0);
   --sidebar-border: oklch(0.25 0 0);
   --sidebar-ring: oklch(0.45 0 0);
+
+  --ir-bg-app: #1a1a1a;
+  --ir-bg-panel: #1e1e1e;
+  --ir-bg-elevated: #242424;
+  --ir-bg-hover: rgba(255, 255, 255, 0.04);
+
+  --ir-text-primary: #e5e5e5;
+  --ir-text-secondary: #a0a0a0;
+  --ir-text-tertiary: #707070;
+
+  --ir-border-default: rgba(255, 255, 255, 0.08);
+  --ir-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Truth tree v1.3 — kind pill + edge label colors (dark mode, brighter) */
+  --ir-glyph-goal: #4ade80;
+  --ir-glyph-decision: #60a5fa;
+  --ir-glyph-constraint: #fbbf24;
+  --ir-glyph-principle: #2dd4bf;
+  --ir-glyph-hypothesis: #c084fc;
+  --ir-glyph-question: #facc15;
+  --ir-glyph-rejection: #f87171;
+  --ir-edge-contradicts: #ef4444;
 
   --shadow-card:
     inset 0 1px 0 oklch(1 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.2),
@@ -198,6 +258,15 @@ textarea:focus-visible {
 
 @utility text-balance {
   text-wrap: balance;
+}
+
+@utility ir-row-title {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 @utility -webkit-overflow-scrolling-touch {

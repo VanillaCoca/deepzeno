@@ -16,6 +16,16 @@ jobs:
   test:
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    # Run inside Microsoft's official Playwright image, which ships the browsers
+    # preinstalled. The runtime `playwright install` download from
+    # cdn.playwright.dev measured ~48 KB/s (~165 MiB => ~60 min), so the job hit
+    # its timeout before tests ran, no matter how high the cap. This image is
+    # pulled from mcr.microsoft.com (fast on Azure runners) with the browser
+    # baked in, so there is no cdn.playwright.dev download at all.
+    # IMPORTANT: keep this tag in sync with @playwright/test in package.json
+    # (currently 1.51.0); a version mismatch makes Playwright re-download.
+    container:
+      image: mcr.microsoft.com/playwright:v1.51.0-jammy
     env:
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
@@ -59,17 +69,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v3
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install Playwright Browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-
+      # Browsers are preinstalled in the container image (see `container:` above),
+      # so no `playwright install` download step is needed.
       - name: Run Playwright tests
         run: pnpm test
 
