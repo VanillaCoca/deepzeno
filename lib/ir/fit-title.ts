@@ -1,12 +1,13 @@
 const PADDING_PX = 16; // node inner horizontal padding (both sides)
+const CJK_RE = /[　-鿿＀-￯]/;
 
 function glyphWidth(ch: string, fontPx: number) {
   // CJK / full-width 　-鿿＀-￯ — 1em; latin/space/punct — 0.55em
-  return /[　-鿿＀-￯]/.test(ch) ? fontPx : fontPx * 0.55;
+  return CJK_RE.test(ch) ? fontPx : fontPx * 0.55;
 }
 
 function isCjk(ch: string) {
-  return /[　-鿿＀-￯]/.test(ch);
+  return CJK_RE.test(ch);
 }
 
 function widthOf(text: string, fontPx: number) {

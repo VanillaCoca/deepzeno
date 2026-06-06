@@ -75,7 +75,10 @@ describe("wrapTitleToLines", () => {
       168,
       13
     );
-    assert.ok(lines.length >= 2, `expected multiple lines, got ${lines.length}`);
+    assert.ok(
+      lines.length >= 2,
+      `expected multiple lines, got ${lines.length}`
+    );
     for (const line of lines) {
       assert.ok(!line.includes("…"), `line should not be truncated: ${line}`);
       assert.ok(
@@ -101,8 +104,13 @@ describe("wrapTitleToLines", () => {
   });
 
   it("reserves first-line width for prefix/suffix", () => {
-    const withReserve = wrapTitleToLines("一二三四五六七八九十", 168, 13, "✓  ?");
+    const withReserve = wrapTitleToLines(
+      "一二三四五六七八九十",
+      168,
+      13,
+      "✓  ?"
+    );
     const without = wrapTitleToLines("一二三四五六七八九十", 168, 13);
-    assert.ok(withReserve[0].length <= without[0].length);
+    assert.ok(measureWidth(withReserve[0], 13) <= measureWidth(without[0], 13));
   });
 });
