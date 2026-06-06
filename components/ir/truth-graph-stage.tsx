@@ -83,11 +83,24 @@ export function TruthGraphStage() {
     [topics]
   );
 
+  // The Detail+Action panel now floats over the overview as an inset card. We
+  // hand it to TruthGraph as a slot so the graph positions it next to the Chain
+  // card; both vanish together when nothing is selected (blank-canvas click).
+  const detailSlot = selectedNode ? (
+    <IRDetailPane
+      actions={actions}
+      detail={detail}
+      selectedNode={selectedNode}
+      subNodes={childrenByParent.get(selectedNode.id) ?? []}
+    />
+  ) : null;
+
   return (
     <div className="flex h-full flex-col pt-16" data-testid="truth-graph-stage">
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <TruthGraph
           childrenByParent={childrenByParent}
+          detailSlot={detailSlot}
           edges={graphEdges}
           mode={graphMode}
           nodes={graphNodes}
@@ -97,16 +110,6 @@ export function TruthGraphStage() {
           topics={truthGraphTopics}
         />
       </div>
-      {selectedNode ? (
-        <div className="h-2/5 min-h-[220px] overflow-auto border-t border-[var(--ir-border-default)]">
-          <IRDetailPane
-            actions={actions}
-            detail={detail}
-            selectedNode={selectedNode}
-            subNodes={childrenByParent.get(selectedNode.id) ?? []}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

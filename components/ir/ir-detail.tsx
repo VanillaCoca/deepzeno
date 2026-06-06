@@ -59,13 +59,13 @@ function ActionItem({
   tone: ActionRole;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <p className="min-w-0 flex-1 text-xs leading-snug text-[var(--ir-text-secondary)]">
+    <div className="flex items-center justify-between gap-3 py-2">
+      <p className="min-w-0 flex-1 text-[11px] leading-snug text-[var(--ir-text-tertiary)]">
         {caption}
       </p>
       <Button
         className={cn(
-          "min-w-[116px] justify-center",
+          "min-w-[104px] justify-center",
           primary && "font-semibold"
         )}
         disabled={disabled}
@@ -148,18 +148,23 @@ function ActionColumn({
   const needsDiscussion = confirmability?.status === "needs_discussion";
 
   if (selectedNode.status === "active") {
+    // Confirmed truths only re-open for re-evaluation. No explanatory intro —
+    // just a single button pinned to the bottom-right of the panel.
     return (
       <>
         <div className="min-h-0 flex-1 overflow-y-auto" />
-        <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
-          <ActionItem
-            caption="Bring this truth back to the sandbox to re-evaluate."
-            icon={ArrowDownToLineIcon}
-            label="Re-evaluate"
+        <div className="flex shrink-0 justify-end">
+          <Button
+            className="min-w-[104px] justify-center font-semibold"
             onClick={() => actions.handleBringToSandbox(selectedNode)}
-            primary
-            tone="sandbox"
-          />
+            size="sm"
+            variant="secondary"
+          >
+            <ArrowDownToLineIcon
+              className={cn("size-4", ACTION_ICON.sandbox)}
+            />
+            Re-evaluate
+          </Button>
         </div>
       </>
     );
@@ -368,21 +373,24 @@ export function IRDetailPane({
       className="flex h-full min-h-[220px] flex-col overflow-hidden"
       data-testid="ir-detail-pane"
     >
-      {/* Shared header — spans the full width so the actions belong to the node */}
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-3">
+      {/* Shared header — a compact meta row (kind · status) over the title, so
+          the actions below clearly belong to this node. */}
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-2.5">
         <div className="min-w-0">
-          <p className="text-xs text-[var(--ir-text-secondary)]">
-            {kindPresentation(selectedNode.kind, selectedNode.subtype).label}
-          </p>
-          <h3 className="mt-1 break-words text-base font-medium leading-[1.35] text-[var(--ir-text-primary)]">
-            {selectedNode.title}
-          </h3>
-          <div className="mt-1">
+          <div className="flex items-center gap-1.5 text-[11px] text-[var(--ir-text-tertiary)]">
+            <span>
+              {kindPresentation(selectedNode.kind, selectedNode.subtype).label}
+            </span>
+            <span aria-hidden="true">·</span>
             <StatusBadge status={selectedNode.status} />
           </div>
+          <h3 className="mt-0.5 break-words text-sm font-semibold leading-snug text-[var(--ir-text-primary)]">
+            {selectedNode.title}
+          </h3>
         </div>
         <Button
-          className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
+          aria-label="Close detail"
+          className="shrink-0 rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
           onClick={() => selectNode(null)}
           size="icon-sm"
           variant="outline"
@@ -392,8 +400,8 @@ export function IRDetailPane({
       </div>
 
       {/* Body: Detail (left) + Actions (right) */}
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden">
-        <div className="min-h-0 overflow-y-auto border-r border-[var(--ir-border-default)] px-3 py-3">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(190px,34%,260px)] overflow-hidden">
+        <div className="min-h-0 overflow-y-auto border-r border-[var(--ir-border-default)] px-3 py-2.5">
           <section className="space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
               Rationale
@@ -405,7 +413,7 @@ export function IRDetailPane({
             </p>
           </section>
 
-          <section className="mt-4 space-y-2">
+          <section className="mt-3 space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
               Relations
             </p>
@@ -419,7 +427,7 @@ export function IRDetailPane({
           </section>
 
           {subNodes.length > 0 ? (
-            <section className="mt-4 space-y-2">
+            <section className="mt-3 space-y-2">
               <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
                 Sub-nodes
               </p>
@@ -443,7 +451,7 @@ export function IRDetailPane({
             </section>
           ) : null}
 
-          <section className="mt-4 space-y-2">
+          <section className="mt-3 space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
               Source
             </p>
@@ -454,7 +462,7 @@ export function IRDetailPane({
           </section>
 
           {selectedNode.kind === "unclassified" ? (
-            <section className="mt-4 space-y-2 border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] p-2">
+            <section className="mt-3 space-y-2 border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] p-2">
               <p className="text-xs font-semibold text-[var(--ir-warning-fg)]">
                 Kind: not yet classified
               </p>
@@ -491,7 +499,7 @@ export function IRDetailPane({
         </div>
 
         {/* Actions — supplemental content scrolls; the buttons stay pinned */}
-        <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-3">
+        <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-2.5">
           <ActionColumn
             actions={actions}
             detail={detail}

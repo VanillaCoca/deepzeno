@@ -1,6 +1,13 @@
 "use client";
 
-import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { fitNodeTitle } from "@/lib/ir/fit-title";
 import type { IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel, truncateIRTitle } from "@/lib/ir/types";
@@ -64,11 +71,16 @@ export type TruthGraphMode = "truth" | "all";
 
 export type TruthGraphProps = {
   childrenByParent: Map<string, IRNode[]>;
+  // Floating Detail+Action card, rendered by the stage and positioned by the
+  // graph as an inset card over the overview canvas (only when a node is
+  // selected). Keeping the slot here lets the graph own both floating cards'
+  // geometry so they stay aligned.
+  detailSlot?: ReactNode;
   edges: TruthGraphFlowEdge["edge"][];
   mode: TruthGraphMode;
   nodes: IRNode[];
   onModeChange: (mode: TruthGraphMode) => void;
-  onSelect: (nodeId: string) => void;
+  onSelect: (nodeId: string | null) => void;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
 };
@@ -572,6 +584,7 @@ function CompactTruthList({
 
 export function TruthGraph({
   childrenByParent,
+  detailSlot,
   edges,
   mode,
   nodes,
@@ -694,14 +707,21 @@ export function TruthGraph({
   const chainHeight = Math.max(1, layout.chain?.height ?? 260);
 
   return (
-    // Shared column split (minmax(0,1fr) | clamp(300px,30%,380px)) — keep in
-    // sync with IRDetailPane's grid so Overview|Chain lines up with
-    // Details|Actions into one continuous "+". h-full stretches the grid to
-    // fill the stage so both panel backgrounds reach the bottom edge.
+    // The overview is the base canvas. The Chain and Detail+Action panels float
+    // ABOVE it as inset rounded cards (only when a node is selected), so the
+    // canvas stays free for browsing every IR when nothing is selected.
+    // `--z-chain-w` drives both the Chain card width and the Detail card's right
+    // edge, so the Detail card width matches the remaining overview region.
     <div
-      className="grid h-full min-h-[360px] grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden border-y border-[var(--z-topic-border)]"
+      className="relative h-full min-h-[360px] border-y border-[var(--z-topic-border)]"
       data-testid="truth-graph"
-      style={{ color: "var(--z-text)", fontFamily: "var(--z-font-sans)" }}
+      style={
+        {
+          color: "var(--z-text)",
+          fontFamily: "var(--z-font-sans)",
+          "--z-chain-w": "clamp(280px, 30%, 360px)",
+        } as CSSProperties
+      }
     >
       <div className="sr-only" data-testid="truth-graph-text-index">
         {nodes.map((node) => (
@@ -709,7 +729,7 @@ export function TruthGraph({
         ))}
       </div>
       <section
-        className="min-w-0 border-r border-[var(--z-topic-border)] bg-[var(--z-bg)]"
+        className="flex h-full flex-col bg-[var(--z-bg)]"
         data-testid="truth-graph-overview"
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
@@ -758,7 +778,7 @@ export function TruthGraph({
             ))}
           </div>
         ) : null}
-        <div className="flex justify-center overflow-auto">
+        <div className="flex flex-1 justify-center overflow-auto">
           <div className="min-w-max">
             <svg
               aria-label="Truth graph overview grouped by topic"
@@ -780,6 +800,28 @@ export function TruthGraph({
                   <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                 </marker>
               </defs>
+              {/* Full-canvas hit layer: clicking blank space (between/around
+                  topics) clears the selection so both floating cards vanish and
+                  the user can browse every IR. Nodes sit in sibling <g>s above,
+                  so a node click never reaches this layer. */}
+              {/* biome-ignore lint/a11y/useSemanticElements: background deselect target must live in SVG coordinate space. */}
+              <rect
+                aria-label="Clear selection"
+                fill="transparent"
+                height={overviewHeight}
+                onClick={() => onSelect(null)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(null);
+                  }
+                }}
+                role="button"
+                tabIndex={-1}
+                width={overviewWidth}
+                x={0}
+                y={0}
+              />
               {model.topicGroups.map((group) => {
                 const box = overviewBoxes.get(topicLayoutId(group.topic.id));
 
@@ -864,21 +906,16 @@ export function TruthGraph({
         </div>
       </section>
 
-      <section
-        className={cn(
-          "min-w-0 bg-[var(--z-node-fill)]",
-          !activeSelectedNodeId && "flex flex-col"
-        )}
-        data-testid="truth-graph-chain"
-      >
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
-          <span>Chain</span>
-          {activeSelectedNodeId ? (
+      {activeSelectedNodeId && layout.chain ? (
+        <aside
+          className="absolute top-[var(--z-card-inset)] right-[var(--z-card-inset)] bottom-[var(--z-card-inset)] z-10 flex w-[var(--z-chain-w)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          data-testid="truth-graph-chain"
+        >
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
+            <span>Chain</span>
             <span className="normal-case">{chainNodeIds.size} steps</span>
-          ) : null}
-        </div>
-        {activeSelectedNodeId && layout.chain ? (
-          <div className="flex justify-center overflow-auto">
+          </div>
+          <div className="flex flex-1 justify-center overflow-auto">
             <div className="min-w-max">
               <svg
                 aria-label="Selected truth upstream chain"
@@ -955,12 +992,24 @@ export function TruthGraph({
               </svg>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-1 items-center px-4 py-8 text-sm leading-[1.6] text-[var(--z-text-3)]">
-            Select a node in the overview to see the upstream reasoning chain.
-          </div>
-        )}
-      </section>
+        </aside>
+      ) : null}
+
+      {activeSelectedNodeId && detailSlot ? (
+        // Detail+Action floating card. Pinned to the bottom-left and stretched
+        // to the chain card's left edge, so its width matches the remaining
+        // overview region (rules: details width == overview area width).
+        <div
+          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex max-h-[58%] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          data-testid="truth-graph-detail-card"
+          style={{
+            right:
+              "calc(var(--z-chain-w) + var(--z-card-inset) + var(--z-card-inset))",
+          }}
+        >
+          {detailSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

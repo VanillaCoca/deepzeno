@@ -97,6 +97,13 @@
   --z-rejected-fill-sel: color-mix(in srgb, var(--z-rejected) 24%, transparent);
   --z-node-fill-sel: color-mix(in srgb, var(--z-fg) 11%, transparent);
 
+  /* ---- 悬浮卡片 (Detail+Action / Chain 悬浮在画布上的圆角卡片) ---------- */
+  --z-card-bg: var(--z-bg); /* 卡片背景 (浅色下与画布同白,靠阴影分层) */
+  --z-card-radius: 14px; /* 卡片圆角 (轻灵感) */
+  --z-card-inset: 12px; /* 卡片与画布边缘的留白 */
+  --z-card-shadow: 0 1px 2px rgba(26, 26, 26, 0.05),
+    0 10px 30px rgba(26, 26, 26, 0.12); /* 柔和悬浮阴影 */
+
   /* ---- 节点尺寸 ---------------------------------------------------------- */
   --z-node-radius: 7px; /* decision 普通矩形圆角 */
   --z-node-radius-target: 9px; /* 选中节点圆角 (略大) */
@@ -160,6 +167,10 @@
   --z-attention-text: #e8b968;
   --z-candidate: #8b82e0;
   --z-candidate-text: #a99ff0;
+  /* floating cards lift off the dark canvas with a slightly elevated surface */
+  --z-card-bg: #232323;
+  --z-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
 /* =============================================================================
