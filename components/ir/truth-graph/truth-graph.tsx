@@ -72,8 +72,8 @@ export type TruthGraphProps = {
   topics: TruthGraphTopic[];
 };
 
-const OVERVIEW_DIMS = { width: 200, baseFont: 13, padY: 10, padX: 13 };
-const CHAIN_DIMS = { width: 242, baseFont: 13, padY: 12, padX: 14 };
+const OVERVIEW_DIMS = { width: 236, baseFont: 13, padY: 10, padX: 14 };
+const CHAIN_DIMS = { width: 276, baseFont: 13, padY: 12, padX: 16 };
 const NODE_MAX_LINES = 4;
 const NODE_SHRINK_FONT = 11.5;
 
@@ -203,14 +203,39 @@ function absoluteBoxes(root: ElkChild) {
   return boxes;
 }
 
-function elbowPath(from: NodeBox, to: NodeBox) {
-  const x1 = from.x + from.width / 2;
-  const y1 = from.y + from.height;
-  const x2 = to.x + to.width / 2;
-  const y2 = to.y;
-  const middleY = y1 + Math.max(18, (y2 - y1) / 2);
+// Orthogonal connector that always stops a gap OUTSIDE the target node and
+// enters from whichever side faces the source, so the line never crosses the
+// node body / text (overview nodes can sit in any relative position).
+const EDGE_GAP = 7;
 
-  return `M${x1} ${y1} L${x1} ${middleY} L${x2} ${middleY} L${x2} ${y2}`;
+function elbowPath(from: NodeBox, to: NodeBox) {
+  const fromCx = from.x + from.width / 2;
+  const fromCy = from.y + from.height / 2;
+  const toCx = to.x + to.width / 2;
+  const toCy = to.y + to.height / 2;
+
+  // Target clearly below the source → connect bottom → top.
+  if (to.y >= from.y + from.height) {
+    const y1 = from.y + from.height;
+    const y2 = to.y - EDGE_GAP;
+    const midY = y1 + Math.max(14, (y2 - y1) / 2);
+    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
+  }
+
+  // Target clearly above the source → connect top → bottom.
+  if (to.y + to.height <= from.y) {
+    const y1 = from.y;
+    const y2 = to.y + to.height + EDGE_GAP;
+    const midY = y1 + Math.min(-14, (y2 - y1) / 2);
+    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
+  }
+
+  // Otherwise they overlap vertically (side by side) → connect side → side.
+  const goRight = toCx >= fromCx;
+  const x1 = goRight ? from.x + from.width : from.x;
+  const x2 = goRight ? to.x - EDGE_GAP : to.x + to.width + EDGE_GAP;
+  const midX = (x1 + x2) / 2;
+  return `M${x1} ${fromCy} L${midX} ${fromCy} L${midX} ${toCy} L${x2} ${toCy}`;
 }
 
 function chainEdgePath(edge: ElkEdge) {
