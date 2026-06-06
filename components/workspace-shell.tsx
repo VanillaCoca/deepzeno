@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { IRDrawer } from "@/components/ir/ir-drawer";
 import { IRProvider } from "@/components/ir/ir-provider";
@@ -27,6 +27,15 @@ export function WorkspaceShell({
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // The server can't read localStorage, so it always renders the default view.
+  // Reflect the stored view only AFTER mount, so the first client render matches
+  // the server HTML and React doesn't report a hydration mismatch.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+  const activeView: WorkspaceView = hydrated ? view : "conversation";
+
   return (
     <SidebarProvider
       className="bg-sidebar"
@@ -42,10 +51,10 @@ export function WorkspaceShell({
               <WorkspaceHeader
                 onOpenDrawer={() => setDrawerOpen(true)}
                 onViewChange={setView}
-                view={view}
+                view={activeView}
               />
               <div className="min-h-0 flex-1 overflow-hidden">
-                {view === "truth-graph" ? <TruthGraphStage /> : children}
+                {activeView === "truth-graph" ? <TruthGraphStage /> : children}
               </div>
             </div>
           </div>
