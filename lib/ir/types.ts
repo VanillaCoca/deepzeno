@@ -64,6 +64,10 @@ export type IRNode = {
   supersededBy: string | null;
   createdBy: IRCreatedBy;
   confirmedBy: string | null;
+  confirmability?: {
+    status: "ready" | "needs_discussion";
+    reason: string | null;
+  } | null;
 };
 
 export type IREdge = {
