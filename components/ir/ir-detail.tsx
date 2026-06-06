@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
-import { cn } from "@/lib/utils";
 
 // Shared action-button look, aligned with the floating WorkspaceHeader island:
 // full-width, rounded, hairline border, ghost fill, hover tint.
@@ -96,96 +95,109 @@ function ActionColumn({
 
   if (selectedNode.status === "active") {
     return (
-      <Button
-        className={ACTION_SANDBOX}
-        onClick={() => actions.handleBringToSandbox(selectedNode)}
-        size="sm"
-        variant="outline"
-      >
-        <ArrowDownToLineIcon className="size-4" />
-        带回 sandbox 重新评估
-      </Button>
+      <>
+        <div className="min-h-0 flex-1 overflow-y-auto" />
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button
+            className={ACTION_SANDBOX}
+            onClick={() => actions.handleBringToSandbox(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <ArrowDownToLineIcon className="size-4" />
+            带回 sandbox 重新评估
+          </Button>
+        </div>
+      </>
     );
   }
 
   if (selectedNode.status === "pending") {
     return (
       <>
-        {detail?.edges.some(
-          (edge) =>
-            edge.fromNode === selectedNode.id && edge.relation === "supersedes"
-        ) ? (
-          <div className="flex items-start gap-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
-            <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-            确认这条会把一条旧 IR 节点标记为已取代。
-          </div>
-        ) : null}
-        {selectedNode.topicId ? null : (
-          <div className="flex flex-col gap-2 rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
-            <p className="text-xs font-medium text-[var(--ir-text-primary)]">
-              确认前先归入一个判断
-            </p>
-            <select
-              className="h-8 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-2 text-xs"
-              onChange={(event) =>
-                actions.setAssignmentTopicId(event.target.value)
-              }
-              value={actions.assignmentTopicId}
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          {detail?.edges.some(
+            (edge) =>
+              edge.fromNode === selectedNode.id &&
+              edge.relation === "supersedes"
+          ) ? (
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
+              <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+              确认这条会把一条旧 IR 节点标记为已取代。
+            </div>
+          ) : null}
+          {selectedNode.topicId ? null : (
+            <div className="flex flex-col gap-2 rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
+              <p className="text-xs font-medium text-[var(--ir-text-primary)]">
+                确认前先归入一个判断
+              </p>
+              <select
+                className="h-8 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-2 text-xs"
+                onChange={(event) =>
+                  actions.setAssignmentTopicId(event.target.value)
+                }
+                value={actions.assignmentTopicId}
+              >
+                {actions.assignableTopics.map((topic) => (
+                  <option key={topic.id} value={topic.id}>
+                    {topic.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                className="h-8 rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] text-xs focus-visible:ring-0"
+                onChange={(event) =>
+                  actions.setNewTopicLabel(event.target.value)
+                }
+                placeholder="或新建一个判断"
+                value={actions.newTopicLabel}
+              />
+            </div>
+          )}
+          {needsDiscussion ? (
+            <div className="rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2 text-xs text-[var(--ir-text-secondary)]">
+              这其实是个待解决问题，继续讨论。
+              {confirmability?.reason ? (
+                <span className="mt-1 block text-[var(--ir-text-tertiary)]">
+                  {confirmability.reason}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col gap-2">
+          {needsDiscussion ? null : (
+            <Button
+              className={ACTION_CONFIRM}
+              disabled={actions.isMutating}
+              onClick={() => actions.handleConfirmNode(selectedNode)}
+              size="sm"
+              variant="outline"
             >
-              {actions.assignableTopics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {topic.label}
-                </option>
-              ))}
-            </select>
-            <Input
-              className="h-8 rounded border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] text-xs focus-visible:ring-0"
-              onChange={(event) => actions.setNewTopicLabel(event.target.value)}
-              placeholder="或新建一个判断"
-              value={actions.newTopicLabel}
-            />
-          </div>
-        )}
-        {needsDiscussion ? (
-          <div className="rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2 text-xs text-[var(--ir-text-secondary)]">
-            这其实是个待解决问题，继续讨论。
-            {confirmability?.reason ? (
-              <span className="mt-1 block text-[var(--ir-text-tertiary)]">
-                {confirmability.reason}
-              </span>
-            ) : null}
-          </div>
-        ) : (
+              <CheckIcon className="size-4" />
+              确认为 truth
+            </Button>
+          )}
           <Button
-            className={ACTION_CONFIRM}
-            disabled={actions.isMutating}
-            onClick={() => actions.handleConfirmNode(selectedNode)}
+            className={ACTION_SANDBOX}
+            onClick={() => actions.handleBringToSandbox(selectedNode)}
             size="sm"
             variant="outline"
           >
-            <CheckIcon className="size-4" />
-            确认为 truth
+            <ArrowDownToLineIcon className="size-4" />
+            继续讨论
           </Button>
-        )}
-        <Button
-          className={ACTION_SANDBOX}
-          onClick={() => actions.handleBringToSandbox(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <ArrowDownToLineIcon className="size-4" />
-          继续讨论
-        </Button>
-        <Button
-          className={cn(ACTION_BTN, "mt-auto")}
-          disabled={actions.isMutating}
-          onClick={() => actions.handleDismissCandidate(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <XIcon className="size-4" />
-          否决
-        </Button>
+          <Button
+            className={ACTION_BTN}
+            disabled={actions.isMutating}
+            onClick={() => actions.handleDismissCandidate(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <XIcon className="size-4" />
+            否决
+          </Button>
+        </div>
       </>
     );
   }
@@ -193,35 +205,38 @@ function ActionColumn({
   if (selectedNode.status === "idea") {
     return (
       <>
-        <Button
-          className={ACTION_PROMOTE}
-          disabled={actions.isMutating}
-          onClick={() => actions.handlePromoteIdea(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <CircleDotIcon className="size-4" />
-          升为候选
-        </Button>
-        <Button
-          className={ACTION_SANDBOX}
-          onClick={() => actions.handleBringToSandbox(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <ArrowDownToLineIcon className="size-4" />
-          带回 sandbox 讨论
-        </Button>
-        <Button
-          className={cn(ACTION_BTN, "mt-auto")}
-          disabled={actions.isMutating}
-          onClick={() => actions.handleDismissIdea(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <XIcon className="size-4" />
-          忽略
-        </Button>
+        <div className="min-h-0 flex-1 overflow-y-auto" />
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button
+            className={ACTION_PROMOTE}
+            disabled={actions.isMutating}
+            onClick={() => actions.handlePromoteIdea(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <CircleDotIcon className="size-4" />
+            升为候选
+          </Button>
+          <Button
+            className={ACTION_SANDBOX}
+            onClick={() => actions.handleBringToSandbox(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <ArrowDownToLineIcon className="size-4" />
+            带回 sandbox 讨论
+          </Button>
+          <Button
+            className={ACTION_BTN}
+            disabled={actions.isMutating}
+            onClick={() => actions.handleDismissIdea(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <XIcon className="size-4" />
+            忽略
+          </Button>
+        </div>
       </>
     );
   }
@@ -229,37 +244,45 @@ function ActionColumn({
   if (selectedNode.status === "superseded") {
     return (
       <>
-        <Button className={ACTION_BTN} disabled size="sm" variant="outline">
-          恢复
-        </Button>
-        <Button
-          className={ACTION_SANDBOX}
-          onClick={() => actions.handleBringToSandbox(selectedNode)}
-          size="sm"
-          variant="outline"
-        >
-          <ArrowDownToLineIcon className="size-4" />
-          带回 sandbox 讨论
-        </Button>
+        <div className="min-h-0 flex-1 overflow-y-auto" />
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button className={ACTION_BTN} disabled size="sm" variant="outline">
+            恢复
+          </Button>
+          <Button
+            className={ACTION_SANDBOX}
+            onClick={() => actions.handleBringToSandbox(selectedNode)}
+            size="sm"
+            variant="outline"
+          >
+            <ArrowDownToLineIcon className="size-4" />
+            带回 sandbox 讨论
+          </Button>
+        </div>
       </>
     );
   }
 
   // Fallback (e.g. dismissed): a single reference action.
   return (
-    <Button
-      className={ACTION_BTN}
-      onClick={() =>
-        queueReferenceDraft(
-          `> [${selectedNode.id}] ${selectedNode.title}\n> ${selectedNode.content ?? selectedNode.title}`
-        )
-      }
-      size="sm"
-      variant="outline"
-    >
-      <ArrowDownToLineIcon className="size-4" />
-      带回 sandbox 讨论
-    </Button>
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto" />
+      <div className="flex shrink-0 flex-col gap-2">
+        <Button
+          className={ACTION_BTN}
+          onClick={() =>
+            queueReferenceDraft(
+              `> [${selectedNode.id}] ${selectedNode.title}\n> ${selectedNode.content ?? selectedNode.title}`
+            )
+          }
+          size="sm"
+          variant="outline"
+        >
+          <ArrowDownToLineIcon className="size-4" />
+          带回 sandbox 讨论
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -394,8 +417,9 @@ export function IRDetailPane({
         </div>
       </div>
 
-      {/* RIGHT: fixed action column (~38%) */}
-      <aside className="flex basis-[38%] flex-col gap-2 overflow-y-auto px-3 py-3">
+      {/* RIGHT: action column (~38%). Supplemental content scrolls; the button
+          footer stays pinned and visible (requirement: buttons don't scroll). */}
+      <aside className="flex min-w-0 basis-[38%] flex-col gap-2 overflow-hidden px-3 py-3">
         <ActionColumn
           actions={actions}
           detail={detail}
