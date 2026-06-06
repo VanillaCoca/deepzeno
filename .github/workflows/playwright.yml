@@ -14,7 +14,13 @@ on:
 
 jobs:
   test:
-    timeout-minutes: 30
+    # The first cold run downloads the Playwright browser (~165 MiB). When the
+    # CDN is slow this alone can take ~30 min, so a 30 min cap cancelled the job
+    # mid-download, meaning actions/cache never saved the browser, so every run
+    # re-downloaded and timed out again (a self-perpetuating failure). A higher
+    # cap lets one run finish and populate the cache; later runs hit the cache
+    # (see "Cache Playwright browsers" below) and skip the download entirely.
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     env:
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
