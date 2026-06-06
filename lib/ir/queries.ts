@@ -124,6 +124,7 @@ function mapIRNode(row: DatabaseRecord): IRNode {
     id: String(row.id),
     projectId: String(row.project_id),
     topicId: toNullableString(row.topic_id),
+    parentId: toNullableString(row.parent_id),
     kind: String(row.kind) as IRKind,
     subtype: toNullableString(row.subtype) as IRPlanSubtype | null,
     status: String(row.status) as IRStatus,

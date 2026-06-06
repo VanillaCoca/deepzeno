@@ -7,11 +7,16 @@ import {
 } from "../../components/ir/truth-graph/data.ts";
 import type { IREdge, IRNode, IRRelation } from "../../lib/ir/types.ts";
 
-function node(id: string, topicId = "topic-a"): IRNode {
+function node(
+  id: string,
+  topicId = "topic-a",
+  parentId: string | null = null
+): IRNode {
   return {
     id,
     projectId: "project-1",
     topicId,
+    parentId,
     kind: "plan",
     subtype: "decision",
     status: "active",

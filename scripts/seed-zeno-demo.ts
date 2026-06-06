@@ -40,6 +40,7 @@ type NodeSpec = {
   title: string;
   rationale: string;
   source: "manual" | "sweep";
+  parentKey?: string;
 };
 
 // active = Truth · pending = Candidate · idea = Idea
@@ -173,6 +174,39 @@ const NODES: NodeSpec[] = [
       "Power users should be able to traverse and act on the graph without a mouse.",
     source: "sweep",
   },
+
+  // ---- Sub-nodes (decompose a parent into smaller IRs) ----
+  {
+    key: "onePaneSharedHeader",
+    kind: "plan",
+    subtype: "task",
+    status: "active",
+    title: "Shared header over detail + actions",
+    rationale:
+      "One header (title + status) spanning the detail and action panes.",
+    source: "manual",
+    parentKey: "onePane",
+  },
+  {
+    key: "toggleStageColors",
+    kind: "plan",
+    subtype: "task",
+    status: "pending",
+    title: "Stage color + dash encoding",
+    rationale: "Truth/candidate/idea each get a distinct fill and glyph.",
+    source: "sweep",
+    parentKey: "scopeToggle",
+  },
+  {
+    key: "toggleDrillIn",
+    kind: "plan",
+    subtype: "task",
+    status: "idea",
+    title: "Drill-in viewport for sub-nodes",
+    rationale: "Focus a parent and show its children with a breadcrumb back.",
+    source: "sweep",
+    parentKey: "scopeToggle",
+  },
 ];
 
 // [fromKey, relation, toKey] — relation points child → parent (depends_on etc.).
@@ -224,16 +258,32 @@ async function main() {
   const userId = owner.id;
   const now = new Date().toISOString();
 
+  // Closure over `db` so we avoid the supabase-js generic-typing friction of
+  // passing the client as a parameter.
+  const insertOne = async (
+    table: string,
+    payload: Record<string, unknown>,
+    label: string
+  ): Promise<{ id: string }> => {
+    const { data, error } = await db
+      .from(table)
+      .insert(payload)
+      .select("id")
+      .single();
+    if (error) {
+      throw new Error(`Failed to insert ${label}: ${error.message}`);
+    }
+    return data as { id: string };
+  };
+
   // 2) Project skeleton: project + general topic + a conversation per topic.
   const project = await insertOne(
-    db,
     "projects",
     { user_id: userId, name: PROJECT_NAME },
     "project"
   );
 
   const generalTopic = await insertOne(
-    db,
     "topics",
     {
       project_id: project.id,
@@ -245,14 +295,12 @@ async function main() {
     "general topic"
   );
   await insertOne(
-    db,
     "conversations",
     { topic_id: generalTopic.id, project_id: project.id },
     "general conversation"
   );
 
   const judgment = await insertOne(
-    db,
     "topics",
     {
       project_id: project.id,
@@ -264,7 +312,6 @@ async function main() {
     "judgment topic"
   );
   await insertOne(
-    db,
     "conversations",
     { topic_id: judgment.id, project_id: project.id },
     "judgment conversation"
@@ -306,6 +353,7 @@ async function main() {
       id,
       project_id: project.id,
       topic_id: judgment.id,
+      parent_id: spec.parentKey ? idByKey[spec.parentKey] : null,
       kind: spec.kind,
       subtype: spec.subtype ?? null,
       status: spec.status,
@@ -350,23 +398,6 @@ async function main() {
       `  ${NODES.length} nodes, ${EDGES.length} edges in judgment "${JUDGMENT_LABEL}".\n` +
       "Open it from the homepage, pick the judgment, then toggle Truth/All."
   );
-}
-
-async function insertOne(
-  db: ReturnType<typeof createClient>,
-  table: string,
-  payload: Record<string, unknown>,
-  label: string
-): Promise<{ id: string }> {
-  const { data, error } = await db
-    .from(table)
-    .insert(payload)
-    .select("id")
-    .single();
-  if (error) {
-    throw new Error(`Failed to insert ${label}: ${error.message}`);
-  }
-  return data as { id: string };
 }
 
 main().catch((error) => {
