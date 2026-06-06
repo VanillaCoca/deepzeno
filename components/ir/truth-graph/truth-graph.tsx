@@ -5,6 +5,8 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -259,6 +261,158 @@ function useFitScale(contentWidth: number, contentHeight: number) {
   }, [contentWidth, contentHeight]);
 
   return { ref, scale };
+}
+
+// Pan + zoom for the overview canvas: drag empty space to pan, wheel / ⌘-wheel
+// (or the on-screen controls) to zoom toward the cursor, with a Fit control.
+const OVERVIEW_ZOOM = { min: 0.25, max: 2.5, step: 1.18 };
+
+type ViewTransform = { x: number; y: number; scale: number };
+
+function clampScale(value: number) {
+  return Math.min(OVERVIEW_ZOOM.max, Math.max(OVERVIEW_ZOOM.min, value));
+}
+
+function useOverviewPanZoom(
+  contentWidth: number,
+  contentHeight: number,
+  onBackgroundClick: () => void
+) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState<ViewTransform>({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
+  const drag = useRef<{
+    ox: number;
+    oy: number;
+    px: number;
+    py: number;
+    moved: boolean;
+  } | null>(null);
+
+  // Scale + center the whole graph so it fits the viewport (capped at 1x).
+  const fitToView = useCallback(() => {
+    const element = containerRef.current;
+    if (!(element && contentWidth && contentHeight)) {
+      return;
+    }
+    const pad = 28;
+    const scale = clampScale(
+      Math.min(
+        1,
+        (element.clientWidth - pad * 2) / contentWidth,
+        (element.clientHeight - pad * 2) / contentHeight
+      )
+    );
+    setTransform({
+      scale,
+      x: (element.clientWidth - contentWidth * scale) / 2,
+      y: (element.clientHeight - contentHeight * scale) / 2,
+    });
+  }, [contentWidth, contentHeight]);
+
+  // Re-fit whenever the content size changes (first layout, Truth/All toggle).
+  useEffect(() => {
+    fitToView();
+  }, [fitToView]);
+
+  const zoomAt = useCallback((factor: number, px: number, py: number) => {
+    setTransform((current) => {
+      const scale = clampScale(current.scale * factor);
+      const ratio = scale / current.scale;
+      return {
+        scale,
+        x: px - (px - current.x) * ratio,
+        y: py - (py - current.y) * ratio,
+      };
+    });
+  }, []);
+
+  // Native non-passive wheel listener so we can preventDefault the page scroll.
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      zoomAt(
+        event.deltaY < 0 ? OVERVIEW_ZOOM.step : 1 / OVERVIEW_ZOOM.step,
+        event.clientX - rect.left,
+        event.clientY - rect.top
+      );
+    };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, [zoomAt]);
+
+  const onPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    drag.current = {
+      ox: transform.x,
+      oy: transform.y,
+      px: event.clientX,
+      py: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
+    const state = drag.current;
+    if (!state) {
+      return;
+    }
+    const dx = event.clientX - state.px;
+    const dy = event.clientY - state.py;
+    if (!state.moved && Math.hypot(dx, dy) > 3) {
+      state.moved = true;
+    }
+    if (state.moved) {
+      setTransform((current) => ({
+        ...current,
+        x: state.ox + dx,
+        y: state.oy + dy,
+      }));
+    }
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
+    const state = drag.current;
+    drag.current = null;
+    // A press with no drag is a plain click on empty canvas → deselect.
+    if (state && !state.moved) {
+      onBackgroundClick();
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const zoomByButton = useCallback(
+    (factor: number) => {
+      const element = containerRef.current;
+      if (!element) {
+        return;
+      }
+      zoomAt(factor, element.clientWidth / 2, element.clientHeight / 2);
+    },
+    [zoomAt]
+  );
+
+  return {
+    containerRef,
+    transform,
+    panHandlers: { onPointerDown, onPointerMove, onPointerUp },
+    fit: fitToView,
+    zoomIn: () => zoomByButton(OVERVIEW_ZOOM.step),
+    zoomOut: () => zoomByButton(1 / OVERVIEW_ZOOM.step),
+  };
 }
 
 // Orthogonal connector that always stops a gap OUTSIDE the target node and
@@ -710,11 +864,19 @@ export function TruthGraph({
     };
   }, [chainNodeIds, model, nodes.length]);
 
-  // Chain content size is needed both for the SVG viewBox and the fit-scale.
-  // The hook runs unconditionally (Rules of Hooks) — before the early returns.
+  // Content sizes feed the SVG viewBoxes, the chain fit-scale, and the overview
+  // pan/zoom. These hooks run unconditionally (Rules of Hooks) — before the
+  // early returns below.
   const chainWidth = Math.max(1, layout.chain?.width ?? 300);
   const chainHeight = Math.max(1, layout.chain?.height ?? 260);
   const chainFit = useFitScale(chainWidth, chainHeight);
+  const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
+  const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
+  const overviewPanZoom = useOverviewPanZoom(
+    overviewWidth,
+    overviewHeight,
+    useCallback(() => onSelect(null), [onSelect])
+  );
 
   if (nodes.length === 0) {
     return (
@@ -741,8 +903,6 @@ export function TruthGraph({
     ? absoluteBoxes(layout.chain)
     : new Map<string, NodeBox>();
   const selectedChainEdges = getEdgesWithinNodeSet(model, chainNodeIds);
-  const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
-  const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
 
   return (
     // The overview is the base canvas. The Chain and Detail panels float ABOVE
@@ -819,42 +979,48 @@ export function TruthGraph({
             ))}
           </div>
         ) : null}
-        {/* Clicking anywhere on the canvas (the whole scroll area, including the
-            empty margins around the graph) clears the selection so both floating
-            cards vanish and every IR can be browsed. Node clicks stop
-            propagation, so selecting a node never bubbles up to here. */}
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas-wide deselect; the close button + node buttons carry the keyboard path. */}
-        {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: canvas-wide deselect; the close button + node buttons carry the keyboard path. */}
+        {/* Pan + zoom canvas: the SVG fills the box; a transparent surface rect
+            captures drag-to-pan and click-to-deselect; the content lives inside a
+            transformed <g>. Node <g>s sit above the surface, so node clicks select
+            and never start a pan. */}
         <div
-          className="flex flex-1 justify-center overflow-auto"
-          onClick={() => onSelect(null)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              onSelect(null);
-            }
-          }}
+          className="relative min-h-0 flex-1 overflow-hidden"
+          ref={overviewPanZoom.containerRef}
+          style={{ touchAction: "none" }}
         >
-          <div className="min-w-max">
-            <svg
-              aria-label="Truth graph overview grouped by topic"
-              height={overviewHeight}
-              role="img"
-              viewBox={`0 0 ${overviewWidth} ${overviewHeight}`}
-              width={overviewWidth}
+          <svg
+            aria-label="Truth graph overview grouped by topic"
+            className="h-full w-full"
+            role="img"
+          >
+            <defs>
+              <marker
+                id="z-truth-overview-arrow"
+                markerHeight="7"
+                markerWidth="7"
+                orient="auto-start-reverse"
+                refX="8"
+                refY="5"
+                viewBox="0 0 10 10"
+              >
+                <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
+              </marker>
+            </defs>
+            {/* drag-to-pan / click-to-deselect surface */}
+            <rect
+              className="cursor-grab active:cursor-grabbing"
+              fill="transparent"
+              height="100%"
+              onPointerDown={overviewPanZoom.panHandlers.onPointerDown}
+              onPointerMove={overviewPanZoom.panHandlers.onPointerMove}
+              onPointerUp={overviewPanZoom.panHandlers.onPointerUp}
+              width="100%"
+              x={0}
+              y={0}
+            />
+            <g
+              transform={`translate(${overviewPanZoom.transform.x} ${overviewPanZoom.transform.y}) scale(${overviewPanZoom.transform.scale})`}
             >
-              <defs>
-                <marker
-                  id="z-truth-overview-arrow"
-                  markerHeight="7"
-                  markerWidth="7"
-                  orient="auto-start-reverse"
-                  refX="8"
-                  refY="5"
-                  viewBox="0 0 10 10"
-                >
-                  <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
-                </marker>
-              </defs>
               {model.topicGroups.map((group) => {
                 const box = overviewBoxes.get(topicLayoutId(group.topic.id));
 
@@ -934,7 +1100,35 @@ export function TruthGraph({
                   />
                 );
               })}
-            </svg>
+            </g>
+          </svg>
+          {/* Zoom controls — top-left stays clear of the Detail (right) and
+              Chain (bottom) cards. */}
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-0.5 rounded-lg border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] p-0.5">
+            <button
+              aria-label="Zoom out"
+              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.zoomOut}
+              type="button"
+            >
+              −
+            </button>
+            <button
+              aria-label="Fit to view"
+              className="flex size-6 items-center justify-center rounded text-[13px] leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.fit}
+              type="button"
+            >
+              ⤢
+            </button>
+            <button
+              aria-label="Zoom in"
+              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.zoomIn}
+              type="button"
+            >
+              +
+            </button>
           </div>
         </div>
       </section>
