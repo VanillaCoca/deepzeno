@@ -3,31 +3,14 @@
 import { useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { IRDrawer } from "@/components/ir/ir-drawer";
-import { IRProvider, useIR } from "@/components/ir/ir-provider";
+import { IRProvider } from "@/components/ir/ir-provider";
 import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
-  WorkspaceToolbar,
+  WorkspaceHeader,
   type WorkspaceView,
-} from "@/components/workspace/workspace-toolbar";
+} from "@/components/workspace/workspace-header";
 import { ProjectSidebar } from "./project-sidebar";
-
-function ViewToolbar(props: {
-  onOpenDrawer: () => void;
-  onViewChange: (view: WorkspaceView) => void;
-  view: WorkspaceView;
-}) {
-  const { candidates, ideas } = useIR();
-  return (
-    <WorkspaceToolbar
-      candidateCount={candidates.length}
-      ideaCount={ideas.length}
-      onOpenDrawer={props.onOpenDrawer}
-      onViewChange={props.onViewChange}
-      view={props.view}
-    />
-  );
-}
 
 export function WorkspaceShell({
   children,
@@ -55,8 +38,8 @@ export function WorkspaceShell({
       <SidebarInset className="min-h-dvh bg-sidebar">
         <IRProvider>
           <div className="relative flex h-dvh min-w-0">
-            <div className="flex min-w-0 flex-1 flex-col">
-              <ViewToolbar
+            <div className="relative flex min-w-0 flex-1 flex-col">
+              <WorkspaceHeader
                 onOpenDrawer={() => setDrawerOpen(true)}
                 onViewChange={setView}
                 view={view}
