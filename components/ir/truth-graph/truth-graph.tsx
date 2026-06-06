@@ -60,9 +60,13 @@ type LayoutState = {
   chain: ElkGraph | null;
 };
 
+export type TruthGraphMode = "truth" | "all";
+
 export type TruthGraphProps = {
   edges: TruthGraphFlowEdge["edge"][];
+  mode: TruthGraphMode;
   nodes: IRNode[];
+  onModeChange: (mode: TruthGraphMode) => void;
   onSelect: (nodeId: string) => void;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
@@ -259,6 +263,7 @@ function nodeTone({
       stroke: "var(--z-rejected)",
       text: "var(--z-rejected)",
       decoration: "line-through",
+      dash: "none",
     };
   }
 
@@ -267,6 +272,29 @@ function nodeTone({
       stroke: "var(--z-attention)",
       text: "var(--z-attention-text)",
       decoration: "none",
+      dash: "none",
+    };
+  }
+
+  // Stage identity for non-truth nodes (only present in "All" mode). Each stage
+  // gets a distinct color AND stroke pattern (dotted idea, dashed candidate) so
+  // the difference survives color-blindness (rules §4.7). Kept ahead of the
+  // selection/chain check so a selected candidate stays a candidate visually.
+  if (node.status === "idea") {
+    return {
+      stroke: "var(--z-text-3)",
+      text: "var(--z-text-3)",
+      decoration: "none",
+      dash: "2 3",
+    };
+  }
+
+  if (node.status === "pending") {
+    return {
+      stroke: "var(--z-candidate)",
+      text: "var(--z-candidate-text)",
+      decoration: "none",
+      dash: "5 4",
     };
   }
 
@@ -275,6 +303,7 @@ function nodeTone({
       stroke: "var(--z-confirmed)",
       text: "var(--z-confirmed)",
       decoration: "none",
+      dash: "none",
     };
   }
 
@@ -283,6 +312,7 @@ function nodeTone({
       stroke: "var(--z-fact-stroke)",
       text: "var(--z-text-2)",
       decoration: "none",
+      dash: "none",
     };
   }
 
@@ -290,6 +320,7 @@ function nodeTone({
     stroke: "var(--z-node-stroke)",
     text: "var(--z-text)",
     decoration: "none",
+    dash: "none",
   };
 }
 
@@ -362,6 +393,7 @@ function GraphNode({
           fill="var(--z-node-fill)"
           points={`${box.x + box.width / 2},${box.y} ${box.x + box.width},${box.y + box.height / 2} ${box.x + box.width / 2},${box.y + box.height} ${box.x},${box.y + box.height / 2}`}
           stroke={tone.stroke}
+          strokeDasharray={tone.dash === "none" ? undefined : tone.dash}
           strokeWidth={strokeWidth}
         />
       ) : (
@@ -376,6 +408,7 @@ function GraphNode({
                 : "var(--z-node-radius)"
           }
           stroke={tone.stroke}
+          strokeDasharray={tone.dash === "none" ? undefined : tone.dash}
           strokeWidth={strokeWidth}
           width={box.width}
           x={box.x}
@@ -470,7 +503,9 @@ function CompactTruthList({
 
 export function TruthGraph({
   edges,
+  mode,
   nodes,
+  onModeChange,
   onSelect,
   selectedNodeId,
   topics,
@@ -587,8 +622,50 @@ export function TruthGraph({
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
           <span>Overview</span>
-          <span className="normal-case">{nodes.length} truths</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-md border border-[var(--z-topic-border)] p-0.5 normal-case">
+              {(["truth", "all"] as const).map((scope) => (
+                <button
+                  aria-label={`Show ${scope === "truth" ? "truths only" : "all stages"}`}
+                  aria-pressed={mode === scope}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                    mode === scope
+                      ? "bg-[var(--z-node-fill)] text-[var(--z-text)]"
+                      : "text-[var(--z-text-3)] hover:text-[var(--z-text-2)]"
+                  )}
+                  key={scope}
+                  onClick={() => onModeChange(scope)}
+                  type="button"
+                >
+                  {scope === "truth" ? "Truth" : "All"}
+                </button>
+              ))}
+            </div>
+            <span className="normal-case">
+              {nodes.length} {mode === "all" ? "nodes" : "truths"}
+            </span>
+          </div>
         </div>
+        {mode === "all" ? (
+          <div className="flex items-center gap-3 px-3 pb-1.5 text-[10px] text-[var(--z-text-3)]">
+            {(
+              [
+                { color: "var(--z-confirmed)", label: "Truth" },
+                { color: "var(--z-candidate)", label: "Candidate" },
+                { color: "var(--z-text-3)", label: "Idea" },
+              ] as const
+            ).map((item) => (
+              <span className="flex items-center gap-1" key={item.label}>
+                <span
+                  className="size-2 rounded-[2px]"
+                  style={{ backgroundColor: item.color }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="flex justify-center overflow-auto">
           <div className="min-w-max">
             <svg
