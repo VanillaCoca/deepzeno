@@ -359,37 +359,39 @@ export function IRDetailPane({
   }
 
   return (
-    // Column split kept in sync with TruthGraph above so Details|Actions aligns
-    // with Overview|Chain into one continuous "+".
+    // 情况4: one card with a shared header (node title + status) over a body
+    // split into Detail (left) + Actions (right). The body split stays in sync
+    // with TruthGraph's columns so the divider still lines up with the graph.
     <div
-      className="grid h-full min-h-[220px] grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden"
+      className="flex h-full min-h-[220px] flex-col overflow-hidden"
       data-testid="ir-detail-pane"
     >
-      {/* LEFT: detail content — aligned under the Overview column */}
-      <div className="flex min-w-0 flex-col overflow-hidden border-r border-[var(--ir-border-default)]">
-        <div className="flex items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-3">
-          <div className="min-w-0">
-            <p className="text-xs text-[var(--ir-text-secondary)]">
-              {kindPresentation(selectedNode.kind, selectedNode.subtype).label}
-            </p>
-            <h3 className="mt-1 break-words text-base font-medium leading-[1.35] text-[var(--ir-text-primary)]">
-              {selectedNode.title}
-            </h3>
-            <div className="mt-1">
-              <StatusBadge status={selectedNode.status} />
-            </div>
+      {/* Shared header — spans the full width so the actions belong to the node */}
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-3">
+        <div className="min-w-0">
+          <p className="text-xs text-[var(--ir-text-secondary)]">
+            {kindPresentation(selectedNode.kind, selectedNode.subtype).label}
+          </p>
+          <h3 className="mt-1 break-words text-base font-medium leading-[1.35] text-[var(--ir-text-primary)]">
+            {selectedNode.title}
+          </h3>
+          <div className="mt-1">
+            <StatusBadge status={selectedNode.status} />
           </div>
-          <Button
-            className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
-            onClick={() => selectNode(null)}
-            size="icon-sm"
-            variant="outline"
-          >
-            <XIcon className="size-4" />
-          </Button>
         </div>
+        <Button
+          className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
+          onClick={() => selectNode(null)}
+          size="icon-sm"
+          variant="outline"
+        >
+          <XIcon className="size-4" />
+        </Button>
+      </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      {/* Body: Detail (left) + Actions (right) */}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden">
+        <div className="min-h-0 overflow-y-auto border-r border-[var(--ir-border-default)] px-3 py-3">
           <section className="space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
               Rationale
@@ -460,17 +462,16 @@ export function IRDetailPane({
             </section>
           ) : null}
         </div>
-      </div>
 
-      {/* RIGHT: action column (~38%). Supplemental content scrolls; the button
-          footer stays pinned and visible (requirement: buttons don't scroll). */}
-      <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-3">
-        <ActionColumn
-          actions={actions}
-          detail={detail}
-          selectedNode={selectedNode}
-        />
-      </aside>
+        {/* Actions — supplemental content scrolls; the buttons stay pinned */}
+        <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-3">
+          <ActionColumn
+            actions={actions}
+            detail={detail}
+            selectedNode={selectedNode}
+          />
+        </aside>
+      </div>
     </div>
   );
 }
