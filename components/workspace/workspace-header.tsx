@@ -94,6 +94,11 @@ export function WorkspaceHeader({
               #
             </span>
             {activeTopic?.label ?? "Workspace"}
+            {activeTopic?.archivedAt ? (
+              <span className="ml-1.5 font-normal text-[var(--ir-text-tertiary)]">
+                · archived
+              </span>
+            ) : null}
           </span>
         </span>
         <span className={ISLAND}>

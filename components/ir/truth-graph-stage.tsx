@@ -31,7 +31,7 @@ export function TruthGraphStage() {
   );
 
   return (
-    <div className="flex h-full flex-col pt-14" data-testid="truth-graph-stage">
+    <div className="flex h-full flex-col pt-16" data-testid="truth-graph-stage">
       <div className="min-h-0 flex-1 overflow-auto">
         <TruthGraph
           edges={truthEdges}
