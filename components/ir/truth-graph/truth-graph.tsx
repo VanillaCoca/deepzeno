@@ -3,6 +3,7 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   useEffect,
   useMemo,
@@ -425,7 +426,12 @@ function GraphNode({
   const leftX = box.x + dims.padX;
   const blockTop = box.y + (titleHeight - lines.length * lineHeight) / 2;
   const anchorLabel = isRoot ? "from here" : null;
-  const selectNode = () => onSelect(node.id);
+  // Stop propagation so selecting a node never bubbles to the canvas-wide
+  // deselect handler on the scroll container.
+  function handleClick(event: MouseEvent<SVGGElement>) {
+    event.stopPropagation();
+    onSelect(node.id);
+  }
 
   function handleKeyDown(event: KeyboardEvent<SVGGElement>) {
     if (event.key !== "Enter" && event.key !== " ") {
@@ -433,7 +439,8 @@ function GraphNode({
     }
 
     event.preventDefault();
-    selectNode();
+    event.stopPropagation();
+    onSelect(node.id);
   }
 
   return (
@@ -442,7 +449,7 @@ function GraphNode({
       aria-label={node.title}
       className="cursor-pointer outline-none [&:focus-visible>:first-child]:[stroke:var(--z-confirmed)] focus-visible:[outline:none]"
       data-testid={`truth-graph-node-${node.id}`}
-      onClick={selectNode}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       opacity={
         !hasSelection || isOnChain || isSelected
@@ -778,7 +785,21 @@ export function TruthGraph({
             ))}
           </div>
         ) : null}
-        <div className="flex flex-1 justify-center overflow-auto">
+        {/* Clicking anywhere on the canvas (the whole scroll area, including the
+            empty margins around the graph) clears the selection so both floating
+            cards vanish and every IR can be browsed. Node clicks stop
+            propagation, so selecting a node never bubbles up to here. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas-wide deselect; the close button + node buttons carry the keyboard path. */}
+        {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: canvas-wide deselect; the close button + node buttons carry the keyboard path. */}
+        <div
+          className="flex flex-1 justify-center overflow-auto"
+          onClick={() => onSelect(null)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              onSelect(null);
+            }
+          }}
+        >
           <div className="min-w-max">
             <svg
               aria-label="Truth graph overview grouped by topic"
@@ -800,28 +821,6 @@ export function TruthGraph({
                   <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                 </marker>
               </defs>
-              {/* Full-canvas hit layer: clicking blank space (between/around
-                  topics) clears the selection so both floating cards vanish and
-                  the user can browse every IR. Nodes sit in sibling <g>s above,
-                  so a node click never reaches this layer. */}
-              {/* biome-ignore lint/a11y/useSemanticElements: background deselect target must live in SVG coordinate space. */}
-              <rect
-                aria-label="Clear selection"
-                fill="transparent"
-                height={overviewHeight}
-                onClick={() => onSelect(null)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelect(null);
-                  }
-                }}
-                role="button"
-                tabIndex={-1}
-                width={overviewWidth}
-                x={0}
-                y={0}
-              />
               {model.topicGroups.map((group) => {
                 const box = overviewBoxes.get(topicLayoutId(group.topic.id));
 
