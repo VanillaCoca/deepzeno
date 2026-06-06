@@ -3,7 +3,13 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { ArrowUpIcon, BrainIcon, EyeIcon, PlusIcon, WrenchIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  BrainIcon,
+  EyeIcon,
+  PlusIcon,
+  WrenchIcon,
+} from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
