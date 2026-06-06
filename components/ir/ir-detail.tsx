@@ -366,16 +366,17 @@ export function IRDetailPane({
   }
 
   return (
-    // 情况4: one card with a shared header (node title + status) over a body
-    // split into Detail (left) + Actions (right). The body split stays in sync
-    // with TruthGraph's columns so the divider still lines up with the graph.
+    // Portrait card (right column of the stage): a shared header, a generously
+    // spaced single-column reading body, and an action footer whose buttons stay
+    // pinned to the bottom. Typography follows Apple's reading guidance —
+    // comfortable line-height (~1.6), a narrow measure, and a clear type
+    // hierarchy (small all-caps eyebrow labels over larger calm body text).
     <div
       className="flex h-full min-h-[220px] flex-col overflow-hidden"
       data-testid="ir-detail-pane"
     >
-      {/* Shared header — a compact meta row (kind · status) over the title, so
-          the actions below clearly belong to this node. */}
-      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-2.5">
+      {/* Shared header — a compact meta row (kind · status) over the title. */}
+      <div className="flex shrink-0 items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-4 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-[11px] text-[var(--ir-text-tertiary)]">
             <span>
@@ -384,7 +385,7 @@ export function IRDetailPane({
             <span aria-hidden="true">·</span>
             <StatusBadge status={selectedNode.status} />
           </div>
-          <h3 className="mt-0.5 break-words text-sm font-semibold leading-snug text-[var(--ir-text-primary)]">
+          <h3 className="mt-1 break-words text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-[var(--ir-text-primary)]">
             {selectedNode.title}
           </h3>
         </div>
@@ -399,113 +400,110 @@ export function IRDetailPane({
         </Button>
       </div>
 
-      {/* Body: Detail (left) + Actions (right) */}
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(190px,34%,260px)] overflow-hidden">
-        <div className="min-h-0 overflow-y-auto border-r border-[var(--ir-border-default)] px-3 py-2.5">
-          <section className="space-y-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
-              Rationale
-            </p>
-            <p className="whitespace-pre-wrap text-sm leading-[1.55] text-[var(--ir-text-primary)]">
-              {selectedNode.rationale ||
-                selectedNode.content ||
-                selectedNode.title}
-            </p>
-          </section>
+      {/* Reading body — scrolls; sections separated by a roomy vertical rhythm */}
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <section className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
+            Rationale
+          </p>
+          <p className="whitespace-pre-wrap text-[14px] leading-[1.6] text-[var(--ir-text-primary)]">
+            {selectedNode.rationale ||
+              selectedNode.content ||
+              selectedNode.title}
+          </p>
+        </section>
 
-          <section className="mt-3 space-y-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
-              Relations
+        <section className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
+            Relations
+          </p>
+          {detail ? (
+            <DetailRelationList detail={detail} onSelect={selectNode} />
+          ) : (
+            <p className="text-[13px] text-[var(--ir-text-tertiary)]">
+              Loading...
             </p>
-            {detail ? (
-              <DetailRelationList detail={detail} onSelect={selectNode} />
-            ) : (
-              <p className="text-sm text-[var(--ir-text-tertiary)]">
-                Loading...
-              </p>
-            )}
-          </section>
+          )}
+        </section>
 
-          {subNodes.length > 0 ? (
-            <section className="mt-3 space-y-2">
-              <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
-                Sub-nodes
-              </p>
-              <div>
-                {subNodes.map((sub) => (
-                  <button
-                    className="flex w-full items-center gap-2 border-b border-[var(--ir-border-default)] px-1 py-2 text-left text-sm last:border-b-0 hover:bg-[var(--ir-bg-hover)]"
-                    key={sub.id}
-                    onClick={() => selectNode(sub.id)}
-                    type="button"
-                  >
-                    <span className="shrink-0 text-[11px] lowercase text-[var(--ir-text-tertiary)]">
-                      {sub.id}
-                    </span>
-                    <span className="min-w-0 flex-1 text-[var(--ir-text-primary)]">
-                      {sub.title}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="mt-3 space-y-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
-              Source
+        {subNodes.length > 0 ? (
+          <section className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
+              Sub-nodes
             </p>
-            <p className="text-sm leading-[1.55] text-[var(--ir-text-secondary)]">
-              {selectedNode.sourceLayer ?? "manual"} ·{" "}
-              {new Date(selectedNode.createdAt).toLocaleString()}
-            </p>
-          </section>
-
-          {selectedNode.kind === "unclassified" ? (
-            <section className="mt-3 space-y-2 border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] p-2">
-              <p className="text-xs font-semibold text-[var(--ir-warning-fg)]">
-                Kind: not yet classified
-              </p>
-              <div className="flex gap-2">
-                <select
-                  className="h-8 min-w-0 flex-1 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 text-xs"
-                  onChange={(event) =>
-                    actions.setKindChoice(event.target.value)
-                  }
-                  value={actions.kindChoice}
+            <div>
+              {subNodes.map((sub) => (
+                <button
+                  className="flex w-full items-center gap-2 border-b border-[var(--ir-border-default)] py-2.5 text-left text-[14px] leading-[1.45] last:border-b-0 hover:bg-[var(--ir-bg-hover)]"
+                  key={sub.id}
+                  onClick={() => selectNode(sub.id)}
+                  type="button"
                 >
-                  <option value="plan:decision">plan / decision</option>
-                  <option value="plan:task">plan / task</option>
-                  <option value="plan:milestone">plan / milestone</option>
-                  <option value="goal:_">goal</option>
-                  <option value="constraint:_">constraint</option>
-                  <option value="open_question:_">open question</option>
-                  <option value="hypothesis:_">hypothesis</option>
-                  <option value="principle:_">principle</option>
-                  <option value="rejection:_">rejection</option>
-                </select>
-                <Button
-                  className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
-                  disabled={actions.isMutating}
-                  onClick={() => actions.handleReclassify(selectedNode)}
-                  size="sm"
-                  variant="outline"
-                >
-                  Use
-                </Button>
-              </div>
-            </section>
-          ) : null}
-        </div>
+                  <span className="shrink-0 text-[11px] lowercase text-[var(--ir-text-tertiary)]">
+                    {sub.id}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[var(--ir-text-primary)]">
+                    {sub.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-        {/* Actions — supplemental content scrolls; the buttons stay pinned */}
-        <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-2.5">
-          <ActionColumn
-            actions={actions}
-            detail={detail}
-            selectedNode={selectedNode}
-          />
-        </aside>
+        <section className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
+            Source
+          </p>
+          <p className="text-[13px] leading-[1.55] text-[var(--ir-text-secondary)]">
+            {selectedNode.sourceLayer ?? "manual"} ·{" "}
+            {new Date(selectedNode.createdAt).toLocaleString()}
+          </p>
+        </section>
+
+        {selectedNode.kind === "unclassified" ? (
+          <section className="space-y-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] p-3">
+            <p className="text-xs font-semibold text-[var(--ir-warning-fg)]">
+              Kind: not yet classified
+            </p>
+            <div className="flex gap-2">
+              <select
+                className="h-8 min-w-0 flex-1 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 text-xs"
+                onChange={(event) => actions.setKindChoice(event.target.value)}
+                value={actions.kindChoice}
+              >
+                <option value="plan:decision">plan / decision</option>
+                <option value="plan:task">plan / task</option>
+                <option value="plan:milestone">plan / milestone</option>
+                <option value="goal:_">goal</option>
+                <option value="constraint:_">constraint</option>
+                <option value="open_question:_">open question</option>
+                <option value="hypothesis:_">hypothesis</option>
+                <option value="principle:_">principle</option>
+                <option value="rejection:_">rejection</option>
+              </select>
+              <Button
+                className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
+                disabled={actions.isMutating}
+                onClick={() => actions.handleReclassify(selectedNode)}
+                size="sm"
+                variant="outline"
+              >
+                Use
+              </Button>
+            </div>
+          </section>
+        ) : null}
+      </div>
+
+      {/* Action footer — supplemental content scrolls; the buttons stay pinned
+          to the bottom (rules: the action button is always anchored below). */}
+      <div className="flex max-h-[58%] shrink-0 flex-col border-t border-[var(--ir-border-default)] px-4 py-3">
+        <ActionColumn
+          actions={actions}
+          detail={detail}
+          selectedNode={selectedNode}
+        />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { fitNodeTitle } from "@/lib/ir/fit-title";
@@ -139,13 +140,16 @@ const TOPIC_OPTIONS = {
   "elk.padding": "[top=32,left=12,bottom=12,right=12]",
 };
 
+// The Chain now lives in the wide, short bottom card, so it flows left → right
+// (root "from here" on the left, the selected node on the right). A horizontal
+// layout fits a landscape card far better than a vertical one.
 const CHAIN_OPTIONS = {
   "elk.algorithm": "layered",
-  "elk.direction": "DOWN",
+  "elk.direction": "RIGHT",
   "elk.edgeRouting": "ORTHOGONAL",
-  "elk.spacing.nodeNode": "30",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "46",
-  "elk.padding": "[top=24,left=20,bottom=24,right=20]",
+  "elk.spacing.nodeNode": "26",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "54",
+  "elk.padding": "[top=20,left=20,bottom=20,right=20]",
 };
 
 function createOverviewGraph(model: TruthGraphModel): ElkGraph {
@@ -219,6 +223,42 @@ function absoluteBoxes(root: ElkChild) {
 
   visit(root, 0, 0);
   return boxes;
+}
+
+// Fit-to-container: measure the available box and return the scale that makes
+// the content fit ENTIRELY without scrolling, capped at 1 so we never blow a
+// small graph up. This is what guarantees the Chain is always fully visible
+// (no pan/zoom needed) however many nodes it has.
+function useFitScale(contentWidth: number, contentHeight: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+
+    const update = () => {
+      const { clientWidth, clientHeight } = element;
+      if (!(clientWidth && clientHeight && contentWidth && contentHeight)) {
+        return;
+      }
+      const next = Math.min(
+        1,
+        clientWidth / contentWidth,
+        clientHeight / contentHeight
+      );
+      setScale(next > 0 ? next : 1);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [contentWidth, contentHeight]);
+
+  return { ref, scale };
 }
 
 // Orthogonal connector that always stops a gap OUTSIDE the target node and
@@ -683,6 +723,12 @@ export function TruthGraph({
     };
   }, [chainNodeIds, model, nodes.length]);
 
+  // Chain content size is needed both for the SVG viewBox and the fit-scale.
+  // The hook runs unconditionally (Rules of Hooks) — before the early returns.
+  const chainWidth = Math.max(1, layout.chain?.width ?? 300);
+  const chainHeight = Math.max(1, layout.chain?.height ?? 260);
+  const chainFit = useFitScale(chainWidth, chainHeight);
+
   if (nodes.length === 0) {
     return (
       <p className="px-3 py-4 text-xs text-[var(--ir-text-tertiary)]">
@@ -710,15 +756,15 @@ export function TruthGraph({
   const selectedChainEdges = getEdgesWithinNodeSet(model, chainNodeIds);
   const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
   const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
-  const chainWidth = Math.max(1, layout.chain?.width ?? 300);
-  const chainHeight = Math.max(1, layout.chain?.height ?? 260);
 
   return (
-    // The overview is the base canvas. The Chain and Detail+Action panels float
-    // ABOVE it as inset rounded cards (only when a node is selected), so the
-    // canvas stays free for browsing every IR when nothing is selected.
-    // `--z-chain-w` drives both the Chain card width and the Detail card's right
-    // edge, so the Detail card width matches the remaining overview region.
+    // The overview is the base canvas. The Chain and Detail panels float ABOVE
+    // it as inset rounded cards (only when a node is selected), so the canvas
+    // stays free for browsing every IR when nothing is selected.
+    // Detail is the tall right column (portrait → readable text); Chain is the
+    // wide bottom strip (landscape → fits a horizontal reasoning flow).
+    // `--z-detail-w` / `--z-chain-h` size them and let the Chain stop just
+    // before the Detail card.
     <div
       className="relative h-full min-h-[360px] border-y border-[var(--z-topic-border)]"
       data-testid="truth-graph"
@@ -726,7 +772,8 @@ export function TruthGraph({
         {
           color: "var(--z-text)",
           fontFamily: "var(--z-font-sans)",
-          "--z-chain-w": "clamp(280px, 30%, 360px)",
+          "--z-detail-w": "clamp(320px, 28%, 420px)",
+          "--z-chain-h": "clamp(190px, 32%, 300px)",
         } as CSSProperties
       }
     >
@@ -906,22 +953,39 @@ export function TruthGraph({
       </section>
 
       {activeSelectedNodeId && layout.chain ? (
+        // Chain = the wide bottom card. Stretches from the left inset to just
+        // before the Detail card on the right.
         <aside
-          className="absolute top-[var(--z-card-inset)] right-[var(--z-card-inset)] bottom-[var(--z-card-inset)] z-10 flex w-[var(--z-chain-w)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex h-[var(--z-chain-h)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
           data-testid="truth-graph-chain"
+          style={{
+            right:
+              "calc(var(--z-detail-w) + var(--z-card-inset) + var(--z-card-inset))",
+          }}
         >
           <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
             <span>Chain</span>
             <span className="normal-case">{chainNodeIds.size} steps</span>
           </div>
-          <div className="flex flex-1 justify-center overflow-auto">
-            <div className="min-w-max">
+          {/* Fit-scale wrapper: the SVG is scaled to fit this box exactly, so
+              the whole chain is always visible without panning/zooming. */}
+          <div
+            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+            ref={chainFit.ref}
+          >
+            <div
+              style={{
+                width: chainWidth * chainFit.scale,
+                height: chainHeight * chainFit.scale,
+              }}
+            >
               <svg
                 aria-label="Selected truth upstream chain"
-                height={chainHeight}
+                height={chainHeight * chainFit.scale}
+                preserveAspectRatio="xMidYMid meet"
                 role="img"
                 viewBox={`0 0 ${chainWidth} ${chainHeight}`}
-                width={chainWidth}
+                width={chainWidth * chainFit.scale}
               >
                 <defs>
                   <marker
@@ -995,16 +1059,11 @@ export function TruthGraph({
       ) : null}
 
       {activeSelectedNodeId && detailSlot ? (
-        // Detail+Action floating card. Pinned to the bottom-left and stretched
-        // to the chain card's left edge, so its width matches the remaining
-        // overview region (rules: details width == overview area width).
+        // Detail = the tall right card (portrait → comfortable reading measure).
+        // Spans the full canvas height on the right side.
         <div
-          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex max-h-[58%] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          className="absolute top-[var(--z-card-inset)] right-[var(--z-card-inset)] bottom-[var(--z-card-inset)] z-10 flex w-[var(--z-detail-w)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
           data-testid="truth-graph-detail-card"
-          style={{
-            right:
-              "calc(var(--z-chain-w) + var(--z-card-inset) + var(--z-card-inset))",
-          }}
         >
           {detailSlot}
         </div>
