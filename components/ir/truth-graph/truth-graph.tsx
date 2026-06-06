@@ -344,7 +344,7 @@ function GraphNode({
     // biome-ignore lint/a11y/useSemanticElements: SVG graph nodes must remain in SVG coordinate space.
     <g
       aria-label={node.title}
-      className="cursor-pointer"
+      className="cursor-pointer outline-none [&:focus-visible>:first-child]:[stroke:var(--z-confirmed)] focus-visible:[outline:none]"
       data-testid={`truth-graph-node-${node.id}`}
       onClick={selectNode}
       onKeyDown={handleKeyDown}
