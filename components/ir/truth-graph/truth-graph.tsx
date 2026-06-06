@@ -65,12 +65,10 @@ export type TruthGraphMode = "truth" | "all";
 export type TruthGraphProps = {
   childrenByParent: Map<string, IRNode[]>;
   edges: TruthGraphFlowEdge["edge"][];
-  expandedIds: Set<string>;
   mode: TruthGraphMode;
   nodes: IRNode[];
   onModeChange: (mode: TruthGraphMode) => void;
   onSelect: (nodeId: string) => void;
-  onToggleExpand: (parentId: string) => void;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
 };
@@ -79,19 +77,6 @@ const OVERVIEW_DIMS = { width: 236, baseFont: 13, padY: 10, padX: 14 };
 const CHAIN_DIMS = { width: 276, baseFont: 13, padY: 12, padX: 16 };
 const NODE_MAX_LINES = 4;
 const NODE_SHRINK_FONT = 11.5;
-
-// Inline expand: children render as rows nested directly beneath the parent's
-// title (the parent's laid-out box reserves the extra height so nothing overlaps).
-const CHILD_ROW = { height: 30, gap: 6, topGap: 8 };
-
-function expandedExtraHeight(count: number) {
-  if (count <= 0) {
-    return 0;
-  }
-  return (
-    CHILD_ROW.topGap + count * CHILD_ROW.height + (count - 1) * CHILD_ROW.gap
-  );
-}
 
 // Reserve text is stable per node (worst-case indicator width) so a node's
 // height never changes when it becomes selected/root — avoids relayout jitter.
@@ -150,31 +135,22 @@ const CHAIN_OPTIONS = {
   "elk.padding": "[top=24,left=20,bottom=24,right=20]",
 };
 
-function createOverviewGraph(
-  model: TruthGraphModel,
-  expandedIds: Set<string>,
-  childCountOf: (id: string) => number
-): ElkGraph {
+function createOverviewGraph(model: TruthGraphModel): ElkGraph {
   return {
     id: "truth-graph-overview-root",
     layoutOptions: OVERVIEW_OPTIONS,
     children: model.topicGroups.map((group) => ({
       id: topicLayoutId(group.topic.id),
       layoutOptions: TOPIC_OPTIONS,
-      // Only roots are laid out; children render nested inside an expanded
-      // parent, so we reserve extra height on the parent box for them.
+      // Sub-nodes are not shown in the overview (they live in the detail panel
+      // + chain), so we lay out roots only.
       children: group.nodes
         .filter((node) => !node.parentId)
-        .map((node) => {
-          const extra = expandedIds.has(node.id)
-            ? expandedExtraHeight(childCountOf(node.id))
-            : 0;
-          return {
-            id: node.id,
-            width: OVERVIEW_DIMS.width,
-            height: measureNode(node, OVERVIEW_DIMS).height + extra,
-          };
-        }),
+        .map((node) => ({
+          id: node.id,
+          width: OVERVIEW_DIMS.width,
+          height: measureNode(node, OVERVIEW_DIMS).height,
+        })),
     })),
     edges: [],
   };
@@ -398,26 +374,22 @@ function nodeTone({
 
 function GraphNode({
   box,
-  subNodes,
+  subNodeCount = 0,
   hasSelection,
-  isExpanded = false,
   isOnChain,
   isRoot,
   isSelected,
   node,
   onSelect,
-  onToggleExpand,
 }: {
   box: NodeBox;
-  subNodes?: IRNode[];
+  subNodeCount?: number;
   hasSelection: boolean;
-  isExpanded?: boolean;
   isOnChain: boolean;
   isRoot: boolean;
   isSelected: boolean;
   node: IRNode;
   onSelect: (nodeId: string) => void;
-  onToggleExpand?: (parentId: string) => void;
 }) {
   const tone = nodeTone({ isOnChain, isSelected, node });
   const strokeWidth = isSelected
@@ -429,7 +401,6 @@ function GraphNode({
   // Title keeps its original measured height; an expanded box is taller and the
   // children render in the reserved space below the title.
   const titleHeight = measured.height;
-  const childCount = subNodes?.length ?? 0;
   // Stage glyph gives candidates/ideas a non-color cue (color-blind safety).
   const stageGlyph =
     node.status === "pending" ? "◇ " : node.status === "idea" ? "○ " : "";
@@ -520,31 +491,16 @@ function GraphNode({
           {anchorLabel}
         </text>
       ) : null}
-      {childCount > 0 && onToggleExpand ? (
-        // biome-ignore lint/a11y/useSemanticElements: SVG must stay in SVG space.
-        <g
-          aria-label={`Toggle ${childCount} sub-node${childCount === 1 ? "" : "s"}`}
-          className="cursor-pointer outline-none"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleExpand(node.id);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              event.stopPropagation();
-              onToggleExpand(node.id);
-            }
-          }}
-          role="button"
-          tabIndex={0}
-        >
+      {subNodeCount > 0 ? (
+        // Passive badge: signals "has N sub-nodes"; the sub-nodes themselves
+        // live in the detail panel + chain when this node is selected.
+        <g>
           <rect
             fill="var(--z-node-fill-sel)"
             height="16"
             rx="8"
-            width="30"
-            x={box.x + box.width - 36}
+            width="24"
+            x={box.x + box.width - 30}
             y={box.y + (titleHeight - 16) / 2}
           />
           <text
@@ -553,75 +509,13 @@ function GraphNode({
             fontFamily="var(--z-font-sans)"
             fontSize="var(--z-font-anchor)"
             textAnchor="middle"
-            x={box.x + box.width - 21}
+            x={box.x + box.width - 18}
             y={box.y + titleHeight / 2}
           >
-            {`${isExpanded ? "▾" : "▸"} ${childCount}`}
+            {subNodeCount}
           </text>
         </g>
       ) : null}
-      {isExpanded && subNodes
-        ? subNodes.map((child, index) => {
-            const cy =
-              box.y +
-              titleHeight +
-              CHILD_ROW.topGap +
-              index * (CHILD_ROW.height + CHILD_ROW.gap);
-            const childTone = nodeTone({
-              isOnChain: false,
-              isSelected: false,
-              node: child,
-            });
-            const childGlyph =
-              child.status === "pending"
-                ? "◇ "
-                : child.status === "idea"
-                  ? "○ "
-                  : "";
-            return (
-              // biome-ignore lint/a11y/useSemanticElements: SVG must stay in SVG space.
-              <g
-                aria-label={child.title}
-                className="cursor-pointer outline-none"
-                key={child.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect(child.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onSelect(child.id);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
-              >
-                <rect
-                  fill={childTone.fill}
-                  height={CHILD_ROW.height}
-                  rx="var(--z-node-radius)"
-                  width={box.width - 16}
-                  x={box.x + 8}
-                  y={cy}
-                />
-                <text
-                  dominantBaseline="central"
-                  fill={childTone.text}
-                  fontFamily="var(--z-font-sans)"
-                  fontSize="var(--z-font-topic)"
-                  textAnchor="start"
-                  textDecoration={childTone.decoration}
-                  x={box.x + 20}
-                  y={cy + CHILD_ROW.height / 2}
-                >
-                  {childGlyph + truncateIRTitle(child.title, 32)}
-                </text>
-              </g>
-            );
-          })
-        : null}
     </g>
   );
 }
@@ -679,12 +573,10 @@ function CompactTruthList({
 export function TruthGraph({
   childrenByParent,
   edges,
-  expandedIds,
   mode,
   nodes,
   onModeChange,
   onSelect,
-  onToggleExpand,
   selectedNodeId,
   topics,
 }: TruthGraphProps) {
@@ -696,10 +588,32 @@ export function TruthGraph({
     selectedNodeId && model.nodeById.has(selectedNodeId)
       ? selectedNodeId
       : null;
-  const chainNodeIds = useMemo(
-    () => getUpstreamNodeIds(model, activeSelectedNodeId),
-    [activeSelectedNodeId, model]
-  );
+  const chainNodeIds = useMemo(() => {
+    const upstream = getUpstreamNodeIds(model, activeSelectedNodeId);
+    if (!activeSelectedNodeId) {
+      return upstream;
+    }
+    const subNodes = childrenByParent.get(activeSelectedNodeId) ?? [];
+    if (subNodes.length === 0) {
+      return upstream;
+    }
+    // Include the selected node's sub-nodes and their 1-hop relations, so the
+    // Chain shows how the sub-nodes connect to the rest of the graph.
+    const set = new Set(upstream);
+    const subIds = new Set(subNodes.map((sub) => sub.id));
+    for (const id of subIds) {
+      set.add(id);
+    }
+    for (const edge of edges) {
+      if (subIds.has(edge.fromNode) && model.nodeById.has(edge.toNode)) {
+        set.add(edge.toNode);
+      }
+      if (subIds.has(edge.toNode) && model.nodeById.has(edge.fromNode)) {
+        set.add(edge.fromNode);
+      }
+    }
+    return set;
+  }, [activeSelectedNodeId, model, childrenByParent, edges]);
   const chainRootIds = useMemo(
     () => new Set(getChainRootIds(model, chainNodeIds)),
     [chainNodeIds, model]
@@ -722,11 +636,7 @@ export function TruthGraph({
         import("elkjs/lib/elk.bundled.js"),
       ]);
       const elk = new ELK();
-      const overviewGraph = createOverviewGraph(
-        model,
-        expandedIds,
-        (id) => childrenByParent.get(id)?.length ?? 0
-      );
+      const overviewGraph = createOverviewGraph(model);
       const chainGraph = createChainGraph(model, chainNodeIds);
       const [overview, chain] = await Promise.all([
         elk.layout(overviewGraph),
@@ -751,7 +661,7 @@ export function TruthGraph({
     return () => {
       cancelled = true;
     };
-  }, [chainNodeIds, childrenByParent, expandedIds, model, nodes.length]);
+  }, [chainNodeIds, model, nodes.length]);
 
   if (nodes.length === 0) {
     return (
@@ -939,15 +849,13 @@ export function TruthGraph({
                   <GraphNode
                     box={box}
                     hasSelection={Boolean(activeSelectedNodeId)}
-                    isExpanded={expandedIds.has(node.id)}
                     isOnChain={isOnChain}
                     isRoot={false}
                     isSelected={isSelected}
                     key={node.id}
                     node={node}
                     onSelect={onSelect}
-                    onToggleExpand={onToggleExpand}
-                    subNodes={childrenByParent.get(node.id)}
+                    subNodeCount={childrenByParent.get(node.id)?.length ?? 0}
                   />
                 );
               })}

@@ -333,6 +333,7 @@ export type IRDetailPaneProps = {
   actions: ReturnType<typeof useIRActions>;
   detail: IRDetail | undefined;
   selectedNode: IRNode | null;
+  subNodes?: IRNode[];
 };
 
 /**
@@ -343,6 +344,7 @@ export function IRDetailPane({
   actions,
   detail,
   selectedNode,
+  subNodes = [],
 }: IRDetailPaneProps) {
   const { selectNode } = useIR();
 
@@ -415,6 +417,31 @@ export function IRDetailPane({
               </p>
             )}
           </section>
+
+          {subNodes.length > 0 ? (
+            <section className="mt-4 space-y-2">
+              <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">
+                Sub-nodes
+              </p>
+              <div>
+                {subNodes.map((sub) => (
+                  <button
+                    className="flex w-full items-center gap-2 border-b border-[var(--ir-border-default)] px-1 py-2 text-left text-sm last:border-b-0 hover:bg-[var(--ir-bg-hover)]"
+                    key={sub.id}
+                    onClick={() => selectNode(sub.id)}
+                    type="button"
+                  >
+                    <span className="shrink-0 text-[11px] lowercase text-[var(--ir-text-tertiary)]">
+                      {sub.id}
+                    </span>
+                    <span className="min-w-0 flex-1 text-[var(--ir-text-primary)]">
+                      {sub.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="mt-4 space-y-2">
             <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-[var(--ir-text-tertiary)]">

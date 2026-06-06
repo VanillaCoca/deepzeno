@@ -15,8 +15,6 @@ export function TruthGraphStage() {
     useIR();
   const { topics, activeProjectId } = useWorkspace();
   const [graphMode, setGraphMode] = useState<TruthGraphMode>("truth");
-  // Parents whose sub-nodes are expanded inline beneath them.
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const { data: detail, mutate: mutateDetail } = useSWR<IRDetail>(
     irNodeKey(selectedNodeId),
@@ -85,36 +83,16 @@ export function TruthGraphStage() {
     [topics]
   );
 
-  // Switching scope collapses any expanded parents to avoid stale state.
-  function handleModeChange(mode: TruthGraphMode) {
-    setGraphMode(mode);
-    setExpandedIds(new Set());
-  }
-
-  function toggleExpand(parentId: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(parentId)) {
-        next.delete(parentId);
-      } else {
-        next.add(parentId);
-      }
-      return next;
-    });
-  }
-
   return (
     <div className="flex h-full flex-col pt-16" data-testid="truth-graph-stage">
       <div className="min-h-0 flex-1 overflow-auto">
         <TruthGraph
           childrenByParent={childrenByParent}
           edges={graphEdges}
-          expandedIds={expandedIds}
           mode={graphMode}
           nodes={graphNodes}
-          onModeChange={handleModeChange}
+          onModeChange={setGraphMode}
           onSelect={selectNode}
-          onToggleExpand={toggleExpand}
           selectedNodeId={selectedNodeId}
           topics={truthGraphTopics}
         />
@@ -125,6 +103,7 @@ export function TruthGraphStage() {
             actions={actions}
             detail={detail}
             selectedNode={selectedNode}
+            subNodes={childrenByParent.get(selectedNode.id) ?? []}
           />
         </div>
       ) : null}
