@@ -124,20 +124,22 @@
 }
 
 /* =============================================================================
-   深色模式: 只改双色根 + 语义色,其余中性层次自动适配 (双色推导的价值)
+   Dark mode: driven by the `.dark` class (next-themes, attribute="class"),
+   matching the rest of the app's tokens in app/globals.css. Because the theme
+   provider runs with enableSystem, the `.dark` class is also applied for
+   system-dark users — so auto dark still works AND a manual toggle now flips
+   the graph colors too (previously these only reacted to the OS media query).
    ============================================================================= */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --z-bg: #1a1a1a;
-    --z-fg: #ececec;
-    /* 语义色在深色下调亮一档,保持可读 */
-    --z-confirmed: #6fa84a;
-    --z-rejected: #d96b6b;
-    --z-attention: #d4942f;
-    --z-attention-text: #e8b968;
-    --z-candidate: #8b82e0;
-    --z-candidate-text: #a99ff0;
-  }
+.dark {
+  --z-bg: #1a1a1a;
+  --z-fg: #ececec;
+  /* semantic colors brightened one step for dark legibility */
+  --z-confirmed: #6fa84a;
+  --z-rejected: #d96b6b;
+  --z-attention: #d4942f;
+  --z-attention-text: #e8b968;
+  --z-candidate: #8b82e0;
+  --z-candidate-text: #a99ff0;
 }
 
 /* =============================================================================

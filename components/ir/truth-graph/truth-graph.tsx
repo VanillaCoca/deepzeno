@@ -567,8 +567,12 @@ export function TruthGraph({
   const chainHeight = Math.max(1, layout.chain?.height ?? 260);
 
   return (
+    // Shared column split (minmax(0,1fr) | clamp(300px,30%,380px)) — keep in
+    // sync with IRDetailPane's grid so Overview|Chain lines up with
+    // Details|Actions into one continuous "+". h-full stretches the grid to
+    // fill the stage so both panel backgrounds reach the bottom edge.
     <div
-      className="grid min-h-[360px] grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] overflow-hidden border-y border-[var(--z-topic-border)]"
+      className="grid h-full min-h-[360px] grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden border-y border-[var(--z-topic-border)]"
       data-testid="truth-graph"
       style={{ color: "var(--z-text)", fontFamily: "var(--z-font-sans)" }}
     >

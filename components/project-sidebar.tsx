@@ -2,15 +2,19 @@
 
 import {
   ArchiveIcon,
+  ChevronsUpDownIcon,
   Layers3Icon,
   LogOutIcon,
+  MoonIcon,
   MoreHorizontalIcon,
   PlusIcon,
   SparklesIcon,
+  SunIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useTheme } from "next-themes";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ProjectApiKeyDialog } from "@/components/project-api-key-dialog";
 import { Button } from "@/components/ui/button";
@@ -26,6 +30,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -51,6 +57,80 @@ import { cn } from "@/lib/utils";
 
 function getTopicStatusLabel(status: string) {
   return status.replace("_", " ");
+}
+
+// ChatGPT-style account control: the user row is the trigger; the menu opens
+// upward with a working light/dark toggle and Log out.
+function SidebarAccountMenu({
+  isSigningOut,
+  onSignOut,
+  userEmail,
+}: {
+  isSigningOut: boolean;
+  onSignOut: () => void;
+  userEmail: string | null;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const { resolvedTheme, setTheme } = useTheme();
+
+  useEffect(() => setMounted(true), []);
+
+  const isDark = mounted ? resolvedTheme === "dark" : true;
+  const email = userEmail ?? "Authenticated user";
+  const name = email.includes("@") ? email.split("@")[0] : email;
+  const initial = (name.trim()[0] ?? "?").toUpperCase();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring aria-expanded:bg-sidebar-accent"
+          type="button"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/10 text-xs font-semibold text-sidebar-primary ring-1 ring-sidebar-border/60">
+            {initial}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-sidebar-foreground">
+              {name}
+            </span>
+            <span className="block truncate text-xs text-sidebar-foreground/60">
+              {email}
+            </span>
+          </span>
+          <ChevronsUpDownIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="start"
+        className="min-w-56"
+        side="top"
+        sideOffset={8}
+      >
+        <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onSelect={(event) => {
+            // Keep the menu open so the theme flip is visible while toggling.
+            event.preventDefault();
+            setTheme(isDark ? "light" : "dark");
+          }}
+        >
+          {isDark ? <SunIcon /> : <MoonIcon />}
+          {isDark ? "Light mode" : "Dark mode"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={isSigningOut}
+          onSelect={() => onSignOut()}
+          variant="destructive"
+        >
+          <LogOutIcon />
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
@@ -297,30 +377,12 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
           )}
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-sidebar-border/60 px-4 py-4">
-          <div className="flex flex-col gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-sidebar-foreground">
-                Signed in
-              </p>
-              <p className="truncate text-xs text-sidebar-foreground/60">
-                {userEmail ?? "Authenticated user"}
-              </p>
-            </div>
-
-            <Button
-              className={cn(
-                "justify-start rounded-xl",
-                isSigningOut && "pointer-events-none opacity-70"
-              )}
-              onClick={handleSignOut}
-              size="sm"
-              variant="outline"
-            >
-              <LogOutIcon className="size-4" />
-              Sign out
-            </Button>
-          </div>
+        <SidebarFooter className="border-t border-sidebar-border/60 px-3 py-3">
+          <SidebarAccountMenu
+            isSigningOut={isSigningOut}
+            onSignOut={handleSignOut}
+            userEmail={userEmail}
+          />
         </SidebarFooter>
       </Sidebar>
 

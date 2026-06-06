@@ -7,6 +7,7 @@ import {
   ShieldAlertIcon,
   XIcon,
 } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useIR } from "@/components/ir/ir-provider";
 import { kindPresentation } from "@/components/ir/kind-presentation";
 import type { useIRActions } from "@/components/ir/use-ir-actions";
@@ -14,17 +15,70 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
+import { cn } from "@/lib/utils";
 
-// Shared action-button look, aligned with the floating WorkspaceHeader island:
-// full-width, rounded, hairline border, ghost fill, hover tint.
-const ACTION_BTN =
-  "w-full justify-start gap-2 rounded-lg border border-[var(--ir-border-default)] bg-transparent text-[var(--ir-text-secondary)] hover:bg-[var(--ir-bg-hover)]";
-const ACTION_CONFIRM =
-  "w-full justify-start gap-2 rounded-lg border border-[var(--z-confirmed)] bg-transparent text-[var(--z-confirmed)] hover:bg-[var(--ir-bg-hover)]";
-const ACTION_SANDBOX =
-  "w-full justify-start gap-2 rounded-lg border border-[var(--z-attention)] bg-transparent text-[var(--z-attention-text)] hover:bg-[var(--ir-bg-hover)]";
-const ACTION_PROMOTE =
-  "w-full justify-start gap-2 rounded-lg border border-[var(--ir-accent-blue-border)] bg-transparent text-[var(--ir-accent-blue)] hover:bg-[var(--ir-bg-hover)]";
+// Semantic accent is carried by the icon only; the buttons themselves stay calm
+// and native so the action column reads as buttons, not bordered text.
+const ACTION_ICON = {
+  confirm: "text-[var(--z-confirmed)]",
+  sandbox: "text-[var(--z-attention-text)]",
+  promote: "text-[var(--ir-accent-blue)]",
+  neutral: "text-[var(--ir-text-tertiary)]",
+} as const;
+
+type ActionRole = keyof typeof ACTION_ICON;
+
+function actionVariant(tone: ActionRole, primary?: boolean) {
+  if (primary) {
+    return "secondary" as const;
+  }
+  if (tone === "neutral") {
+    return "ghost" as const;
+  }
+  return "outline" as const;
+}
+
+// One action = a short explanation on the left, a real button on the right.
+// The buttons share a min-width so they line up into a tidy right-hand column;
+// a single action then reads like a calm card.
+function ActionItem({
+  caption,
+  disabled,
+  icon: Icon,
+  label,
+  onClick,
+  primary,
+  tone,
+}: {
+  caption: string;
+  disabled?: boolean;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  label: string;
+  onClick?: () => void;
+  primary?: boolean;
+  tone: ActionRole;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <p className="min-w-0 flex-1 text-xs leading-snug text-[var(--ir-text-secondary)]">
+        {caption}
+      </p>
+      <Button
+        className={cn(
+          "min-w-[116px] justify-center",
+          primary && "font-semibold"
+        )}
+        disabled={disabled}
+        onClick={onClick}
+        size="sm"
+        variant={actionVariant(tone, primary)}
+      >
+        <Icon className={cn("size-4", ACTION_ICON[tone])} />
+        {label}
+      </Button>
+    </div>
+  );
+}
 
 export function StatusBadge({ status }: { status: IRNode["status"] }) {
   return (
@@ -97,16 +151,15 @@ function ActionColumn({
     return (
       <>
         <div className="min-h-0 flex-1 overflow-y-auto" />
-        <div className="flex shrink-0 flex-col gap-2">
-          <Button
-            className={ACTION_SANDBOX}
+        <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
+          <ActionItem
+            caption="Bring this truth back to the sandbox to re-evaluate."
+            icon={ArrowDownToLineIcon}
+            label="Re-evaluate"
             onClick={() => actions.handleBringToSandbox(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <ArrowDownToLineIcon className="size-4" />
-            带回 sandbox 重新评估
-          </Button>
+            primary
+            tone="sandbox"
+          />
         </div>
       </>
     );
@@ -123,13 +176,13 @@ function ActionColumn({
           ) ? (
             <div className="flex items-start gap-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
               <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-              确认这条会把一条旧 IR 节点标记为已取代。
+              Confirming this will mark an older IR node as superseded.
             </div>
           ) : null}
           {selectedNode.topicId ? null : (
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
               <p className="text-xs font-medium text-[var(--ir-text-primary)]">
-                确认前先归入一个判断
+                Assign to a judgment before confirming
               </p>
               <select
                 className="h-8 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-2 text-xs"
@@ -149,14 +202,14 @@ function ActionColumn({
                 onChange={(event) =>
                   actions.setNewTopicLabel(event.target.value)
                 }
-                placeholder="或新建一个判断"
+                placeholder="or create a new judgment"
                 value={actions.newTopicLabel}
               />
             </div>
           )}
           {needsDiscussion ? (
             <div className="rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2 text-xs text-[var(--ir-text-secondary)]">
-              这其实是个待解决问题，继续讨论。
+              This is actually an open question — keep discussing it.
               {confirmability?.reason ? (
                 <span className="mt-1 block text-[var(--ir-text-tertiary)]">
                   {confirmability.reason}
@@ -165,38 +218,33 @@ function ActionColumn({
             </div>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-col gap-2">
+        <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
           {needsDiscussion ? null : (
-            <Button
-              className={ACTION_CONFIRM}
+            <ActionItem
+              caption="Mark this candidate as a confirmed truth."
               disabled={actions.isMutating}
+              icon={CheckIcon}
+              label="Confirm"
               onClick={() => actions.handleConfirmNode(selectedNode)}
-              size="sm"
-              variant="outline"
-            >
-              <CheckIcon className="size-4" />
-              确认为 truth
-            </Button>
+              primary
+              tone="confirm"
+            />
           )}
-          <Button
-            className={ACTION_SANDBOX}
+          <ActionItem
+            caption="Send it back to the sandbox to keep discussing."
+            icon={ArrowDownToLineIcon}
+            label="Discuss"
             onClick={() => actions.handleBringToSandbox(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <ArrowDownToLineIcon className="size-4" />
-            继续讨论
-          </Button>
-          <Button
-            className={ACTION_BTN}
+            tone="sandbox"
+          />
+          <ActionItem
+            caption="Reject this candidate; it won't become a truth."
             disabled={actions.isMutating}
+            icon={XIcon}
+            label="Dismiss"
             onClick={() => actions.handleDismissCandidate(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <XIcon className="size-4" />
-            否决
-          </Button>
+            tone="neutral"
+          />
         </div>
       </>
     );
@@ -206,36 +254,31 @@ function ActionColumn({
     return (
       <>
         <div className="min-h-0 flex-1 overflow-y-auto" />
-        <div className="flex shrink-0 flex-col gap-2">
-          <Button
-            className={ACTION_PROMOTE}
+        <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
+          <ActionItem
+            caption="Promote this idea to a candidate, pending confirmation."
             disabled={actions.isMutating}
+            icon={CircleDotIcon}
+            label="Promote"
             onClick={() => actions.handlePromoteIdea(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <CircleDotIcon className="size-4" />
-            升为候选
-          </Button>
-          <Button
-            className={ACTION_SANDBOX}
+            primary
+            tone="promote"
+          />
+          <ActionItem
+            caption="Bring it back to the sandbox to explore."
+            icon={ArrowDownToLineIcon}
+            label="Discuss"
             onClick={() => actions.handleBringToSandbox(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <ArrowDownToLineIcon className="size-4" />
-            带回 sandbox 讨论
-          </Button>
-          <Button
-            className={ACTION_BTN}
+            tone="sandbox"
+          />
+          <ActionItem
+            caption="Ignore this idea; stop surfacing it."
             disabled={actions.isMutating}
+            icon={XIcon}
+            label="Ignore"
             onClick={() => actions.handleDismissIdea(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <XIcon className="size-4" />
-            忽略
-          </Button>
+            tone="neutral"
+          />
         </div>
       </>
     );
@@ -245,19 +288,21 @@ function ActionColumn({
     return (
       <>
         <div className="min-h-0 flex-1 overflow-y-auto" />
-        <div className="flex shrink-0 flex-col gap-2">
-          <Button className={ACTION_BTN} disabled size="sm" variant="outline">
-            恢复
-          </Button>
-          <Button
-            className={ACTION_SANDBOX}
+        <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
+          <ActionItem
+            caption="Restore this superseded node."
+            disabled
+            icon={ArrowDownToLineIcon}
+            label="Restore"
+            tone="neutral"
+          />
+          <ActionItem
+            caption="Bring it back to the sandbox to discuss."
+            icon={ArrowDownToLineIcon}
+            label="Discuss"
             onClick={() => actions.handleBringToSandbox(selectedNode)}
-            size="sm"
-            variant="outline"
-          >
-            <ArrowDownToLineIcon className="size-4" />
-            带回 sandbox 讨论
-          </Button>
+            tone="sandbox"
+          />
         </div>
       </>
     );
@@ -267,20 +312,18 @@ function ActionColumn({
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto" />
-      <div className="flex shrink-0 flex-col gap-2">
-        <Button
-          className={ACTION_BTN}
+      <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
+        <ActionItem
+          caption="Bring this back to the sandbox to discuss."
+          icon={ArrowDownToLineIcon}
+          label="Discuss"
           onClick={() =>
             queueReferenceDraft(
               `> [${selectedNode.id}] ${selectedNode.title}\n> ${selectedNode.content ?? selectedNode.title}`
             )
           }
-          size="sm"
-          variant="outline"
-        >
-          <ArrowDownToLineIcon className="size-4" />
-          带回 sandbox 讨论
-        </Button>
+          tone="sandbox"
+        />
       </div>
     </>
   );
@@ -316,12 +359,14 @@ export function IRDetailPane({
   }
 
   return (
+    // Column split kept in sync with TruthGraph above so Details|Actions aligns
+    // with Overview|Chain into one continuous "+".
     <div
-      className="flex h-full min-h-[220px] overflow-hidden"
+      className="grid h-full min-h-[220px] grid-cols-[minmax(0,1fr)_clamp(300px,30%,380px)] overflow-hidden"
       data-testid="ir-detail-pane"
     >
-      {/* LEFT: scrollable content (~62%) */}
-      <div className="flex min-w-0 basis-[62%] flex-col overflow-hidden border-r border-[var(--ir-border-default)]">
+      {/* LEFT: detail content — aligned under the Overview column */}
+      <div className="flex min-w-0 flex-col overflow-hidden border-r border-[var(--ir-border-default)]">
         <div className="flex items-start justify-between gap-2 border-b border-[var(--ir-border-default)] px-3 py-3">
           <div className="min-w-0">
             <p className="text-xs text-[var(--ir-text-secondary)]">
@@ -419,7 +464,7 @@ export function IRDetailPane({
 
       {/* RIGHT: action column (~38%). Supplemental content scrolls; the button
           footer stays pinned and visible (requirement: buttons don't scroll). */}
-      <aside className="flex min-w-0 basis-[38%] flex-col gap-2 overflow-hidden px-3 py-3">
+      <aside className="flex min-w-0 flex-col gap-2 overflow-hidden px-3 py-3">
         <ActionColumn
           actions={actions}
           detail={detail}
