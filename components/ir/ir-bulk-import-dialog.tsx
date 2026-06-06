@@ -189,10 +189,32 @@ function CountSummary({ rows }: { rows: BulkImportRow[] }) {
   );
 }
 
-export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
+export function IRBulkImportDialog({
+  disabled,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  hideTrigger,
+}: {
+  disabled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}) {
   const { activeProjectId, activeTopic, activeTopicId } = useWorkspace();
   const { refreshIR } = useIR();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled =
+    controlledOpen !== undefined && controlledOnOpenChange !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  function setOpen(next: boolean) {
+    if (isControlled) {
+      controlledOnOpenChange?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  }
   const [sourceDocument, setSourceDocument] = useState("");
   const [importSessionId, setImportSessionId] = useState<string | null>(null);
   const [rows, setRows] = useState<BulkImportRow[]>([]);
@@ -773,12 +795,14 @@ export function IRBulkImportDialog({ disabled }: { disabled?: boolean }) {
         }}
         open={open}
       >
-        <DialogTrigger asChild>
-          <Button disabled={disabled} size="sm" variant="outline">
-            <FileUpIcon className="size-4" />
-            Import
-          </Button>
-        </DialogTrigger>
+        {!hideTrigger && (
+          <DialogTrigger asChild>
+            <Button disabled={disabled} size="sm" variant="outline">
+              <FileUpIcon className="size-4" />
+              Import
+            </Button>
+          </DialogTrigger>
+        )}
         <DialogContent
           className="h-[min(820px,calc(100dvh-2rem))] w-[min(1120px,calc(100vw-2rem))] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] p-0 sm:max-w-[min(1120px,calc(100vw-2rem))]"
           showCloseButton={!isConfirming}

@@ -3,7 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { ArrowUpIcon, BrainIcon, EyeIcon, WrenchIcon } from "lucide-react";
+import { ArrowUpIcon, BrainIcon, EyeIcon, PlusIcon, WrenchIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -28,6 +28,13 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { IRBulkImportDialog } from "@/components/ir/ir-bulk-import-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import {
   type ChatModel,
@@ -45,7 +52,7 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { Button } from "../ui/button";
-import { PaperclipIcon, StopIcon } from "./icons";
+import { StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
 import {
   type SlashCommand,
@@ -628,7 +635,7 @@ function PureMultimodalInput({
         />
         <PromptInputFooter className="px-3 pb-3">
           <PromptInputTools>
-            <AttachmentsButton
+            <ComposerPlusMenu
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
@@ -700,7 +707,7 @@ export const MultimodalInput = memo(
   }
 );
 
-function PureAttachmentsButton({
+function ComposerPlusMenu({
   fileInputRef,
   status,
   selectedModelId,
@@ -709,6 +716,9 @@ function PureAttachmentsButton({
   status: UseChatHelpers<ChatMessage>["status"];
   selectedModelId: string;
 }) {
+  const { activeProjectId, activeTopic, activeTopicId } = useWorkspace();
+  const [importOpen, setImportOpen] = useState(false);
+
   const { data: modelsResponse } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
@@ -718,29 +728,45 @@ function PureAttachmentsButton({
   const caps: Record<string, ModelCapabilities> | undefined =
     modelsResponse?.capabilities ?? modelsResponse;
   const hasVision = caps?.[selectedModelId]?.vision ?? false;
+  const importDisabled =
+    !activeProjectId || !activeTopicId || Boolean(activeTopic?.archivedAt);
 
   return (
-    <Button
-      className={cn(
-        "h-7 w-7 rounded-lg border border-border/40 p-1 transition-colors",
-        hasVision
-          ? "text-foreground hover:border-border hover:text-foreground"
-          : "text-muted-foreground/30 cursor-not-allowed"
-      )}
-      data-testid="attachments-button"
-      disabled={status !== "ready" || !hasVision}
-      onClick={(event) => {
-        event.preventDefault();
-        fileInputRef.current?.click();
-      }}
-      variant="ghost"
-    >
-      <PaperclipIcon size={14} style={{ width: 14, height: 14 }} />
-    </Button>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            className="h-7 w-7 rounded-lg border border-border/40 p-1 text-muted-foreground hover:text-foreground"
+            data-testid="composer-plus"
+            variant="ghost"
+          >
+            <PlusIcon className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            disabled={status !== "ready" || !hasVision}
+            onSelect={() => fileInputRef.current?.click()}
+          >
+            Attach file
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={importDisabled}
+            onSelect={() => setImportOpen(true)}
+          >
+            Import decisions
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <IRBulkImportDialog
+        disabled={importDisabled}
+        hideTrigger
+        onOpenChange={setImportOpen}
+        open={importOpen}
+      />
+    </>
   );
 }
-
-const AttachmentsButton = memo(PureAttachmentsButton);
 
 function PureModelSelectorCompact({
   selectedModelId,
