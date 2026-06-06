@@ -17,8 +17,8 @@ function widthOf(text: string, fontPx: number) {
 /**
  * Greedy line wrap that never truncates. CJK breaks per character; latin
  * breaks at spaces, and an overlong latin word falls back to per-character
- * breaking. `reserveText` shrinks only the first line's budget (for an
- * indicator prefix/suffix the caller renders separately).
+ * breaking. `reserveText` shrinks every line's budget (for an indicator the
+ * caller renders on the first and/or last line).
  */
 export function wrapTitleToLines(
   title: string,
@@ -38,8 +38,7 @@ export function wrapTitleToLines(
   let lineWidth = 0;
   let breakAt = -1; // index in `line` where a space allows a break
 
-  const budget = () =>
-    Math.max(1, fullBudget - (lines.length === 0 ? reserveWidth : 0));
+  const budget = () => Math.max(1, fullBudget - reserveWidth);
 
   for (const ch of normalized) {
     const w = glyphWidth(ch, fontPx);

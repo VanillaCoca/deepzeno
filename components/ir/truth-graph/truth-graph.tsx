@@ -162,7 +162,7 @@ function createChainGraph(
       const node = model.nodeById.get(nodeId);
       const height = node
         ? measureNode(node, CHAIN_DIMS).height
-        : CHAIN_DIMS.padY * 2 + 17;
+        : CHAIN_DIMS.padY * 2 + Math.round(CHAIN_DIMS.baseFont * 1.3);
       return { id: nodeId, width: CHAIN_DIMS.width, height };
     }),
     edges: chainEdges.map((edge) => ({

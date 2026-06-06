@@ -117,6 +117,23 @@ describe("wrapTitleToLines", () => {
     const without = wrapTitleToLines("一二三四五六七八九十", 168, 13);
     assert.ok(measureWidth(withReserve[0], 13) <= measureWidth(without[0], 13));
   });
+
+  it("reserves indicator width on every line, not just the first", () => {
+    const reserve = "✓  ?";
+    const lines = wrapTitleToLines(
+      "一二三四五六七八九十一二三四五六七八九十一二三四五六",
+      168,
+      13,
+      reserve
+    );
+    assert.ok(lines.length >= 2);
+    for (const line of lines) {
+      assert.ok(
+        measureWidth(line, 13) + measureWidth(reserve, 13) <= 168 - PADDING_PX,
+        `line "${line}" + reserve exceeds budget`
+      );
+    }
+  });
 });
 
 describe("fitNodeTitle", () => {
