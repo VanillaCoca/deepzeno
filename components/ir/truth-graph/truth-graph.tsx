@@ -251,11 +251,27 @@ function chainEdgePath(edge: ElkEdge) {
     section.endPoint,
   ];
 
+  // Pull the final point back by EDGE_GAP so the solid arrowhead sits in the
+  // gap just below the source / above the target, never overshooting into it.
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  if (last && prev) {
+    const dx = last.x - prev.x;
+    const dy = last.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    points[points.length - 1] = {
+      x: last.x - (dx / len) * EDGE_GAP,
+      y: last.y - (dy / len) * EDGE_GAP,
+    };
+  }
+
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`)
     .join(" ");
 }
 
+// Label sits at the true geometric midpoint between the two node anchors — i.e.
+// centered in the gap between nodes — so it reads consistently on every edge.
 function chainEdgeLabelPoint(edge: ElkEdge) {
   const section = edge.sections?.[0];
 
@@ -263,16 +279,9 @@ function chainEdgeLabelPoint(edge: ElkEdge) {
     return null;
   }
 
-  const points = [
-    section.startPoint,
-    ...(section.bendPoints ?? []),
-    section.endPoint,
-  ];
-  const middle = points[Math.floor(points.length / 2)];
-
   return {
-    x: middle.x,
-    y: middle.y,
+    x: (section.startPoint.x + section.endPoint.x) / 2,
+    y: (section.startPoint.y + section.endPoint.y) / 2,
   };
 }
 
@@ -702,14 +711,7 @@ export function TruthGraph({
                   refY="5"
                   viewBox="0 0 10 10"
                 >
-                  <path
-                    d="M2 1L8 5L2 9"
-                    fill="none"
-                    stroke="var(--z-confirmed)"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="var(--z-line-w-strong)"
-                  />
+                  <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                 </marker>
               </defs>
               {model.topicGroups.map((group) => {
@@ -828,14 +830,7 @@ export function TruthGraph({
                     refY="5"
                     viewBox="0 0 10 10"
                   >
-                    <path
-                      d="M2 1L8 5L2 9"
-                      fill="none"
-                      stroke="var(--z-confirmed)"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="var(--z-line-w-strong)"
-                    />
+                    <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                   </marker>
                 </defs>
                 {layout.chain.edges?.map((edge) => {
