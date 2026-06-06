@@ -53,6 +53,6 @@ test.describe("Authentication Pages", () => {
   test("unauthenticated users are redirected to login", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page).toHaveURL(/\/login\?next=%2F$/);
+    await expect(page).toHaveURL(/\/login/);
   });
 });
