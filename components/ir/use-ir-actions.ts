@@ -8,8 +8,6 @@ import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRKind, IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel } from "@/lib/ir/types";
 
-export type EditMode = "confirm" | "supersede" | null;
-
 export async function postJSON<T>(
   path: string,
   body?: Record<string, unknown>
@@ -36,13 +34,8 @@ export function useIRActions(
   mutateDetail: KeyedMutator<IRDetail>
 ) {
   const { refreshIR, selectNode } = useIR();
-  const { activeProjectId, activeTopicId, bringDecisionToSandbox, topics } =
-    useWorkspace();
+  const { activeTopicId, bringDecisionToSandbox, topics } = useWorkspace();
 
-  const [editMode, setEditMode] = useState<EditMode>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftContent, setDraftContent] = useState("");
-  const [draftRationale, setDraftRationale] = useState("");
   const [kindChoice, setKindChoice] = useState("plan:decision");
   const [assignmentTopicId, setAssignmentTopicId] = useState("");
   const [newTopicLabel, setNewTopicLabel] = useState("");
@@ -106,17 +99,6 @@ export function useIRActions(
     }
   }
 
-  function openEdit(mode: Exclude<EditMode, null>) {
-    if (!selectedNode) {
-      return;
-    }
-
-    setEditMode(mode);
-    setDraftTitle(selectedNode.title);
-    setDraftContent(selectedNode.content ?? "");
-    setDraftRationale(selectedNode.rationale ?? "");
-  }
-
   function getAssignmentPayload(node: IRNode) {
     if (node.topicId) {
       return {};
@@ -134,52 +116,6 @@ export function useIRActions(
 
     toast.error("Choose a judgment topic before confirming.");
     return null;
-  }
-
-  async function submitEditDialog() {
-    if (!selectedNode) {
-      return;
-    }
-
-    const title = draftTitle.trim();
-
-    if (!title) {
-      toast.error("Title is required.");
-      return;
-    }
-
-    if (editMode === "confirm") {
-      const assignment = getAssignmentPayload(selectedNode);
-
-      if (!assignment) {
-        return;
-      }
-
-      await runMutation(
-        () =>
-          postJSON<IRDetail>(`/api/ir/${selectedNode.id}/confirm`, {
-            ...assignment,
-            edits: {
-              title,
-              content: draftContent.trim() || null,
-              rationale: draftRationale.trim() || null,
-            },
-          }),
-        "Candidate confirmed."
-      );
-    } else if (editMode === "supersede") {
-      await runMutation(
-        () =>
-          postJSON<IRDetail>(`/api/ir/${selectedNode.id}/supersede`, {
-            title,
-            content: draftContent.trim() || null,
-            rationale: draftRationale.trim() || null,
-          }),
-        "Replacement candidate drafted."
-      );
-    }
-
-    setEditMode(null);
   }
 
   async function handleReclassify(node: IRNode) {
@@ -212,30 +148,6 @@ export function useIRActions(
     if (success) {
       toast.success("Loaded into sandbox.");
     }
-  }
-
-  async function handleCreateNextStep(node: IRNode) {
-    if (!activeProjectId) {
-      return;
-    }
-
-    await runMutation(
-      () =>
-        postJSON<IRDetail>("/api/ir/draft", {
-          project_id: activeProjectId,
-          topic_id: node.topicId ?? activeTopicId,
-          kind: "plan",
-          subtype: "task",
-          title: `Next step for ${node.id}`,
-          content: `Define the next concrete step for: ${node.title}`,
-          rationale: "Drafted from the active IR detail pane.",
-          source_layer: "manual",
-          created_by: "user",
-          initial_status: "pending",
-          relations: [{ relation: "depends_on", to_node: node.id }],
-        }),
-      "Task candidate drafted."
-    );
   }
 
   async function handleConfirmNode(node: IRNode) {
@@ -278,14 +190,6 @@ export function useIRActions(
 
   return {
     // state
-    editMode,
-    setEditMode,
-    draftTitle,
-    setDraftTitle,
-    draftContent,
-    setDraftContent,
-    draftRationale,
-    setDraftRationale,
     kindChoice,
     setKindChoice,
     assignmentTopicId,
@@ -297,11 +201,8 @@ export function useIRActions(
     assignableTopics,
     // handlers
     runMutation,
-    openEdit,
-    submitEditDialog,
     handleReclassify,
     handleBringToSandbox,
-    handleCreateNextStep,
     handleConfirmNode,
     handleDismissCandidate,
     handlePromoteIdea,
