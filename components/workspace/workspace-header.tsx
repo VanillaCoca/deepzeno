@@ -84,7 +84,7 @@ export function WorkspaceHeader({
       <div className="absolute top-2.5 left-3 flex items-center gap-2">
         <span className={cn(ISLAND, "pr-2.5")}>
           <Button
-            aria-label="Toggle sidebar"
+            aria-label={t("header.toggleSidebar")}
             onClick={toggleSidebar}
             size="icon-sm"
             variant="ghost"
@@ -95,17 +95,17 @@ export function WorkspaceHeader({
             <span className="mr-0.5 font-normal text-[var(--ir-text-tertiary)]">
               #
             </span>
-            {activeTopic?.label ?? "Workspace"}
+            {activeTopic?.label ?? t("header.workspace")}
             {activeTopic?.archivedAt ? (
               <span className="ml-1.5 font-normal text-[var(--ir-text-tertiary)]">
-                · archived
+                · {t("header.archived")}
               </span>
             ) : null}
           </span>
         </span>
         <span className={ISLAND}>
           <Button
-            aria-label="Back"
+            aria-label={t("header.back")}
             disabled={!canGoBack}
             onClick={goBack}
             size="icon-sm"
@@ -114,7 +114,7 @@ export function WorkspaceHeader({
             <ArrowLeftIcon className="size-4" />
           </Button>
           <Button
-            aria-label="Forward"
+            aria-label={t("header.forward")}
             disabled={!canGoForward}
             onClick={goForward}
             size="icon-sm"
@@ -123,7 +123,7 @@ export function WorkspaceHeader({
             <ArrowRightIcon className="size-4" />
           </Button>
           <Button
-            aria-label="Explore new idea"
+            aria-label={t("header.exploreNewIdea")}
             disabled={
               isExploring ||
               !activeProjectId ||
@@ -142,7 +142,7 @@ export function WorkspaceHeader({
 
       <div className="-translate-x-1/2 absolute top-2.5 left-1/2">
         <div
-          aria-label="Workspace view"
+          aria-label={t("header.workspaceView")}
           className={cn(ISLAND, "gap-1 p-1")}
           role="radiogroup"
         >
@@ -181,12 +181,12 @@ export function WorkspaceHeader({
           onClick={onOpenDrawer}
           type="button"
         >
-          Ideas&nbsp;
+          {t("header.ideas")}&nbsp;
           <b className="font-medium text-[var(--ir-text-primary)]">
             {ideas.length}
           </b>
           <span className="mx-1.5 text-[var(--ir-text-tertiary)]">·</span>
-          Candidates&nbsp;
+          {t("header.candidates")}&nbsp;
           <b className="font-medium text-[var(--ir-text-primary)]">
             {candidates.length}
           </b>
@@ -196,14 +196,15 @@ export function WorkspaceHeader({
       <AlertDialog onOpenChange={setExploreOpen} open={exploreOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Explore new idea</AlertDialogTitle>
+            <AlertDialogTitle>{t("header.exploreNewIdea")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Start fresh on a new idea in this topic? ZENO will review the
-              current discussion before clearing.
+              {t("header.exploreDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isExploring}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isExploring}>
+              {t("header.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isExploring}
               onClick={(event) => {
@@ -211,7 +212,7 @@ export function WorkspaceHeader({
                 handleExplore().catch(console.error);
               }}
             >
-              Yes, explore new
+              {t("header.exploreConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
