@@ -3,6 +3,7 @@
 import { SearchIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { LoadingOverlay } from "@/components/loading-overlay";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ export function ProjectSearchDialog({
   open: boolean;
 }) {
   const { activeProjectId, requestView } = useWorkspace();
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<IRNode[] | null>(null);
   const [mode, setMode] = useState<"semantic" | "keyword" | null>(null);
@@ -57,7 +59,7 @@ export function ProjectSearchDialog({
       setMode(data.mode ?? null);
     } catch (error) {
       console.error(error);
-      toast.error("Search failed.");
+      toast.error(t("dialog.search.failedToast"));
       setResults([]);
       setMode(null);
     } finally {
@@ -76,9 +78,9 @@ export function ProjectSearchDialog({
       <Dialog onOpenChange={onOpenChange} open={open}>
         <DialogContent className="max-h-[82vh] w-[92vw] gap-4 sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Search</DialogTitle>
+            <DialogTitle>{t("dialog.search.title")}</DialogTitle>
             <DialogDescription>
-              Search across this project's truths, candidates, and ideas.
+              {t("dialog.search.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -92,7 +94,7 @@ export function ProjectSearchDialog({
                   runSearch();
                 }
               }}
-              placeholder="Search the project…"
+              placeholder={t("dialog.search.placeholder")}
               value={query}
             />
             <Button
@@ -101,24 +103,26 @@ export function ProjectSearchDialog({
               size="sm"
             >
               <SearchIcon className="size-4" />
-              Search
+              {t("dialog.search.button")}
             </Button>
           </div>
 
           {results && results.length > 0 && mode ? (
             <p className="px-1 text-[11px] text-muted-foreground">
-              {mode === "semantic" ? "Ranked by relevance" : "Keyword matches"}
+              {mode === "semantic"
+                ? t("dialog.search.rankedByRelevance")
+                : t("dialog.search.keywordMatches")}
             </p>
           ) : null}
 
           <div className="max-h-[60vh] min-h-[40vh] space-y-1 overflow-y-auto pr-1">
             {results === null ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Type a query and press Enter.
+                {t("dialog.search.prompt")}
               </p>
             ) : results.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No matches found.
+                {t("dialog.search.noMatches")}
               </p>
             ) : (
               results.map((node) => (
@@ -142,9 +146,9 @@ export function ProjectSearchDialog({
       </Dialog>
 
       <LoadingOverlay
-        message="Searching the project"
+        message={t("dialog.search.overlayMessage")}
         show={searching}
-        submessage="Looking across truths, candidates, and ideas"
+        submessage={t("dialog.search.overlaySubmessage")}
       />
     </>
   );

@@ -3,6 +3,7 @@
 import { ArrowDownToLineIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,6 +61,7 @@ export function QuickNotesDialog({
     bringDecisionToSandbox,
     requestView,
   } = useWorkspace();
+  const { t } = useLocale();
   const [notes, setNotes] = useState<QuickNote[]>([]);
   const [draft, setDraft] = useState("");
 
@@ -103,7 +105,7 @@ export function QuickNotesDialog({
     beginSandboxNav();
     const ok = bringDecisionToSandbox({
       decisionId: note.id,
-      decisionTitle: "Quick note",
+      decisionTitle: t("dialog.quickNotes.noteLabel"),
       kind: "Note",
       content: note.text,
     });
@@ -115,7 +117,7 @@ export function QuickNotesDialog({
       );
       onOpenChange(false);
       requestView("conversation");
-      toast.success("Note loaded into the conversation.");
+      toast.success(t("dialog.quickNotes.loadedToast"));
     }
   }
 
@@ -123,17 +125,16 @@ export function QuickNotesDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="max-h-[82vh] w-[92vw] gap-4 sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Quick Notes</DialogTitle>
+          <DialogTitle>{t("dialog.quickNotes.title")}</DialogTitle>
           <DialogDescription>
-            Jot down anything for this project. Bring a note into the
-            conversation when you're ready to discuss it.
+            {t("dialog.quickNotes.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="max-h-[60vh] min-h-[40vh] space-y-2 overflow-y-auto pr-1">
           {notes.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No notes yet.
+              {t("dialog.quickNotes.empty")}
             </p>
           ) : (
             notes.map((note) => {
@@ -149,8 +150,10 @@ export function QuickNotesDialog({
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="text-[11px] text-muted-foreground">
                       {discussed
-                        ? `Last discussed ${discussed}`
-                        : "Not discussed yet"}
+                        ? t("dialog.quickNotes.lastDiscussed", {
+                            when: discussed,
+                          })
+                        : t("dialog.quickNotes.notDiscussed")}
                     </span>
                     <div className="flex items-center gap-1">
                       <Button
@@ -160,10 +163,10 @@ export function QuickNotesDialog({
                         variant="secondary"
                       >
                         <ArrowDownToLineIcon className="size-3.5" />
-                        Sandbox
+                        {t("dialog.quickNotes.sandbox")}
                       </Button>
                       <Button
-                        aria-label="Delete note"
+                        aria-label={t("dialog.quickNotes.deleteNote")}
                         className="h-7 px-2 text-muted-foreground hover:text-foreground"
                         onClick={() => deleteNote(note.id)}
                         size="sm"
@@ -188,11 +191,11 @@ export function QuickNotesDialog({
                 addNote();
               }
             }}
-            placeholder="Write a quick note…"
+            placeholder={t("dialog.quickNotes.placeholder")}
             value={draft}
           />
           <Button disabled={!draft.trim()} onClick={addNote} size="sm">
-            Add
+            {t("dialog.quickNotes.add")}
           </Button>
         </div>
       </DialogContent>

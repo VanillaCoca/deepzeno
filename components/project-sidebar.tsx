@@ -429,9 +429,9 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
       <Dialog onOpenChange={setTopicDialogOpen} open={topicDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New topic</DialogTitle>
+            <DialogTitle>{t("dialog.sidebar.newTopicTitle")}</DialogTitle>
             <DialogDescription>
-              Start a blank topic for a specific decision or question.
+              {t("dialog.sidebar.newTopicDescription")}
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -441,13 +441,13 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                 submitTopic();
               }
             }}
-            placeholder="Topic name"
+            placeholder={t("dialog.sidebar.newTopicPlaceholder")}
             value={topicLabel}
           />
           <DialogFooter>
             <Button onClick={submitTopic}>
               <PlusIcon className="size-4" />
-              Create
+              {t("dialog.sidebar.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
