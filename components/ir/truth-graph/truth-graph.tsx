@@ -144,7 +144,8 @@ const TOPIC_OPTIONS = {
   "elk.direction": "RIGHT",
   "elk.spacing.nodeNode": "10",
   "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-  "elk.padding": "[top=32,left=12,bottom=12,right=12]",
+  // No topic label is drawn anymore, so no extra top padding is needed.
+  "elk.padding": "[top=8,left=8,bottom=8,right=8]",
 };
 
 // The Chain now lives in the wide, short bottom card, so it flows left → right
@@ -1061,38 +1062,12 @@ export function TruthGraph({
             <g
               transform={`translate(${overviewPanZoom.transform.x} ${overviewPanZoom.transform.y}) scale(${overviewPanZoom.transform.scale})`}
             >
-              {model.topicGroups.map((group) => {
-                const box = overviewBoxes.get(topicLayoutId(group.topic.id));
-
-                if (!box) {
-                  return null;
-                }
-
-                return (
-                  <g key={group.topic.id ?? "unassigned"}>
-                    <rect
-                      fill="none"
-                      height={box.height}
-                      rx="var(--z-node-radius-target)"
-                      stroke="var(--z-topic-border)"
-                      strokeWidth="var(--z-stroke-w-fact)"
-                      width={box.width}
-                      x={box.x}
-                      y={box.y}
-                    />
-                    <text
-                      fill="var(--z-text-2)"
-                      fontFamily="var(--z-font-sans)"
-                      fontSize="var(--z-font-topic)"
-                      fontWeight="600"
-                      x={box.x + 12}
-                      y={box.y + 18}
-                    >
-                      {truncateIRTitle(group.topic.label, 28)}
-                    </text>
-                  </g>
-                );
-              })}
+              {/* Topic container boxes intentionally NOT drawn: the overview
+                  always shows a single topic at a time (the one selected in the
+                  sidebar), so a labeled box around every node only repeated the
+                  sidebar selection and added a redundant second background. The
+                  IR chips sit directly on the canvas; relationships are shown by
+                  the chain + overview edges when a node is selected. */}
               {activeSelectedNodeId
                 ? selectedChainEdges.map((edge) => {
                     const parentBox = overviewBoxes.get(edge.parentId);

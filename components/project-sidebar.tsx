@@ -254,7 +254,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
           <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
               <button
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
                 onClick={() => setSearchOpen(true)}
                 type="button"
               >
@@ -264,7 +264,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <button
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!activeProjectId}
                 onClick={() => setNotesOpen(true)}
                 type="button"
@@ -294,7 +294,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                     >
                       <button
                         className={cn(
-                          "flex w-full items-center gap-2.5 rounded-lg py-2 pr-8 pl-2.5 text-left text-sm transition-colors",
+                          "flex w-full items-center gap-2.5 rounded-lg py-2 pr-8 pl-2.5 text-left text-[13px] transition-colors",
                           isActive
                             ? "bg-sidebar-primary font-medium text-sidebar-primary-foreground"
                             : "text-sidebar-foreground hover:bg-sidebar-accent"
@@ -363,7 +363,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
               </SidebarMenu>
 
               <button
-                className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isLoading || !activeProjectId}
                 onClick={() => setTopicDialogOpen(true)}
                 type="button"
@@ -392,7 +392,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                       <SidebarMenuItem key={topic.id}>
                         <button
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+                            "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
                             topic.id === activeTopicId
                               ? "bg-sidebar-primary font-medium text-sidebar-primary-foreground"
                               : "text-sidebar-foreground/65 hover:bg-sidebar-accent"

@@ -102,7 +102,7 @@ export function WorkspaceShell({
     <SidebarProvider
       className="bg-sidebar"
       defaultOpen={defaultSidebarOpen}
-      style={{ "--sidebar-width": "15rem" } as React.CSSProperties}
+      style={{ "--sidebar-width": "16.5rem" } as React.CSSProperties}
     >
       <ProjectSidebar userEmail={userEmail} />
 
