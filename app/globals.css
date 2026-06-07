@@ -359,26 +359,28 @@ textarea:focus-visible {
    tokens so it adapts to dark/light automatically. */
 @keyframes z-text-shimmer {
   0% {
-    background-position: -150% 0;
+    background-position: 150% 0;
   }
   100% {
-    background-position: 150% 0;
+    background-position: -50% 0;
   }
 }
 
 .z-shimmer-text {
   display: inline-block;
+  /* The text stays fully legible (base ~60% foreground); a brighter, narrow band
+     sweeps across it like a flashlight — never disappears. */
   background-image: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--foreground) 32%, transparent) 0%,
-    color-mix(in srgb, var(--foreground) 32%, transparent) 35%,
+    color-mix(in srgb, var(--foreground) 60%, transparent) 0%,
+    color-mix(in srgb, var(--foreground) 60%, transparent) 42%,
     var(--foreground) 50%,
-    color-mix(in srgb, var(--foreground) 32%, transparent) 65%,
-    color-mix(in srgb, var(--foreground) 32%, transparent) 100%
+    color-mix(in srgb, var(--foreground) 60%, transparent) 58%,
+    color-mix(in srgb, var(--foreground) 60%, transparent) 100%
   );
   background-repeat: no-repeat;
   background-size: 200% 100%;
-  background-position: -150% 0;
+  background-position: 150% 0;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
