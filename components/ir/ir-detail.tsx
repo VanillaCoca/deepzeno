@@ -8,6 +8,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { useIR } from "@/components/ir/ir-provider";
 import { kindPresentation } from "@/components/ir/kind-presentation";
 import type { useIRActions } from "@/components/ir/use-ir-actions";
@@ -102,13 +103,16 @@ function DetailRelationList({
   detail: IRDetail;
   onSelect: (nodeId: string) => void;
 }) {
+  const { t } = useLocale();
   const relatedById = new Map(
     detail.relatedNodes.map((node) => [node.id, node])
   );
 
   if (detail.edges.length === 0) {
     return (
-      <p className="text-sm text-[var(--ir-text-tertiary)]">No relations.</p>
+      <p className="text-sm text-[var(--ir-text-tertiary)]">
+        {t("detail.noRelations")}
+      </p>
     );
   }
 
@@ -127,10 +131,12 @@ function DetailRelationList({
             type="button"
           >
             <span className="text-[11px] lowercase text-[var(--ir-text-tertiary)]">
-              {isOutgoing ? edge.relation : `${edge.relation} by`}
+              {isOutgoing
+                ? edge.relation
+                : `${edge.relation} ${t("detail.relationBySuffix")}`}
             </span>
             <span className="min-w-0 flex-1 text-[var(--ir-text-primary)]">
-              {targetId} · {related?.title ?? "Unknown"}
+              {targetId} · {related?.title ?? t("detail.unknown")}
             </span>
           </button>
         );
@@ -148,6 +154,7 @@ function ActionColumn({
   detail: IRDetail | undefined;
   selectedNode: IRNode;
 }) {
+  const { t } = useLocale();
   const { queueReferenceDraft } = useWorkspace();
   const confirmability = selectedNode.confirmability;
   // Forward-compatible default: until Lixian produces the field, treat absent
@@ -170,7 +177,7 @@ function ActionColumn({
             <ArrowDownToLineIcon
               className={cn("size-4", ACTION_ICON.sandbox)}
             />
-            Re-evaluate
+            {t("detail.reEvaluate")}
           </Button>
         </div>
       </>
@@ -188,13 +195,13 @@ function ActionColumn({
           ) ? (
             <div className="flex items-start gap-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
               <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-              Confirming this will mark an older IR node as superseded.
+              {t("detail.supersedeWarning")}
             </div>
           ) : null}
           {selectedNode.topicId ? null : (
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
               <p className="text-xs font-medium text-[var(--ir-text-primary)]">
-                Assign to a judgment before confirming
+                {t("detail.assignJudgment")}
               </p>
               <select
                 className="h-8 rounded border border-[var(--ir-border-default)] bg-[var(--ir-bg-panel)] px-2 text-xs"
@@ -214,14 +221,14 @@ function ActionColumn({
                 onChange={(event) =>
                   actions.setNewTopicLabel(event.target.value)
                 }
-                placeholder="or create a new judgment"
+                placeholder={t("detail.newJudgmentPlaceholder")}
                 value={actions.newTopicLabel}
               />
             </div>
           )}
           {needsDiscussion ? (
             <div className="rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2 text-xs text-[var(--ir-text-secondary)]">
-              This is actually an open question — keep discussing it.
+              {t("detail.needsDiscussion")}
               {confirmability?.reason ? (
                 <span className="mt-1 block text-[var(--ir-text-tertiary)]">
                   {confirmability.reason}
@@ -233,10 +240,10 @@ function ActionColumn({
         <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
           {needsDiscussion ? null : (
             <ActionItem
-              caption="Mark this candidate as a confirmed truth."
+              caption={t("detail.confirmCaption")}
               disabled={actions.isMutating}
               icon={CheckIcon}
-              label="Confirm"
+              label={t("detail.confirm")}
               loading={actions.pendingAction === "confirm"}
               onClick={() => actions.handleConfirmNode(selectedNode)}
               primary
@@ -244,17 +251,17 @@ function ActionColumn({
             />
           )}
           <ActionItem
-            caption="Send it back to the sandbox to keep discussing."
+            caption={t("detail.discussCandidateCaption")}
             icon={ArrowDownToLineIcon}
-            label="Discuss"
+            label={t("detail.discuss")}
             onClick={() => actions.handleBringToSandbox(selectedNode)}
             tone="sandbox"
           />
           <ActionItem
-            caption="Reject this candidate; it won't become a truth."
+            caption={t("detail.dismissCaption")}
             disabled={actions.isMutating}
             icon={XIcon}
-            label="Dismiss"
+            label={t("detail.dismiss")}
             loading={actions.pendingAction === "dismiss"}
             onClick={() => actions.handleDismissCandidate(selectedNode)}
             tone="neutral"
@@ -270,27 +277,27 @@ function ActionColumn({
         <div className="min-h-0 flex-1 overflow-y-auto" />
         <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
           <ActionItem
-            caption="Promote this idea to a candidate, pending confirmation."
+            caption={t("detail.promoteCaption")}
             disabled={actions.isMutating}
             icon={CircleDotIcon}
-            label="Promote"
+            label={t("detail.promote")}
             loading={actions.pendingAction === "promote"}
             onClick={() => actions.handlePromoteIdea(selectedNode)}
             primary
             tone="promote"
           />
           <ActionItem
-            caption="Bring it back to the sandbox to explore."
+            caption={t("detail.discussIdeaCaption")}
             icon={ArrowDownToLineIcon}
-            label="Discuss"
+            label={t("detail.discuss")}
             onClick={() => actions.handleBringToSandbox(selectedNode)}
             tone="sandbox"
           />
           <ActionItem
-            caption="Ignore this idea; stop surfacing it."
+            caption={t("detail.ignoreCaption")}
             disabled={actions.isMutating}
             icon={XIcon}
-            label="Ignore"
+            label={t("detail.ignore")}
             loading={actions.pendingAction === "dismiss"}
             onClick={() => actions.handleDismissIdea(selectedNode)}
             tone="neutral"
@@ -306,16 +313,16 @@ function ActionColumn({
         <div className="min-h-0 flex-1 overflow-y-auto" />
         <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
           <ActionItem
-            caption="Restore this superseded node."
+            caption={t("detail.restoreCaption")}
             disabled
             icon={ArrowDownToLineIcon}
-            label="Restore"
+            label={t("detail.restore")}
             tone="neutral"
           />
           <ActionItem
-            caption="Bring it back to the sandbox to discuss."
+            caption={t("detail.discussSupersededCaption")}
             icon={ArrowDownToLineIcon}
-            label="Discuss"
+            label={t("detail.discuss")}
             onClick={() => actions.handleBringToSandbox(selectedNode)}
             tone="sandbox"
           />
@@ -330,9 +337,9 @@ function ActionColumn({
       <div className="min-h-0 flex-1 overflow-y-auto" />
       <div className="flex shrink-0 flex-col divide-y divide-[var(--ir-border-default)]">
         <ActionItem
-          caption="Bring this back to the sandbox to discuss."
+          caption={t("detail.discussFallbackCaption")}
           icon={ArrowDownToLineIcon}
-          label="Discuss"
+          label={t("detail.discuss")}
           onClick={() =>
             queueReferenceDraft(
               `> [${selectedNode.id}] ${selectedNode.title}\n> ${selectedNode.content ?? selectedNode.title}`
@@ -362,6 +369,7 @@ export function IRDetailPane({
   selectedNode,
   subNodes = [],
 }: IRDetailPaneProps) {
+  const { t } = useLocale();
   const { selectNode } = useIR();
 
   if (!selectedNode) {
@@ -370,8 +378,10 @@ export function IRDetailPane({
         className="flex h-full flex-col justify-center px-4 text-sm text-[var(--ir-text-tertiary)]"
         data-testid="ir-detail-pane"
       >
-        <p className="font-medium text-[var(--ir-text-primary)]">Detail</p>
-        <p>Select an idea, candidate, IR node, or inline reference.</p>
+        <p className="font-medium text-[var(--ir-text-primary)]">
+          {t("detail.detail")}
+        </p>
+        <p>{t("detail.emptySelection")}</p>
       </div>
     );
   }
@@ -401,7 +411,7 @@ export function IRDetailPane({
           </h3>
         </div>
         <Button
-          aria-label="Close detail"
+          aria-label={t("detail.closeDetail")}
           className="shrink-0 rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
           onClick={() => selectNode(null)}
           size="icon-sm"
@@ -415,7 +425,7 @@ export function IRDetailPane({
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
-            Rationale
+            {t("detail.rationale")}
           </p>
           <p className="whitespace-pre-wrap text-[14px] leading-[1.6] text-[var(--ir-text-primary)]">
             {selectedNode.rationale ||
@@ -426,13 +436,13 @@ export function IRDetailPane({
 
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
-            Relations
+            {t("detail.relations")}
           </p>
           {detail ? (
             <DetailRelationList detail={detail} onSelect={selectNode} />
           ) : (
             <p className="text-[13px] text-[var(--ir-text-tertiary)]">
-              Loading...
+              {t("detail.loading")}
             </p>
           )}
         </section>
@@ -440,7 +450,7 @@ export function IRDetailPane({
         {subNodes.length > 0 ? (
           <section className="space-y-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
-              Sub-nodes
+              {t("detail.subNodes")}
             </p>
             <div>
               {subNodes.map((sub) => (
@@ -464,10 +474,10 @@ export function IRDetailPane({
 
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
-            Source
+            {t("detail.source")}
           </p>
           <p className="text-[13px] leading-[1.55] text-[var(--ir-text-secondary)]">
-            {selectedNode.sourceLayer ?? "manual"} ·{" "}
+            {selectedNode.sourceLayer ?? t("detail.manual")} ·{" "}
             {new Date(selectedNode.createdAt).toLocaleString()}
           </p>
         </section>
@@ -475,7 +485,7 @@ export function IRDetailPane({
         {selectedNode.kind === "unclassified" ? (
           <section className="space-y-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] p-3">
             <p className="text-xs font-semibold text-[var(--ir-warning-fg)]">
-              Kind: not yet classified
+              {t("detail.kindUnclassified")}
             </p>
             <div className="flex gap-2">
               <select
@@ -483,15 +493,25 @@ export function IRDetailPane({
                 onChange={(event) => actions.setKindChoice(event.target.value)}
                 value={actions.kindChoice}
               >
-                <option value="plan:decision">plan / decision</option>
-                <option value="plan:task">plan / task</option>
-                <option value="plan:milestone">plan / milestone</option>
-                <option value="goal:_">goal</option>
-                <option value="constraint:_">constraint</option>
-                <option value="open_question:_">open question</option>
-                <option value="hypothesis:_">hypothesis</option>
-                <option value="principle:_">principle</option>
-                <option value="rejection:_">rejection</option>
+                <option value="plan:decision">
+                  {t("detail.kindPlanDecision")}
+                </option>
+                <option value="plan:task">{t("detail.kindPlanTask")}</option>
+                <option value="plan:milestone">
+                  {t("detail.kindPlanMilestone")}
+                </option>
+                <option value="goal:_">{t("detail.kindGoal")}</option>
+                <option value="constraint:_">
+                  {t("detail.kindConstraint")}
+                </option>
+                <option value="open_question:_">
+                  {t("detail.kindOpenQuestion")}
+                </option>
+                <option value="hypothesis:_">
+                  {t("detail.kindHypothesis")}
+                </option>
+                <option value="principle:_">{t("detail.kindPrinciple")}</option>
+                <option value="rejection:_">{t("detail.kindRejection")}</option>
               </select>
               <Button
                 className="rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
@@ -500,7 +520,7 @@ export function IRDetailPane({
                 size="sm"
                 variant="outline"
               >
-                Use
+                {t("detail.use")}
               </Button>
             </div>
           </section>

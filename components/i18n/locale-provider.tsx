@@ -7,13 +7,36 @@ import {
   isLocale,
   type Locale,
 } from "@/lib/i18n/dictionaries";
+import { detailMessages } from "@/lib/i18n/messages/detail";
+import { dialogsMessages } from "@/lib/i18n/messages/dialogs";
 
-const STORAGE_KEY = "zeno-locale";
+export const LOCALE_STORAGE_KEY = "zeno-locale";
+
+// Merge the per-feature copy into the core dictionaries so every `t("…")` key
+// (nav/account/detail/dialog/…) resolves from one place. dictionaries.ts and
+// the per-feature fragment files stay independent.
+const mergedDictionaries: Record<Locale, Record<string, string>> = {
+  en: { ...dictionaries.en, ...detailMessages.en, ...dialogsMessages.en },
+  zh: { ...dictionaries.zh, ...detailMessages.zh, ...dialogsMessages.zh },
+  fr: { ...dictionaries.fr, ...detailMessages.fr, ...dialogsMessages.fr },
+};
+
+function interpolate(
+  template: string,
+  params?: Record<string, string | number>
+): string {
+  if (!params) {
+    return template;
+  }
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match
+  );
+}
 
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -24,7 +47,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(defaultLocale);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
     if (isLocale(stored)) {
       setLocaleState(stored);
     }
@@ -35,10 +58,19 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       locale,
       setLocale: (next: Locale) => {
         setLocaleState(next);
-        localStorage.setItem(STORAGE_KEY, next);
+        localStorage.setItem(LOCALE_STORAGE_KEY, next);
+        // Also persist to a cookie so server components (e.g. the homepage) can
+        // render in the chosen language.
+        // biome-ignore lint/suspicious/noDocumentCookie: simple persisted preference; Cookie Store API isn't broadly available.
+        document.cookie = `${LOCALE_STORAGE_KEY}=${next}; path=/; max-age=31536000; samesite=lax`;
       },
-      t: (key: string) =>
-        dictionaries[locale][key] ?? dictionaries[defaultLocale][key] ?? key,
+      t: (key: string, params?: Record<string, string | number>) => {
+        const template =
+          mergedDictionaries[locale][key] ??
+          mergedDictionaries[defaultLocale][key] ??
+          key;
+        return interpolate(template, params);
+      },
     };
   }, [locale]);
 
