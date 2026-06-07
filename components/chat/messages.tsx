@@ -1,6 +1,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { ArrowDownIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useMessages } from "@/hooks/use-messages";
 import type { Vote } from "@/lib/db/schema";
@@ -40,6 +41,7 @@ function PureMessages({
   onEditMessage,
 }: MessagesProps) {
   const { restoredSandboxContext } = useWorkspace();
+  const { t } = useLocale();
   const {
     containerRef: messagesContainerRef,
     endRef: messagesEndRef,
@@ -81,8 +83,9 @@ function PureMessages({
           {restoredSandboxContext && (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-4 text-sm">
               <p className="font-medium text-foreground">
-                Your next message will include{" "}
-                {restoredSandboxContext.decisionTitle}
+                {t("chat.sandboxNextMessage", {
+                  title: restoredSandboxContext.decisionTitle,
+                })}
               </p>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {restoredSandboxContext.contextText}

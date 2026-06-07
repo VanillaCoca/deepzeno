@@ -7,6 +7,7 @@ import {
   isLocale,
   type Locale,
 } from "@/lib/i18n/dictionaries";
+import { chatMessages } from "@/lib/i18n/messages/chat";
 import { detailMessages } from "@/lib/i18n/messages/detail";
 import { dialogsMessages } from "@/lib/i18n/messages/dialogs";
 import { graphMessages } from "@/lib/i18n/messages/graph";
@@ -22,18 +23,21 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...detailMessages.en,
     ...dialogsMessages.en,
     ...graphMessages.en,
+    ...chatMessages.en,
   },
   zh: {
     ...dictionaries.zh,
     ...detailMessages.zh,
     ...dialogsMessages.zh,
     ...graphMessages.zh,
+    ...chatMessages.zh,
   },
   fr: {
     ...dictionaries.fr,
     ...detailMessages.fr,
     ...dialogsMessages.fr,
     ...graphMessages.fr,
+    ...chatMessages.fr,
   },
 };
 

@@ -34,6 +34,7 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { IRBulkImportDialog } from "@/components/ir/ir-bulk-import-dialog";
 import {
   DropdownMenu,
@@ -135,6 +136,7 @@ function PureMultimodalInput({
   onCancelEdit?: () => void;
   isLoading?: boolean;
 }) {
+  const { t } = useLocale();
   const {
     activeProjectId,
     activeTopicId,
@@ -631,10 +633,10 @@ function PureMultimodalInput({
           }}
           placeholder={
             isLoading
-              ? "Loading workspace..."
+              ? t("chat.loadingWorkspace")
               : editingMessage
-                ? "Edit your message..."
-                : "Ask anything..."
+                ? t("chat.editMessage")
+                : t("chat.askAnything")
           }
           ref={textareaRef}
           value={input}
@@ -783,6 +785,7 @@ function PureModelSelectorCompact({
   onModelChange?: (modelId: string) => void;
 }) {
   const { activeTopicId, refreshWorkspace } = useWorkspace();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const selectingModelRef = useRef<string | null>(null);
   const { data: modelsData } = useSWR(
@@ -868,7 +871,7 @@ function PureModelSelectorCompact({
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <ModelSelectorInput placeholder="Search models..." />
+        <ModelSelectorInput placeholder={t("chat.searchModels")} />
         <ModelSelectorList>
           {(() => {
             const allModels = dynamicModels ?? chatModels;
