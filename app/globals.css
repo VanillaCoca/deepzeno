@@ -368,15 +368,16 @@ textarea:focus-visible {
 
 .z-shimmer-text {
   display: inline-block;
-  /* The text stays fully legible (base ~60% foreground); a brighter, narrow band
-     sweeps across it like a flashlight — never disappears. */
+  /* Two SOLID colors (no transparency): the text is always a fully-opaque grey
+     (muted-foreground); a brighter band (foreground) sweeps across it like a
+     flashlight. Because nothing is transparent, the text never fades out. */
   background-image: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--foreground) 60%, transparent) 0%,
-    color-mix(in srgb, var(--foreground) 60%, transparent) 42%,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 42%,
     var(--foreground) 50%,
-    color-mix(in srgb, var(--foreground) 60%, transparent) 58%,
-    color-mix(in srgb, var(--foreground) 60%, transparent) 100%
+    var(--muted-foreground) 58%,
+    var(--muted-foreground) 100%
   );
   background-repeat: no-repeat;
   background-size: 200% 100%;
