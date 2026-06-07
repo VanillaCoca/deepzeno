@@ -353,6 +353,33 @@ textarea:focus-visible {
   }
 }
 
+/* "Thinking"-style shimmer for loading text: a bright band sweeps left→right
+   across muted text (ChatGPT/Claude feel). Uses theme tokens so it adapts to
+   dark/light automatically. */
+.z-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 40%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 60%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .z-shimmer-text {
+    animation: none;
+    color: var(--muted-foreground);
+  }
+}
+
 @keyframes dot-pulse {
   0%,
   60%,

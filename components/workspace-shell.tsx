@@ -3,14 +3,48 @@
 import { useEffect, useState } from "react";
 import { useLocalStorage } from "usehooks-ts";
 import { IRDrawer } from "@/components/ir/ir-drawer";
-import { IRProvider } from "@/components/ir/ir-provider";
+import { IRProvider, useIR } from "@/components/ir/ir-provider";
 import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
+import { LoadingOverlay } from "@/components/loading-overlay";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   WorkspaceHeader,
   type WorkspaceView,
 } from "@/components/workspace/workspace-header";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { ProjectSidebar } from "./project-sidebar";
+
+/**
+ * Keeps the frosted veil up until the workspace is genuinely usable: both the
+ * workspace bootstrap (projects/judgments) AND the IR data (the truth graph)
+ * must be loaded before the user can interact.
+ */
+function WorkspaceReadyVeil() {
+  const { isLoading: workspaceLoading } = useWorkspace();
+  const { isLoading: irLoading } = useIR();
+
+  if (workspaceLoading) {
+    return (
+      <LoadingOverlay
+        message="Preparing your workspace"
+        show
+        submessage="Fetching your projects and judgments"
+      />
+    );
+  }
+
+  if (irLoading) {
+    return (
+      <LoadingOverlay
+        message="Loading the truth graph"
+        show
+        submessage="Gathering truths, candidates, and ideas"
+      />
+    );
+  }
+
+  return null;
+}
 
 export function WorkspaceShell({
   children,
@@ -46,6 +80,7 @@ export function WorkspaceShell({
 
       <SidebarInset className="min-h-dvh bg-sidebar">
         <IRProvider>
+          <WorkspaceReadyVeil />
           <div className="relative flex h-dvh min-w-0">
             <div className="relative flex min-w-0 flex-1 flex-col">
               <WorkspaceHeader

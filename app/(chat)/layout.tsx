@@ -17,11 +17,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         strategy="lazyOnload"
       />
       <DataStreamProvider>
-        <Suspense fallback={<div className="flex h-dvh bg-sidebar" />}>
+        <Suspense fallback={<WorkspaceBootFallback />}>
           <ProtectedWorkspace>{children}</ProtectedWorkspace>
         </Suspense>
       </DataStreamProvider>
     </>
+  );
+}
+
+// Shown while the workspace route boots (auth + cookies) on navigation from the
+// project picker — the same "thinking" shimmer the in-workspace veil uses, so
+// the hand-off reads as one continuous loading experience.
+function WorkspaceBootFallback() {
+  return (
+    <div className="flex h-dvh flex-col items-center justify-center gap-2.5 bg-background">
+      <p className="z-shimmer-text text-base font-medium tracking-tight">
+        Preparing your workspace
+      </p>
+      <p className="text-xs text-muted-foreground/70">
+        Loading your projects and judgments
+      </p>
+    </div>
   );
 }
 
