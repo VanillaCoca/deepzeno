@@ -27,6 +27,7 @@ export function ProjectSearchDialog({
   const { activeProjectId, requestView } = useWorkspace();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<IRNode[] | null>(null);
+  const [mode, setMode] = useState<"semantic" | "keyword" | null>(null);
   const [searching, setSearching] = useState(false);
 
   async function runSearch() {
@@ -37,17 +38,28 @@ export function ProjectSearchDialog({
 
     setSearching(true);
     try {
-      const url = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir/search?project_id=${activeProjectId}&q=${encodeURIComponent(trimmed)}`;
-      const response = await fetch(url);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir/search`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: activeProjectId, query: trimmed }),
+        }
+      );
       if (!response.ok) {
         throw new Error("Search failed");
       }
-      const data = (await response.json()) as { results: IRNode[] };
+      const data = (await response.json()) as {
+        mode: "semantic" | "keyword";
+        results: IRNode[];
+      };
       setResults(data.results ?? []);
+      setMode(data.mode ?? null);
     } catch (error) {
       console.error(error);
       toast.error("Search failed.");
       setResults([]);
+      setMode(null);
     } finally {
       setSearching(false);
     }
@@ -92,6 +104,12 @@ export function ProjectSearchDialog({
               Search
             </Button>
           </div>
+
+          {results && results.length > 0 && mode ? (
+            <p className="px-1 text-[11px] text-muted-foreground">
+              {mode === "semantic" ? "Ranked by relevance" : "Keyword matches"}
+            </p>
+          ) : null}
 
           <div className="max-h-[44vh] space-y-1 overflow-y-auto pr-1">
             {results === null ? (
