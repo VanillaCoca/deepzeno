@@ -17,6 +17,7 @@ import {
   useTransition,
 } from "react";
 import { toast } from "sonner";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   type ConfirmExtractionPayload,
   confirmExtraction,
@@ -209,16 +210,17 @@ function reducer(
   }
 }
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
     return error.message;
   }
 
-  return "Something went wrong.";
+  return fallback;
 }
 
 export function CreateProjectModal({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [state, dispatch] = useReducer(reducer, initialState);
   const [isMutating, startMutation] = useTransition();
@@ -316,7 +318,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
       console.error("Extraction failed", error);
       dispatch({
         type: "extract_error",
-        message: "Couldn't extract — try again or start blank.",
+        message: t("dialog.createProject.extractFailed"),
       });
     } finally {
       if (extractAbortControllerRef.current === controller) {
@@ -411,7 +413,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
         router.refresh();
       } catch (error) {
         console.error("Create blank project failed", error);
-        toast.error(getErrorMessage(error));
+        toast.error(
+          getErrorMessage(error, t("dialog.createProject.somethingWentWrong"))
+        );
       }
     });
   }
@@ -420,9 +424,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
     const payload = buildConfirmPayload();
 
     if (!payload) {
-      toast.error(
-        "Select at least one extracted item before creating the workspace."
-      );
+      toast.error(t("dialog.createProject.selectAtLeastOneToast"));
       return;
     }
 
@@ -435,7 +437,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
         router.refresh();
       } catch (error) {
         console.error("Confirm extraction failed", error);
-        toast.error(getErrorMessage(error));
+        toast.error(
+          getErrorMessage(error, t("dialog.createProject.somethingWentWrong"))
+        );
       }
     });
   }
@@ -466,12 +470,10 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
           <div className="flex max-h-[calc(85dvh-3rem)] flex-col gap-5">
             <DialogHeader className="shrink-0 space-y-2">
               <DialogTitle className="text-lg font-medium">
-                Start with what you have
+                {t("dialog.createProject.inputTitle")}
               </DialogTitle>
               <DialogDescription>
-                Paste notes, drop a pitch deck, or describe the project. ZENO
-                extracts goals, constraints, and open questions for you to
-                confirm.
+                {t("dialog.createProject.inputDescription")}
               </DialogDescription>
             </DialogHeader>
 
@@ -487,7 +489,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                     value: event.target.value,
                   })
                 }
-                placeholder="Describe the project, or paste anything you have..."
+                placeholder={t("dialog.createProject.inputPlaceholder")}
                 rows={6}
                 value={state.input}
               />
@@ -503,7 +505,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                   variant="outline"
                 >
                   <PaperclipIcon className="size-3.5" />
-                  Attach files
+                  {t("dialog.createProject.attachFiles")}
                 </Button>
               </div>
 
@@ -519,7 +521,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                   {isMutating ? (
                     <Loader2Icon className="size-3.5 animate-spin" />
                   ) : null}
-                  {isMutating ? "Creating workspace..." : "Start blank"}
+                  {isMutating
+                    ? t("dialog.createProject.creatingWorkspace")
+                    : t("dialog.createProject.startBlank")}
                 </Button>
                 <Button
                   className="bg-foreground text-background hover:bg-foreground/90"
@@ -530,7 +534,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                   size="sm"
                   type="button"
                 >
-                  Extract →
+                  {t("dialog.createProject.extract")}
                 </Button>
               </div>
             </div>
@@ -541,7 +545,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
           <div className="flex flex-col items-center justify-center gap-3 py-16">
             <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Extracting decisions and topics...
+              {t("dialog.createProject.extracting")}
             </p>
           </div>
         )}
@@ -552,8 +556,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
               {extractionEmpty ? (
                 <div className="flex flex-col items-center gap-3 py-12">
                   <p className="text-center text-sm text-muted-foreground">
-                    We couldn't extract any decisions from that text. Add more
-                    context, or start blank.
+                    {t("dialog.createProject.emptyExtraction")}
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -562,7 +565,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                       type="button"
                       variant="ghost"
                     >
-                      ← Back
+                      {t("dialog.createProject.back")}
                     </Button>
                     <Button
                       aria-busy={isMutating}
@@ -574,7 +577,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                       {isMutating ? (
                         <Loader2Icon className="size-3.5 animate-spin" />
                       ) : null}
-                      {isMutating ? "Creating workspace..." : "Start blank →"}
+                      {isMutating
+                        ? t("dialog.createProject.creatingWorkspace")
+                        : t("dialog.createProject.startBlankArrow")}
                     </Button>
                   </div>
                 </div>
@@ -611,16 +616,16 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                     )}
 
                     <p className="mt-2 text-sm text-muted-foreground">
-                      ZENO grouped {totalDecisionCount} decisions into{" "}
+                      {t("dialog.createProject.groupedPrefix", {
+                        count: totalDecisionCount,
+                      })}
                       <span className="font-medium text-foreground">
                         {review.topics.length}{" "}
-                        {review.topics.length === 1 ? "topic" : "topics"}
+                        {review.topics.length === 1
+                          ? t("dialog.createProject.topicSingular")
+                          : t("dialog.createProject.topicPlural")}
                       </span>
-                      . Rename{" "}
-                      <span className="font-medium text-foreground">
-                        topics
-                      </span>
-                      , uncheck items, or move them before committing.
+                      {t("dialog.createProject.groupedSuffix")}
                     </p>
                   </div>
 
@@ -670,7 +675,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                                 type="button"
                               >
                                 <PencilIcon className="h-3 w-3" />
-                                <span className="sr-only">Rename topic</span>
+                                <span className="sr-only">
+                                  {t("dialog.createProject.renameTopic")}
+                                </span>
                               </button>
                             )}
                           </div>
@@ -702,7 +709,10 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <button
-                                      aria-label={`What is a ${humanLabel(decision.type)}?`}
+                                      aria-label={t(
+                                        "dialog.createProject.whatIsType",
+                                        { type: humanLabel(decision.type) }
+                                      )}
                                       className="inline-flex items-center opacity-0 transition-opacity duration-150 group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
                                       onClick={(event) =>
                                         event.preventDefault()
@@ -759,7 +769,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                   type="button"
                   variant="ghost"
                 >
-                  ← Back
+                  {t("dialog.createProject.back")}
                 </Button>
 
                 <Button
@@ -774,10 +784,13 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                     <Loader2Icon className="size-3.5 animate-spin" />
                   ) : null}
                   {isMutating
-                    ? "Creating workspace..."
+                    ? t("dialog.createProject.creatingWorkspace")
                     : checkedCount === 0
-                      ? "Select at least one item"
-                      : `Confirm ${checkedCount} in ${nonEmptyTopicCount} topics →`}
+                      ? t("dialog.createProject.selectAtLeastOneButton")
+                      : t("dialog.createProject.confirmSummary", {
+                          checked: checkedCount,
+                          topics: nonEmptyTopicCount,
+                        })}
                 </Button>
               </div>
             )}

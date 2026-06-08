@@ -4,6 +4,7 @@ import { Loader2Icon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "@/components/chat/toast";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const [mode, setMode] = useState<AuthMode>(() => {
     const modeParam = searchParams.get("mode");
     return modeParam === "register" ? "register" : initialMode;
@@ -37,8 +39,7 @@ export function LoginForm({
     if (!configured) {
       toast({
         type: "error",
-        description:
-          "Supabase environment variables are missing. Add the public URL and anon key first.",
+        description: t("dialog.login.supabaseMissingToast"),
       });
       return;
     }
@@ -75,7 +76,7 @@ export function LoginForm({
       if (data.session) {
         toast({
           type: "success",
-          description: "Account created.",
+          description: t("dialog.login.accountCreatedToast"),
         });
         router.push("/");
         router.refresh();
@@ -90,7 +91,7 @@ export function LoginForm({
       if (!signInError) {
         toast({
           type: "success",
-          description: "Account created.",
+          description: t("dialog.login.accountCreatedToast"),
         });
         router.push("/");
         router.refresh();
@@ -99,15 +100,16 @@ export function LoginForm({
 
       toast({
         type: "success",
-        description:
-          "Account created. If email confirmation is enabled in Supabase, confirm the email before signing in.",
+        description: t("dialog.login.accountCreatedConfirmToast"),
       });
       setMode("login");
     } catch (error) {
       toast({
         type: "error",
         description:
-          error instanceof Error ? error.message : "Authentication failed.",
+          error instanceof Error
+            ? error.message
+            : t("dialog.login.authFailedToast"),
       });
     } finally {
       setIsSubmitting(false);
@@ -127,7 +129,7 @@ export function LoginForm({
           onClick={() => setMode("login")}
           type="button"
         >
-          Sign in
+          {t("dialog.login.signIn")}
         </button>
         <button
           className={cn(
@@ -139,14 +141,14 @@ export function LoginForm({
           onClick={() => setMode("register")}
           type="button"
         >
-          Create account
+          {t("dialog.login.createAccount")}
         </button>
       </div>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-2">
           <Label className="font-normal text-muted-foreground" htmlFor="email">
-            Email
+            {t("dialog.login.email")}
           </Label>
           <Input
             autoComplete="email"
@@ -154,7 +156,7 @@ export function LoginForm({
             className="h-10 rounded-lg border-border/50 bg-muted/50 text-sm transition-colors focus:border-foreground/20 focus:bg-muted"
             id="email"
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com"
+            placeholder={t("dialog.login.emailPlaceholder")}
             required
             type="email"
             value={email}
@@ -166,14 +168,14 @@ export function LoginForm({
             className="font-normal text-muted-foreground"
             htmlFor="password"
           >
-            Password
+            {t("dialog.login.password")}
           </Label>
           <Input
             className="h-10 rounded-lg border-border/50 bg-muted/50 text-sm transition-colors focus:border-foreground/20 focus:bg-muted"
             id="password"
             minLength={6}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="At least 6 characters"
+            placeholder={t("dialog.login.passwordPlaceholder")}
             required
             type="password"
             value={password}
@@ -185,7 +187,9 @@ export function LoginForm({
           disabled={isSubmitting || !configured}
           type="submit"
         >
-          {mode === "login" ? "Sign in" : "Create account"}
+          {mode === "login"
+            ? t("dialog.login.signIn")
+            : t("dialog.login.createAccount")}
           {isSubmitting && (
             <Loader2Icon className="absolute right-4 size-4 animate-spin" />
           )}
@@ -194,8 +198,7 @@ export function LoginForm({
 
       {!configured && (
         <p className="text-[13px] text-muted-foreground">
-          Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to
-          enable authentication.
+          {t("dialog.login.supabaseConfigHint")}
         </p>
       )}
     </div>

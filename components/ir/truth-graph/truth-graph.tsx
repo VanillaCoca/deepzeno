@@ -1,6 +1,20 @@
 "use client";
 
-import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { MessageSquarePlusIcon, Share2Icon } from "lucide-react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { Button } from "@/components/ui/button";
 import { fitNodeTitle } from "@/lib/ir/fit-title";
 import type { IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel, truncateIRTitle } from "@/lib/ir/types";
@@ -60,16 +74,28 @@ type LayoutState = {
   chain: ElkGraph | null;
 };
 
+export type TruthGraphMode = "truth" | "all";
+
 export type TruthGraphProps = {
+  childrenByParent: Map<string, IRNode[]>;
+  // Floating Detail+Action card, rendered by the stage and positioned by the
+  // graph as an inset card over the overview canvas (only when a node is
+  // selected). Keeping the slot here lets the graph own both floating cards'
+  // geometry so they stay aligned.
+  detailSlot?: ReactNode;
   edges: TruthGraphFlowEdge["edge"][];
+  mode: TruthGraphMode;
   nodes: IRNode[];
-  onSelect: (nodeId: string) => void;
+  onModeChange: (mode: TruthGraphMode) => void;
+  onSelect: (nodeId: string | null) => void;
+  // Lets the empty state send the user to the conversation to start building.
+  onStartConversation?: () => void;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
 };
 
-const OVERVIEW_DIMS = { width: 168, baseFont: 13, padY: 9 };
-const CHAIN_DIMS = { width: 218, baseFont: 13, padY: 13 };
+const OVERVIEW_DIMS = { width: 236, baseFont: 13, padY: 10, padX: 14 };
+const CHAIN_DIMS = { width: 276, baseFont: 13, padY: 12, padX: 16 };
 const NODE_MAX_LINES = 4;
 const NODE_SHRINK_FONT = 11.5;
 
@@ -81,11 +107,13 @@ function nodeReserveText(node: IRNode) {
 
 function measureNode(
   node: IRNode,
-  dims: { width: number; baseFont: number; padY: number }
+  dims: { width: number; baseFont: number; padY: number; padX: number }
 ) {
   return fitNodeTitle({
     title: node.title,
-    width: dims.width,
+    // Reserve horizontal padding on both sides so left-aligned text never
+    // touches the node edges.
+    width: dims.width - dims.padX * 2,
     baseFont: dims.baseFont,
     reserveText: nodeReserveText(node),
     padY: dims.padY,
@@ -116,16 +144,20 @@ const TOPIC_OPTIONS = {
   "elk.direction": "RIGHT",
   "elk.spacing.nodeNode": "10",
   "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-  "elk.padding": "[top=32,left=12,bottom=12,right=12]",
+  // No topic label is drawn anymore, so no extra top padding is needed.
+  "elk.padding": "[top=8,left=8,bottom=8,right=8]",
 };
 
+// The Chain now lives in the wide, short bottom card, so it flows left → right
+// (foundational premises marked ▷ on the left, the selected node on the right).
+// A horizontal layout fits a landscape card far better than a vertical one.
 const CHAIN_OPTIONS = {
   "elk.algorithm": "layered",
-  "elk.direction": "DOWN",
+  "elk.direction": "RIGHT",
   "elk.edgeRouting": "ORTHOGONAL",
-  "elk.spacing.nodeNode": "30",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "46",
-  "elk.padding": "[top=24,left=20,bottom=24,right=20]",
+  "elk.spacing.nodeNode": "26",
+  "elk.layered.spacing.nodeNodeBetweenLayers": "54",
+  "elk.padding": "[top=20,left=20,bottom=20,right=20]",
 };
 
 function createOverviewGraph(model: TruthGraphModel): ElkGraph {
@@ -135,11 +167,15 @@ function createOverviewGraph(model: TruthGraphModel): ElkGraph {
     children: model.topicGroups.map((group) => ({
       id: topicLayoutId(group.topic.id),
       layoutOptions: TOPIC_OPTIONS,
-      children: group.nodes.map((node) => ({
-        id: node.id,
-        width: OVERVIEW_DIMS.width,
-        height: measureNode(node, OVERVIEW_DIMS).height,
-      })),
+      // Sub-nodes are not shown in the overview (they live in the detail panel
+      // + chain), so we lay out roots only.
+      children: group.nodes
+        .filter((node) => !node.parentId)
+        .map((node) => ({
+          id: node.id,
+          width: OVERVIEW_DIMS.width,
+          height: measureNode(node, OVERVIEW_DIMS).height,
+        })),
     })),
     edges: [],
   };
@@ -197,14 +233,227 @@ function absoluteBoxes(root: ElkChild) {
   return boxes;
 }
 
-function elbowPath(from: NodeBox, to: NodeBox) {
-  const x1 = from.x + from.width / 2;
-  const y1 = from.y + from.height;
-  const x2 = to.x + to.width / 2;
-  const y2 = to.y;
-  const middleY = y1 + Math.max(18, (y2 - y1) / 2);
+// Fit-to-container: measure the available box and return the scale that makes
+// the content fit ENTIRELY without scrolling, capped at 1 so we never blow a
+// small graph up. This is what guarantees the Chain is always fully visible
+// (no pan/zoom needed) however many nodes it has.
+function useFitScale(contentWidth: number, contentHeight: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
 
-  return `M${x1} ${y1} L${x1} ${middleY} L${x2} ${middleY} L${x2} ${y2}`;
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+
+    const update = () => {
+      const { clientWidth, clientHeight } = element;
+      if (!(clientWidth && clientHeight && contentWidth && contentHeight)) {
+        return;
+      }
+      const next = Math.min(
+        1,
+        clientWidth / contentWidth,
+        clientHeight / contentHeight
+      );
+      setScale(next > 0 ? next : 1);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [contentWidth, contentHeight]);
+
+  return { ref, scale };
+}
+
+// Pan + zoom for the overview canvas: drag empty space to pan, wheel / ⌘-wheel
+// (or the on-screen controls) to zoom toward the cursor, with a Fit control.
+const OVERVIEW_ZOOM = { min: 0.25, max: 2.5, step: 1.18 };
+
+type ViewTransform = { x: number; y: number; scale: number };
+
+function clampScale(value: number) {
+  return Math.min(OVERVIEW_ZOOM.max, Math.max(OVERVIEW_ZOOM.min, value));
+}
+
+function useOverviewPanZoom(
+  contentWidth: number,
+  contentHeight: number,
+  onBackgroundClick: () => void
+) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState<ViewTransform>({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
+  const drag = useRef<{
+    ox: number;
+    oy: number;
+    px: number;
+    py: number;
+    moved: boolean;
+  } | null>(null);
+
+  // Scale + center the whole graph so it fits the viewport (capped at 1x).
+  const fitToView = useCallback(() => {
+    const element = containerRef.current;
+    if (!(element && contentWidth && contentHeight)) {
+      return;
+    }
+    const pad = 28;
+    const scale = clampScale(
+      Math.min(
+        1,
+        (element.clientWidth - pad * 2) / contentWidth,
+        (element.clientHeight - pad * 2) / contentHeight
+      )
+    );
+    setTransform({
+      scale,
+      x: (element.clientWidth - contentWidth * scale) / 2,
+      y: (element.clientHeight - contentHeight * scale) / 2,
+    });
+  }, [contentWidth, contentHeight]);
+
+  // Re-fit whenever the content size changes (first layout, Truth/All toggle).
+  useEffect(() => {
+    fitToView();
+  }, [fitToView]);
+
+  const zoomAt = useCallback((factor: number, px: number, py: number) => {
+    setTransform((current) => {
+      const scale = clampScale(current.scale * factor);
+      const ratio = scale / current.scale;
+      return {
+        scale,
+        x: px - (px - current.x) * ratio,
+        y: py - (py - current.y) * ratio,
+      };
+    });
+  }, []);
+
+  // Native non-passive wheel listener so we can preventDefault the page scroll.
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      zoomAt(
+        event.deltaY < 0 ? OVERVIEW_ZOOM.step : 1 / OVERVIEW_ZOOM.step,
+        event.clientX - rect.left,
+        event.clientY - rect.top
+      );
+    };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, [zoomAt]);
+
+  const onPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    drag.current = {
+      ox: transform.x,
+      oy: transform.y,
+      px: event.clientX,
+      py: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
+    const state = drag.current;
+    if (!state) {
+      return;
+    }
+    const dx = event.clientX - state.px;
+    const dy = event.clientY - state.py;
+    if (!state.moved && Math.hypot(dx, dy) > 3) {
+      state.moved = true;
+    }
+    if (state.moved) {
+      setTransform((current) => ({
+        ...current,
+        x: state.ox + dx,
+        y: state.oy + dy,
+      }));
+    }
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
+    const state = drag.current;
+    drag.current = null;
+    // A press with no drag is a plain click on empty canvas → deselect.
+    if (state && !state.moved) {
+      onBackgroundClick();
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const zoomByButton = useCallback(
+    (factor: number) => {
+      const element = containerRef.current;
+      if (!element) {
+        return;
+      }
+      zoomAt(factor, element.clientWidth / 2, element.clientHeight / 2);
+    },
+    [zoomAt]
+  );
+
+  return {
+    containerRef,
+    transform,
+    panHandlers: { onPointerDown, onPointerMove, onPointerUp },
+    fit: fitToView,
+    zoomIn: () => zoomByButton(OVERVIEW_ZOOM.step),
+    zoomOut: () => zoomByButton(1 / OVERVIEW_ZOOM.step),
+  };
+}
+
+// Orthogonal connector that always stops a gap OUTSIDE the target node and
+// enters from whichever side faces the source, so the line never crosses the
+// node body / text (overview nodes can sit in any relative position).
+const EDGE_GAP = 7;
+
+function elbowPath(from: NodeBox, to: NodeBox) {
+  const fromCx = from.x + from.width / 2;
+  const fromCy = from.y + from.height / 2;
+  const toCx = to.x + to.width / 2;
+  const toCy = to.y + to.height / 2;
+
+  // Target clearly below the source → connect bottom → top.
+  if (to.y >= from.y + from.height) {
+    const y1 = from.y + from.height;
+    const y2 = to.y - EDGE_GAP;
+    const midY = y1 + Math.max(14, (y2 - y1) / 2);
+    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
+  }
+
+  // Target clearly above the source → connect top → bottom.
+  if (to.y + to.height <= from.y) {
+    const y1 = from.y;
+    const y2 = to.y + to.height + EDGE_GAP;
+    const midY = y1 + Math.min(-14, (y2 - y1) / 2);
+    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
+  }
+
+  // Otherwise they overlap vertically (side by side) → connect side → side.
+  const goRight = toCx >= fromCx;
+  const x1 = goRight ? from.x + from.width : from.x;
+  const x2 = goRight ? to.x - EDGE_GAP : to.x + to.width + EDGE_GAP;
+  const midX = (x1 + x2) / 2;
+  return `M${x1} ${fromCy} L${midX} ${fromCy} L${midX} ${toCy} L${x2} ${toCy}`;
 }
 
 function chainEdgePath(edge: ElkEdge) {
@@ -220,11 +469,27 @@ function chainEdgePath(edge: ElkEdge) {
     section.endPoint,
   ];
 
+  // Pull the final point back by EDGE_GAP so the solid arrowhead sits in the
+  // gap just below the source / above the target, never overshooting into it.
+  const last = points.at(-1);
+  const prev = points.at(-2);
+  if (last && prev) {
+    const dx = last.x - prev.x;
+    const dy = last.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    points[points.length - 1] = {
+      x: last.x - (dx / len) * EDGE_GAP,
+      y: last.y - (dy / len) * EDGE_GAP,
+    };
+  }
+
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`)
     .join(" ");
 }
 
+// Label sits at the true geometric midpoint between the two node anchors — i.e.
+// centered in the gap between nodes — so it reads consistently on every edge.
 function chainEdgeLabelPoint(edge: ElkEdge) {
   const section = edge.sections?.[0];
 
@@ -232,16 +497,9 @@ function chainEdgeLabelPoint(edge: ElkEdge) {
     return null;
   }
 
-  const points = [
-    section.startPoint,
-    ...(section.bendPoints ?? []),
-    section.endPoint,
-  ];
-  const middle = points[Math.floor(points.length / 2)];
-
   return {
-    x: middle.x,
-    y: middle.y,
+    x: (section.startPoint.x + section.endPoint.x) / 2,
+    y: (section.startPoint.y + section.endPoint.y) / 2,
   };
 }
 
@@ -254,8 +512,15 @@ function nodeTone({
   isSelected: boolean;
   node: IRNode;
 }) {
+  // Borderless filled "chips" (Claude-style): identity comes from a soft
+  // background fill + text color, not a colored border. `stroke` is only used
+  // for the selected ring + focus outline. Color-blind redundancy (rules §4.7)
+  // is carried by non-color cues: strike-through (rejection), the "?" suffix
+  // (open question), and the ◇/○ stage glyphs (candidate/idea) added in GraphNode.
   if (node.status === "superseded" || node.kind === "rejection") {
     return {
+      fill: "var(--z-rejected-soft)",
+      fillSel: "var(--z-rejected-fill-sel)",
       stroke: "var(--z-rejected)",
       text: "var(--z-rejected)",
       decoration: "line-through",
@@ -264,14 +529,38 @@ function nodeTone({
 
   if (node.kind === "open_question") {
     return {
+      fill: "var(--z-attention-soft)",
+      fillSel: "var(--z-attention-fill-sel)",
       stroke: "var(--z-attention)",
       text: "var(--z-attention-text)",
       decoration: "none",
     };
   }
 
+  if (node.status === "idea") {
+    return {
+      fill: "var(--z-node-fill)",
+      fillSel: "var(--z-node-fill-sel)",
+      stroke: "var(--z-text-3)",
+      text: "var(--z-text-3)",
+      decoration: "none",
+    };
+  }
+
+  if (node.status === "pending") {
+    return {
+      fill: "var(--z-candidate-soft)",
+      fillSel: "var(--z-candidate-fill-sel)",
+      stroke: "var(--z-candidate)",
+      text: "var(--z-candidate-text)",
+      decoration: "none",
+    };
+  }
+
   if (isOnChain || isSelected) {
     return {
+      fill: "var(--z-confirmed-soft)",
+      fillSel: "var(--z-confirmed-fill-sel)",
       stroke: "var(--z-confirmed)",
       text: "var(--z-confirmed)",
       decoration: "none",
@@ -280,6 +569,8 @@ function nodeTone({
 
   if (node.kind === "constraint" || node.kind === "hypothesis") {
     return {
+      fill: "var(--z-node-fill)",
+      fillSel: "var(--z-node-fill-sel)",
       stroke: "var(--z-fact-stroke)",
       text: "var(--z-text-2)",
       decoration: "none",
@@ -287,18 +578,16 @@ function nodeTone({
   }
 
   return {
+    fill: "var(--z-node-fill)",
     stroke: "var(--z-node-stroke)",
     text: "var(--z-text)",
     decoration: "none",
   };
 }
 
-function isDiamond(node: IRNode) {
-  return node.kind === "open_question";
-}
-
 function GraphNode({
   box,
+  subNodeCount = 0,
   hasSelection,
   isOnChain,
   isRoot,
@@ -307,6 +596,7 @@ function GraphNode({
   onSelect,
 }: {
   box: NodeBox;
+  subNodeCount?: number;
   hasSelection: boolean;
   isOnChain: boolean;
   isRoot: boolean;
@@ -319,17 +609,28 @@ function GraphNode({
     ? "var(--z-stroke-w-target)"
     : "var(--z-stroke-w)";
   const dims = box.width >= CHAIN_DIMS.width ? CHAIN_DIMS : OVERVIEW_DIMS;
-  const { lines, fontPx, lineHeight } = measureNode(node, dims);
-  const displayPrefix = isRoot ? "▷ " : isSelected ? "✓ " : "";
+  const measured = measureNode(node, dims);
+  const { lines, fontPx, lineHeight } = measured;
+  // Title keeps its original measured height; an expanded box is taller and the
+  // children render in the reserved space below the title.
+  const titleHeight = measured.height;
+  // Stage glyph gives candidates/ideas a non-color cue (color-blind safety).
+  const stageGlyph =
+    node.status === "pending" ? "◇ " : node.status === "idea" ? "○ " : "";
+  const displayPrefix = isRoot ? "▷ " : isSelected ? "✓ " : stageGlyph;
   const displaySuffix = node.kind === "open_question" ? " ?" : "";
   const renderLines = lines.map(
     (line, index) =>
       `${index === 0 ? displayPrefix : ""}${line}${index === lines.length - 1 ? displaySuffix : ""}`
   );
-  const cx = box.x + box.width / 2;
-  const blockTop = box.y + (box.height - lines.length * lineHeight) / 2;
-  const anchorLabel = isRoot ? "from here" : null;
-  const selectNode = () => onSelect(node.id);
+  const leftX = box.x + dims.padX;
+  const blockTop = box.y + (titleHeight - lines.length * lineHeight) / 2;
+  // Stop propagation so selecting a node never bubbles to the canvas-wide
+  // deselect handler on the scroll container.
+  function handleClick(event: MouseEvent<SVGGElement>) {
+    event.stopPropagation();
+    onSelect(node.id);
+  }
 
   function handleKeyDown(event: KeyboardEvent<SVGGElement>) {
     if (event.key !== "Enter" && event.key !== " ") {
@@ -337,7 +638,8 @@ function GraphNode({
     }
 
     event.preventDefault();
-    selectNode();
+    event.stopPropagation();
+    onSelect(node.id);
   }
 
   return (
@@ -346,7 +648,7 @@ function GraphNode({
       aria-label={node.title}
       className="cursor-pointer outline-none [&:focus-visible>:first-child]:[stroke:var(--z-confirmed)] focus-visible:[outline:none]"
       data-testid={`truth-graph-node-${node.id}`}
-      onClick={selectNode}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       opacity={
         !hasSelection || isOnChain || isSelected
@@ -357,62 +659,68 @@ function GraphNode({
       style={{ transition: "opacity var(--z-transition)" }}
       tabIndex={0}
     >
-      {isDiamond(node) ? (
-        <polygon
-          fill="var(--z-node-fill)"
-          points={`${box.x + box.width / 2},${box.y} ${box.x + box.width},${box.y + box.height / 2} ${box.x + box.width / 2},${box.y + box.height} ${box.x},${box.y + box.height / 2}`}
-          stroke={tone.stroke}
-          strokeWidth={strokeWidth}
-        />
-      ) : (
-        <rect
-          fill="var(--z-node-fill)"
-          height={box.height}
-          rx={
-            isRoot
-              ? "var(--z-start-radius)"
-              : isSelected
-                ? "var(--z-node-radius-target)"
-                : "var(--z-node-radius)"
-          }
-          stroke={tone.stroke}
-          strokeWidth={strokeWidth}
-          width={box.width}
-          x={box.x}
-          y={box.y}
-        />
-      )}
+      <rect
+        // Selection is shown by a stronger fill (no border); `stroke` stays
+        // "none" except for the keyboard focus ring (via focus-visible CSS).
+        fill={isSelected ? tone.fillSel : tone.fill}
+        height={titleHeight}
+        rx={
+          isRoot
+            ? "var(--z-start-radius)"
+            : isSelected
+              ? "var(--z-node-radius-target)"
+              : "var(--z-node-radius)"
+        }
+        stroke="none"
+        strokeWidth={strokeWidth}
+        width={box.width}
+        x={box.x}
+        y={box.y}
+      />
       <text
         dominantBaseline="central"
         fill={tone.text}
         fontFamily="var(--z-font-sans)"
         fontSize={fontPx}
         fontWeight={isSelected ? "600" : "500"}
-        textAnchor="middle"
+        textAnchor="start"
         textDecoration={tone.decoration}
       >
         {renderLines.map((line, index) => (
           <tspan
             // biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given title
             key={index}
-            x={cx}
+            x={leftX}
             y={blockTop + lineHeight / 2 + index * lineHeight}
           >
             {line}
           </tspan>
         ))}
       </text>
-      {anchorLabel ? (
-        <text
-          fill="var(--z-text-3)"
-          fontFamily="var(--z-font-sans)"
-          fontSize="var(--z-font-anchor)"
-          textAnchor="middle"
-          x={box.x + box.width / 2}
-          y={box.y - 6}
-        >
-          {anchorLabel}
-        </text>
+      {subNodeCount > 0 ? (
+        // Passive badge: signals "has N sub-nodes"; the sub-nodes themselves
+        // live in the detail panel + chain when this node is selected.
+        <g>
+          <rect
+            fill="var(--z-node-fill-sel)"
+            height="16"
+            rx="8"
+            width="24"
+            x={box.x + box.width - 30}
+            y={box.y + (titleHeight - 16) / 2}
+          />
+          <text
+            dominantBaseline="central"
+            fill="var(--z-text-2)"
+            fontFamily="var(--z-font-sans)"
+            fontSize="var(--z-font-anchor)"
+            textAnchor="middle"
+            x={box.x + box.width - 18}
+            y={box.y + titleHeight / 2}
+          >
+            {subNodeCount}
+          </text>
+        </g>
       ) : null}
     </g>
   );
@@ -469,12 +777,18 @@ function CompactTruthList({
 }
 
 export function TruthGraph({
+  childrenByParent,
+  detailSlot,
   edges,
+  mode,
   nodes,
+  onModeChange,
   onSelect,
+  onStartConversation,
   selectedNodeId,
   topics,
 }: TruthGraphProps) {
+  const { t } = useLocale();
   const model = useMemo(
     () => buildTruthGraphModel({ edges, nodes, topics }),
     [edges, nodes, topics]
@@ -483,10 +797,32 @@ export function TruthGraph({
     selectedNodeId && model.nodeById.has(selectedNodeId)
       ? selectedNodeId
       : null;
-  const chainNodeIds = useMemo(
-    () => getUpstreamNodeIds(model, activeSelectedNodeId),
-    [activeSelectedNodeId, model]
-  );
+  const chainNodeIds = useMemo(() => {
+    const upstream = getUpstreamNodeIds(model, activeSelectedNodeId);
+    if (!activeSelectedNodeId) {
+      return upstream;
+    }
+    const subNodes = childrenByParent.get(activeSelectedNodeId) ?? [];
+    if (subNodes.length === 0) {
+      return upstream;
+    }
+    // Include the selected node's sub-nodes and their 1-hop relations, so the
+    // Chain shows how the sub-nodes connect to the rest of the graph.
+    const set = new Set(upstream);
+    const subIds = new Set(subNodes.map((sub) => sub.id));
+    for (const id of subIds) {
+      set.add(id);
+    }
+    for (const edge of edges) {
+      if (subIds.has(edge.fromNode) && model.nodeById.has(edge.toNode)) {
+        set.add(edge.toNode);
+      }
+      if (subIds.has(edge.toNode) && model.nodeById.has(edge.fromNode)) {
+        set.add(edge.fromNode);
+      }
+    }
+    return set;
+  }, [activeSelectedNodeId, model, childrenByParent, edges]);
   const chainRootIds = useMemo(
     () => new Set(getChainRootIds(model, chainNodeIds)),
     [chainNodeIds, model]
@@ -536,11 +872,47 @@ export function TruthGraph({
     };
   }, [chainNodeIds, model, nodes.length]);
 
+  // Content sizes feed the SVG viewBoxes, the chain fit-scale, and the overview
+  // pan/zoom. These hooks run unconditionally (Rules of Hooks) — before the
+  // early returns below.
+  const chainWidth = Math.max(1, layout.chain?.width ?? 300);
+  const chainHeight = Math.max(1, layout.chain?.height ?? 260);
+  const chainFit = useFitScale(chainWidth, chainHeight);
+  const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
+  const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
+  const overviewPanZoom = useOverviewPanZoom(
+    overviewWidth,
+    overviewHeight,
+    useCallback(() => onSelect(null), [onSelect])
+  );
+
   if (nodes.length === 0) {
+    // Empty state — new users land here first, so explain what this canvas is
+    // for and give a clear next step (industry-standard empty-state pattern:
+    // icon → title → one-line explanation → primary action).
     return (
-      <p className="px-3 py-4 text-xs text-[var(--ir-text-tertiary)]">
-        No truth nodes yet.
-      </p>
+      <div className="flex h-full min-h-[360px] flex-col items-center justify-center px-6 text-center">
+        <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-[var(--z-node-fill)] text-[var(--z-text-3)]">
+          <Share2Icon className="size-6" />
+        </div>
+        <h2 className="font-semibold text-[15px] text-[var(--z-text)]">
+          {t("truth.emptyTitle")}
+        </h2>
+        <p className="mt-2 max-w-xs text-sm leading-[1.6] text-[var(--z-text-3)]">
+          {t("truth.emptyBody")}
+        </p>
+        {onStartConversation ? (
+          <Button
+            className="mt-5"
+            onClick={onStartConversation}
+            size="sm"
+            variant="secondary"
+          >
+            <MessageSquarePlusIcon className="size-4" />
+            {t("truth.emptyCta")}
+          </Button>
+        ) : null}
+      </div>
     );
   }
 
@@ -561,16 +933,26 @@ export function TruthGraph({
     ? absoluteBoxes(layout.chain)
     : new Map<string, NodeBox>();
   const selectedChainEdges = getEdgesWithinNodeSet(model, chainNodeIds);
-  const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
-  const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
-  const chainWidth = Math.max(1, layout.chain?.width ?? 300);
-  const chainHeight = Math.max(1, layout.chain?.height ?? 260);
 
   return (
+    // The overview is the base canvas. The Chain and Detail panels float ABOVE
+    // it as inset rounded cards (only when a node is selected), so the canvas
+    // stays free for browsing every IR when nothing is selected.
+    // Detail is the tall right column (portrait → readable text); Chain is the
+    // wide bottom strip (landscape → fits a horizontal reasoning flow).
+    // `--z-detail-w` / `--z-chain-h` size them and let the Chain stop just
+    // before the Detail card.
     <div
-      className="grid min-h-[360px] grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] overflow-hidden border-y border-[var(--z-topic-border)]"
+      className="relative h-full min-h-[360px] border-y border-[var(--z-topic-border)]"
       data-testid="truth-graph"
-      style={{ color: "var(--z-text)", fontFamily: "var(--z-font-sans)" }}
+      style={
+        {
+          color: "var(--z-text)",
+          fontFamily: "var(--z-font-sans)",
+          "--z-detail-w": "clamp(320px, 28%, 420px)",
+          "--z-chain-h": "clamp(190px, 32%, 300px)",
+        } as CSSProperties
+      }
     >
       <div className="sr-only" data-testid="truth-graph-text-index">
         {nodes.map((node) => (
@@ -578,74 +960,114 @@ export function TruthGraph({
         ))}
       </div>
       <section
-        className="min-w-0 border-r border-[var(--z-topic-border)] bg-[var(--z-bg)]"
+        className="flex h-full flex-col bg-[var(--z-bg)]"
         data-testid="truth-graph-overview"
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
-          <span>Overview</span>
-          <span className="normal-case">{nodes.length} truths</span>
-        </div>
-        <div className="flex justify-center overflow-auto">
-          <div className="min-w-max">
-            <svg
-              aria-label="Truth graph overview grouped by topic"
-              height={overviewHeight}
-              role="img"
-              viewBox={`0 0 ${overviewWidth} ${overviewHeight}`}
-              width={overviewWidth}
-            >
-              <defs>
-                <marker
-                  id="z-truth-overview-arrow"
-                  markerHeight="7"
-                  markerWidth="7"
-                  orient="auto-start-reverse"
-                  refX="8"
-                  refY="5"
-                  viewBox="0 0 10 10"
+          <span>{t("graph.overview")}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-md border border-[var(--z-topic-border)] p-0.5 normal-case">
+              {(["truth", "all"] as const).map((scope) => (
+                <button
+                  aria-label={
+                    scope === "truth"
+                      ? t("graph.showTruthsOnly")
+                      : t("graph.showAllStages")
+                  }
+                  aria-pressed={mode === scope}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                    mode === scope
+                      ? "bg-[var(--z-node-fill)] text-[var(--z-text)]"
+                      : "text-[var(--z-text-3)] hover:text-[var(--z-text-2)]"
+                  )}
+                  key={scope}
+                  onClick={() => onModeChange(scope)}
+                  type="button"
                 >
-                  <path
-                    d="M2 1L8 5L2 9"
-                    fill="none"
-                    stroke="var(--z-confirmed)"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="var(--z-line-w-strong)"
-                  />
-                </marker>
-              </defs>
-              {model.topicGroups.map((group) => {
-                const box = overviewBoxes.get(topicLayoutId(group.topic.id));
-
-                if (!box) {
-                  return null;
-                }
-
-                return (
-                  <g key={group.topic.id ?? "unassigned"}>
-                    <rect
-                      fill="none"
-                      height={box.height}
-                      rx="var(--z-node-radius-target)"
-                      stroke="var(--z-topic-border)"
-                      strokeWidth="var(--z-stroke-w-fact)"
-                      width={box.width}
-                      x={box.x}
-                      y={box.y}
-                    />
-                    <text
-                      fill="var(--z-text-2)"
-                      fontFamily="var(--z-font-sans)"
-                      fontSize="var(--z-font-topic)"
-                      fontWeight="600"
-                      x={box.x + 12}
-                      y={box.y + 18}
-                    >
-                      {truncateIRTitle(group.topic.label, 28)}
-                    </text>
-                  </g>
-                );
-              })}
+                  {scope === "truth" ? t("graph.truth") : t("graph.all")}
+                </button>
+              ))}
+            </div>
+            <span className="normal-case">
+              {nodes.length}{" "}
+              {mode === "all" ? t("graph.nodes") : t("graph.truths")}
+            </span>
+          </div>
+        </div>
+        {mode === "all" ? (
+          <div className="flex items-center gap-3 px-3 pb-1.5 text-[10px] text-[var(--z-text-3)]">
+            {[
+              {
+                color: "var(--z-confirmed)",
+                key: "truth",
+                label: t("graph.truth"),
+              },
+              {
+                color: "var(--z-candidate)",
+                key: "candidate",
+                label: t("graph.candidate"),
+              },
+              { color: "var(--z-text-3)", key: "idea", label: t("graph.idea") },
+            ].map((item) => (
+              <span className="flex items-center gap-1" key={item.key}>
+                <span
+                  className="size-2 rounded-[2px]"
+                  style={{ backgroundColor: item.color }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {/* Pan + zoom canvas: the SVG fills the box; a transparent surface rect
+            captures drag-to-pan and click-to-deselect; the content lives inside a
+            transformed <g>. Node <g>s sit above the surface, so node clicks select
+            and never start a pan. */}
+        <div
+          className="relative min-h-0 flex-1 overflow-hidden"
+          ref={overviewPanZoom.containerRef}
+          style={{ touchAction: "none" }}
+        >
+          <svg
+            aria-label={t("graph.overviewAria")}
+            className="h-full w-full"
+            role="img"
+          >
+            <defs>
+              <marker
+                id="z-truth-overview-arrow"
+                markerHeight="7"
+                markerWidth="7"
+                orient="auto-start-reverse"
+                refX="8"
+                refY="5"
+                viewBox="0 0 10 10"
+              >
+                <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
+              </marker>
+            </defs>
+            {/* drag-to-pan / click-to-deselect surface */}
+            <rect
+              className="cursor-grab active:cursor-grabbing"
+              fill="transparent"
+              height="100%"
+              onPointerDown={overviewPanZoom.panHandlers.onPointerDown}
+              onPointerMove={overviewPanZoom.panHandlers.onPointerMove}
+              onPointerUp={overviewPanZoom.panHandlers.onPointerUp}
+              width="100%"
+              x={0}
+              y={0}
+            />
+            <g
+              transform={`translate(${overviewPanZoom.transform.x} ${overviewPanZoom.transform.y}) scale(${overviewPanZoom.transform.scale})`}
+            >
+              {/* Topic container boxes intentionally NOT drawn: the overview
+                  always shows a single topic at a time (the one selected in the
+                  sidebar), so a labeled box around every node only repeated the
+                  sidebar selection and added a redundant second background. The
+                  IR chips sit directly on the canvas; relationships are shown by
+                  the chain + overview edges when a node is selected. */}
               {activeSelectedNodeId
                 ? selectedChainEdges.map((edge) => {
                     const parentBox = overviewBoxes.get(edge.parentId);
@@ -689,36 +1111,79 @@ export function TruthGraph({
                     key={node.id}
                     node={node}
                     onSelect={onSelect}
+                    subNodeCount={childrenByParent.get(node.id)?.length ?? 0}
                   />
                 );
               })}
-            </svg>
+            </g>
+          </svg>
+          {/* Zoom controls — top-left stays clear of the Detail (right) and
+              Chain (bottom) cards. */}
+          <div className="absolute top-2 left-2 z-20 flex items-center gap-0.5 rounded-lg border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] p-0.5">
+            <button
+              aria-label={t("graph.zoomOut")}
+              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.zoomOut}
+              type="button"
+            >
+              −
+            </button>
+            <button
+              aria-label={t("graph.fit")}
+              className="flex size-6 items-center justify-center rounded text-[13px] leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.fit}
+              type="button"
+            >
+              ⤢
+            </button>
+            <button
+              aria-label={t("graph.zoomIn")}
+              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
+              onClick={overviewPanZoom.zoomIn}
+              type="button"
+            >
+              +
+            </button>
           </div>
         </div>
       </section>
 
-      <section
-        className={cn(
-          "min-w-0 bg-[var(--z-node-fill)]",
-          !activeSelectedNodeId && "flex flex-col"
-        )}
-        data-testid="truth-graph-chain"
-      >
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
-          <span>Chain</span>
-          {activeSelectedNodeId ? (
-            <span className="normal-case">{chainNodeIds.size} steps</span>
-          ) : null}
-        </div>
-        {activeSelectedNodeId && layout.chain ? (
-          <div className="flex justify-center overflow-auto">
-            <div className="min-w-max">
+      {activeSelectedNodeId && layout.chain ? (
+        // Chain = the wide bottom card. Stretches from the left inset to just
+        // before the Detail card on the right.
+        <aside
+          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex h-[var(--z-chain-h)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          data-testid="truth-graph-chain"
+          style={{
+            right:
+              "calc(var(--z-detail-w) + var(--z-card-inset) + var(--z-card-inset))",
+          }}
+        >
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
+            <span>{t("graph.chain")}</span>
+            <span className="normal-case">
+              {chainNodeIds.size} {t("graph.steps")}
+            </span>
+          </div>
+          {/* Fit-scale wrapper: the SVG is scaled to fit this box exactly, so
+              the whole chain is always visible without panning/zooming. */}
+          <div
+            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+            ref={chainFit.ref}
+          >
+            <div
+              style={{
+                width: chainWidth * chainFit.scale,
+                height: chainHeight * chainFit.scale,
+              }}
+            >
               <svg
-                aria-label="Selected truth upstream chain"
-                height={chainHeight}
+                aria-label={t("graph.chainAria")}
+                height={chainHeight * chainFit.scale}
+                preserveAspectRatio="xMidYMid meet"
                 role="img"
                 viewBox={`0 0 ${chainWidth} ${chainHeight}`}
-                width={chainWidth}
+                width={chainWidth * chainFit.scale}
               >
                 <defs>
                   <marker
@@ -730,14 +1195,7 @@ export function TruthGraph({
                     refY="5"
                     viewBox="0 0 10 10"
                   >
-                    <path
-                      d="M2 1L8 5L2 9"
-                      fill="none"
-                      stroke="var(--z-confirmed)"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="var(--z-line-w-strong)"
-                    />
+                    <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                   </marker>
                 </defs>
                 {layout.chain.edges?.map((edge) => {
@@ -761,8 +1219,8 @@ export function TruthGraph({
                           fontFamily="var(--z-font-sans)"
                           fontSize="var(--z-font-edge)"
                           fontWeight="500"
-                          textAnchor="middle"
-                          x={labelPoint.x}
+                          textAnchor="start"
+                          x={labelPoint.x + 8}
                           y={labelPoint.y}
                         >
                           {CHAIN_EDGE_LABEL}
@@ -795,12 +1253,19 @@ export function TruthGraph({
               </svg>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-1 items-center px-4 py-8 text-sm leading-[1.6] text-[var(--z-text-3)]">
-            Select a node in the overview to see the upstream reasoning chain.
-          </div>
-        )}
-      </section>
+        </aside>
+      ) : null}
+
+      {activeSelectedNodeId && detailSlot ? (
+        // Detail = the tall right card (portrait → comfortable reading measure).
+        // Spans the full canvas height on the right side.
+        <div
+          className="absolute top-[var(--z-card-inset)] right-[var(--z-card-inset)] bottom-[var(--z-card-inset)] z-10 flex w-[var(--z-detail-w)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          data-testid="truth-graph-detail-card"
+        >
+          {detailSlot}
+        </div>
+      ) : null}
     </div>
   );
 }

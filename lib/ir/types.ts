@@ -43,6 +43,7 @@ export type IRNode = {
   id: string;
   projectId: string;
   topicId: string | null;
+  parentId: string | null;
   kind: IRKind;
   subtype: IRPlanSubtype | null;
   status: IRStatus;

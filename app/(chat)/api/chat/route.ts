@@ -12,6 +12,7 @@ import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { routeAutoModel } from "@/lib/ai/model-policy";
 import {
   getActiveModels,
   getCapabilities,
@@ -25,6 +26,7 @@ import { getWeather } from "@/lib/ai/tools/get-weather";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
+import { prepareCompactedContext } from "@/lib/context/compaction";
 import { assembleContext } from "@/lib/context-assembly";
 import {
   createStreamId,
@@ -39,6 +41,7 @@ import {
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
+import { localePromptName } from "@/lib/i18n/dictionaries";
 import { persistInlineIRMarkersForMessages } from "@/lib/ir/inline-markers";
 import { runIRSweep } from "@/lib/ir/sweep";
 import { buildDecisionContextBlock } from "@/lib/prompting";
@@ -71,6 +74,18 @@ function getMessageModelOverride(text: string) {
   const activeModels = getActiveModels(process.env);
 
   return activeModels.find((model) => model.id === mentionedModel)?.id ?? null;
+}
+
+function messageHasImage(message?: ChatMessage): boolean {
+  return Boolean(
+    message?.parts?.some((part) => {
+      if (part.type !== "file") {
+        return false;
+      }
+      const mediaType = (part as { mediaType?: unknown }).mediaType;
+      return typeof mediaType === "string" && mediaType.startsWith("image/");
+    })
+  );
 }
 
 function getStreamContext() {
@@ -115,6 +130,8 @@ export async function POST(request: Request) {
       conversationId,
       restoredContextMessageIds = [],
       injectedDecisionContext,
+      locale,
+      qualityPreference,
     } = requestBody;
     console.info("Chat API request received", {
       selectedChatModel,
@@ -170,10 +187,23 @@ export async function POST(request: Request) {
     const messageModelOverride = message?.role
       ? getMessageModelOverride(getTextFromMessage(message))
       : null;
-    const resolvedModel = resolveChatModelSelection(
+    const selectedModelId =
       messageModelOverride ??
-        workspaceSelection.topic.defaultModelId ??
-        selectedChatModel,
+      workspaceSelection.topic.defaultModelId ??
+      selectedChatModel;
+    const effectiveModelId =
+      selectedModelId === "auto"
+        ? routeAutoModel(
+            {
+              text: message ? getTextFromMessage(message) : "",
+              hasImage: messageHasImage(message as ChatMessage | undefined),
+            },
+            qualityPreference ?? "balanced",
+            process.env
+          )
+        : selectedModelId;
+    const resolvedModel = resolveChatModelSelection(
+      effectiveModelId,
       process.env
     );
 
@@ -285,7 +315,6 @@ export async function POST(request: Request) {
     const isReasoningModel = capabilities?.reasoning === true;
     const supportsTools = capabilities?.tools === true;
 
-    const modelMessages = await convertToModelMessages(uiMessages);
     const [decisionContext, restoredWorkspaceMessages] = await Promise.all([
       shouldInjectWorkspaceContext
         ? assembleContext(topicId, projectId)
@@ -310,21 +339,53 @@ export async function POST(request: Request) {
       ? `<discussion_context>\n${injectedDecisionContext.trim()}\n</discussion_context>`
       : "";
 
+    // System prompt WITHOUT the conversation summary (used for token budgeting).
+    const baseSystemText = [
+      systemPrompt({
+        requestHints,
+        supportsTools,
+        languageName: locale ? localePromptName[locale] : undefined,
+      }),
+      shouldInjectWorkspaceContext
+        ? buildDecisionContextBlock(decisionContext)
+        : "",
+      restoredContextBlock,
+      injectedDecisionContextBlock,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Automatic conversation compaction: fold older turns into a rolling summary
+    // so a long conversation never overflows the model's context window. The
+    // tool-approval continuation flow is left untouched (in-flight tool calls).
+    let conversationSummaryBlock = "";
+    let payloadUiMessages = uiMessages;
+    if (!isToolApprovalFlow) {
+      const compaction = await prepareCompactedContext({
+        conversationId,
+        historyMessages: messagesFromDb,
+        currentMessage: message as ChatMessage | undefined,
+        baseSystemText,
+        modelId: chatModel,
+        provider: resolvedModel.provider,
+      });
+      conversationSummaryBlock = compaction.summaryBlock;
+      payloadUiMessages = uiMessages.filter((uiMessage) =>
+        compaction.keepMessageIds.has(uiMessage.id)
+      );
+    }
+
+    const fullSystemText = [baseSystemText, conversationSummaryBlock]
+      .filter(Boolean)
+      .join("\n\n");
+    const modelMessages = await convertToModelMessages(payloadUiMessages);
+
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
           model: getLanguageModel(chatModel),
-          system: [
-            systemPrompt({ requestHints, supportsTools }),
-            shouldInjectWorkspaceContext
-              ? buildDecisionContextBlock(decisionContext)
-              : "",
-            restoredContextBlock,
-            injectedDecisionContextBlock,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
+          system: fullSystemText,
           messages: modelMessages,
           stopWhen: stepCountIs(5),
           providerOptions: {
@@ -372,6 +433,8 @@ export async function POST(request: Request) {
             functionId: "stream-text",
           },
         });
+
+        dataStream.write({ type: "data-model", data: chatModel });
 
         dataStream.merge(
           result.toUIMessageStream({ sendReasoning: isReasoningModel })

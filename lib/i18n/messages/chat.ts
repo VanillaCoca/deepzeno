@@ -1,0 +1,55 @@
+type LocaleMessages = Record<"en" | "zh" | "fr", Record<string, string>>;
+
+export const chatMessages: LocaleMessages = {
+  en: {
+    "chat.loadingWorkspace": "Loading workspace...",
+    "chat.editMessage": "Edit your message...",
+    "chat.askAnything": "Ask anything...",
+    "chat.searchModels": "Search models...",
+    "chat.sandboxNextMessage": "Your next message will include {title}",
+    "chat.sandboxNextMessageHint":
+      "This node's structured content will be injected as context for the model.",
+    "chat.compactedDivider": "Earlier conversation summarized",
+    "chat.quality": "Response quality",
+    "chat.qualityEconomy": "Economy",
+    "chat.qualityBalanced": "Balanced",
+    "chat.qualityBest": "Best",
+    "chat.autoModel": "Auto",
+    "chat.autoModelHint": "Picks a model per message",
+    "chat.answeredVia": "via {model}",
+  },
+  zh: {
+    "chat.loadingWorkspace": "正在加载工作台…",
+    "chat.editMessage": "编辑你的消息…",
+    "chat.askAnything": "问点什么…",
+    "chat.searchModels": "搜索模型…",
+    "chat.sandboxNextMessage": "下一条消息将包含 {title}",
+    "chat.sandboxNextMessageHint":
+      "这条节点的结构化内容会作为上下文注入给模型。",
+    "chat.compactedDivider": "已折叠并总结早期对话",
+    "chat.quality": "回复质量",
+    "chat.qualityEconomy": "经济",
+    "chat.qualityBalanced": "均衡",
+    "chat.qualityBest": "最佳",
+    "chat.autoModel": "自动",
+    "chat.autoModelHint": "每条消息自动选模型",
+    "chat.answeredVia": "由 {model} 回答",
+  },
+  fr: {
+    "chat.loadingWorkspace": "Chargement de l'espace de travail…",
+    "chat.editMessage": "Modifier votre message…",
+    "chat.askAnything": "Posez votre question…",
+    "chat.searchModels": "Rechercher des modèles…",
+    "chat.sandboxNextMessage": "Votre prochain message inclura {title}",
+    "chat.sandboxNextMessageHint":
+      "Le contenu structuré de ce nœud sera injecté comme contexte pour le modèle.",
+    "chat.compactedDivider": "Conversation antérieure résumée",
+    "chat.quality": "Qualité des réponses",
+    "chat.qualityEconomy": "Économique",
+    "chat.qualityBalanced": "Équilibré",
+    "chat.qualityBest": "Meilleur",
+    "chat.autoModel": "Auto",
+    "chat.autoModelHint": "Choisit un modèle par message",
+    "chat.answeredVia": "via {model}",
+  },
+};

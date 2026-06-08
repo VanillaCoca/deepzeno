@@ -21,6 +21,8 @@ import { useDataStream } from "@/components/chat/data-stream-provider";
 import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
+import { useLocale } from "@/components/i18n/locale-provider";
+import { useQuality } from "@/components/quality/quality-provider";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
@@ -49,6 +51,9 @@ type ActiveChatContextValue = {
   setCurrentModelId: (id: string) => void;
   showCreditCardAlert: boolean;
   setShowCreditCardAlert: Dispatch<SetStateAction<boolean>>;
+  // Id of the last message folded into the auto-compaction summary, if any.
+  compactedThroughMessageId: string | null;
+  modelByMessageId: Record<string, string>;
 };
 
 const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
@@ -64,7 +69,23 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     isArchivedTopicReadonly,
     isLoading: isWorkspaceLoading,
     consumeInjectedDecisionContext,
+    sandboxNavPending,
+    endSandboxNav,
   } = useWorkspace();
+  const { locale } = useLocale();
+  const { quality } = useQuality();
+
+  // Keep the latest locale in a ref so the transport closure always sends the
+  // current language without rebuilding the transport.
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
+
+  const qualityRef = useRef(quality);
+  useEffect(() => {
+    qualityRef.current = quality;
+  }, [quality]);
 
   const fallbackChatIdRef = useRef(generateUUID());
   const chatId = currentConversationId ?? fallbackChatIdRef.current;
@@ -144,9 +165,16 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     DEFAULT_CHAT_MODEL;
 
   useEffect(() => {
-    const availableModelIds = new Set<string>(
-      (modelsData?.models ?? []).map((model: { id: string }) => model.id)
-    );
+    // "auto" is an explicit, valid pseudo-selection — never auto-correct away
+    // from it (e.g. during the async window where the topic's stored default
+    // model hasn't refreshed to "auto" yet).
+    if (currentModelId === "auto") {
+      return;
+    }
+    const availableModelIds = new Set<string>([
+      ...(modelsData?.models ?? []).map((model: { id: string }) => model.id),
+      "auto",
+    ]);
     const defaultModelId = modelsData?.defaultModelId as string | undefined;
     const candidates = [preferredModelSeed, defaultModelId, DEFAULT_CHAT_MODEL];
     let preferredModelId: string | null = null;
@@ -185,6 +213,17 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
 
   const initialMessages: ChatMessage[] = chatData?.messages ?? [];
   const visibility: VisibilityType = chatData?.visibility ?? "private";
+  const compactedThroughMessageId: string | null =
+    chatData?.compaction?.compactedThroughMessageId ?? null;
+  const modelByMessageId: Record<string, string> = chatData?.models ?? {};
+
+  // After a "bring to sandbox" hand-off, drop the blocking veil once the
+  // conversation (with its prior history) is ready to use.
+  useEffect(() => {
+    if (sandboxNavPending && isWorkspaceReady && !isLoading) {
+      endSandboxNav();
+    }
+  }, [sandboxNavPending, isWorkspaceReady, isLoading, endSandboxNav]);
 
   const {
     messages,
@@ -241,6 +280,8 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             injectedDecisionContext: isToolApprovalContinuation
               ? undefined
               : consumeInjectedDecisionContext(),
+            locale: localeRef.current,
+            qualityPreference: qualityRef.current,
             ...request.body,
           },
         };
@@ -356,6 +397,8 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       setCurrentModelId,
       showCreditCardAlert,
       setShowCreditCardAlert,
+      compactedThroughMessageId,
+      modelByMessageId,
     }),
     [
       chatId,
@@ -374,6 +417,8 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       currentModelId,
       setCurrentModelId,
       showCreditCardAlert,
+      compactedThroughMessageId,
+      modelByMessageId,
     ]
   );
 

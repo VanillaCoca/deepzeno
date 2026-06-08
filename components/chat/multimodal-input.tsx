@@ -3,13 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import {
-  ArrowUpIcon,
-  BrainIcon,
-  EyeIcon,
-  PlusIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { ArrowUpIcon, BrainIcon, Loader2Icon, PlusIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -27,13 +21,13 @@ import {
   ModelSelector,
   ModelSelectorContent,
   ModelSelectorGroup,
-  ModelSelectorInput,
   ModelSelectorItem,
   ModelSelectorList,
   ModelSelectorLogo,
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/components/ai-elements/model-selector";
+import { useLocale } from "@/components/i18n/locale-provider";
 import { IRBulkImportDialog } from "@/components/ir/ir-bulk-import-dialog";
 import {
   DropdownMenu,
@@ -135,6 +129,7 @@ function PureMultimodalInput({
   onCancelEdit?: () => void;
   isLoading?: boolean;
 }) {
+  const { t } = useLocale();
   const {
     activeProjectId,
     activeTopicId,
@@ -305,6 +300,9 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  // True while a model switch is saving (POST default-model + workspace refresh).
+  // The send button shows a spinner and submitting is blocked until it settles.
+  const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
@@ -512,11 +510,14 @@ function PureMultimodalInput({
 
       <PromptInput
         className={cn(
-          "[&>div]:rounded-2xl [&>div]:border [&>div]:border-border/30 [&>div]:bg-card/70 [&>div]:shadow-[var(--shadow-composer)] [&>div]:transition-shadow [&>div]:duration-300 [&>div]:focus-within:shadow-[var(--shadow-composer-focus)]",
+          "[&>div]:rounded-2xl [&>div]:border [&>div]:border-border/30 [&>div]:bg-card/70 [&>div]:shadow-[var(--shadow-composer)] [&>div]:transition-shadow [&>div]:duration-300",
           shouldHighlightInput &&
             "[&>div]:ring-2 [&>div]:ring-foreground/15 [&>div]:shadow-[var(--shadow-composer-focus)]"
         )}
         onSubmit={() => {
+          if (isSwitchingModel) {
+            return;
+          }
           if (isLoading) {
             toast.error(
               "Workspace is still loading. Please try again in a moment."
@@ -631,10 +632,10 @@ function PureMultimodalInput({
           }}
           placeholder={
             isLoading
-              ? "Loading workspace..."
+              ? t("chat.loadingWorkspace")
               : editingMessage
-                ? "Edit your message..."
-                : "Ask anything..."
+                ? t("chat.editMessage")
+                : t("chat.askAnything")
           }
           ref={textareaRef}
           value={input}
@@ -648,6 +649,7 @@ function PureMultimodalInput({
             />
             <ModelSelectorCompact
               onModelChange={onModelChange}
+              onSwitchingChange={setIsSwitchingModel}
               selectedModelId={selectedModelId}
             />
           </PromptInputTools>
@@ -658,12 +660,15 @@ function PureMultimodalInput({
             <PromptInputSubmit
               className={cn(
                 "h-7 w-7 rounded-xl transition-all duration-200",
-                input.trim()
-                  ? "bg-foreground text-background hover:opacity-85 active:scale-95"
-                  : "bg-muted text-muted-foreground/25 cursor-not-allowed"
+                isSwitchingModel
+                  ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
+                  : input.trim()
+                    ? "bg-foreground text-background hover:opacity-85 active:scale-95"
+                    : "bg-muted text-muted-foreground/25 cursor-not-allowed"
               )}
               data-testid="send-button"
               disabled={
+                isSwitchingModel ||
                 !input.trim() ||
                 uploadQueue.length > 0 ||
                 Boolean(isLoading) ||
@@ -672,7 +677,11 @@ function PureMultimodalInput({
               status={status}
               variant="secondary"
             >
-              <ArrowUpIcon className="size-4" />
+              {isSwitchingModel ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : (
+                <ArrowUpIcon className="size-4" />
+              )}
             </PromptInputSubmit>
           )}
         </PromptInputFooter>
@@ -778,12 +787,16 @@ function ComposerPlusMenu({
 function PureModelSelectorCompact({
   selectedModelId,
   onModelChange,
+  onSwitchingChange,
 }: {
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  onSwitchingChange?: (switching: boolean) => void;
 }) {
   const { activeTopicId, refreshWorkspace } = useWorkspace();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const selectingModelRef = useRef<string | null>(null);
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
@@ -796,6 +809,8 @@ function PureModelSelectorCompact({
   const dynamicModels: ChatModel[] | undefined = modelsData?.models;
   const activeModels = dynamicModels ?? chatModels;
 
+  const isAuto = selectedModelId === "auto";
+
   const selectedModel =
     activeModels.find((m: ChatModel) => m.id === selectedModelId) ??
     activeModels.find((m: ChatModel) => m.id === DEFAULT_CHAT_MODEL) ??
@@ -803,11 +818,19 @@ function PureModelSelectorCompact({
 
   const handleModelSelect = useCallback(
     (modelId: string) => {
-      if (selectingModelRef.current === modelId) {
+      // Re-selecting the current model (or one already being switched to) is a
+      // no-op: just close the menu, no save / no switching animation.
+      if (
+        modelId === selectedModelId ||
+        selectingModelRef.current === modelId
+      ) {
+        setOpen(false);
         return;
       }
 
       selectingModelRef.current = modelId;
+      setIsSwitching(true);
+      onSwitchingChange?.(true);
       onModelChange?.(modelId);
       setCookie("chat-model", modelId);
       setOpen(false);
@@ -846,12 +869,20 @@ function PureModelSelectorCompact({
         })
         .finally(() => {
           selectingModelRef.current = null;
+          setIsSwitching(false);
+          onSwitchingChange?.(false);
         });
     },
-    [activeTopicId, onModelChange, refreshWorkspace]
+    [
+      activeTopicId,
+      onModelChange,
+      onSwitchingChange,
+      refreshWorkspace,
+      selectedModelId,
+    ]
   );
 
-  if (!selectedModel) {
+  if (!(selectedModel || isAuto)) {
     return null;
   }
 
@@ -863,12 +894,36 @@ function PureModelSelectorCompact({
           data-testid="model-selector"
           variant="ghost"
         >
-          <ModelSelectorLogo provider={selectedModel.provider} />
-          <ModelSelectorName>{selectedModel.name}</ModelSelectorName>
+          {isSwitching ? (
+            <>
+              <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
+              <ModelSelectorName className="animate-pulse text-muted-foreground">
+                {isAuto ? t("chat.autoModel") : selectedModel?.name}
+              </ModelSelectorName>
+            </>
+          ) : isAuto ? (
+            <ModelSelectorName>{t("chat.autoModel")}</ModelSelectorName>
+          ) : (
+            <>
+              <ModelSelectorLogo provider={selectedModel?.provider} />
+              <ModelSelectorName>{selectedModel?.name}</ModelSelectorName>
+            </>
+          )}
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <ModelSelectorInput placeholder="Search models..." />
+        {/* Auto is a plain button (not a cmdk item) so it is always clickable. */}
+        <button
+          className="mx-1 mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-muted/50"
+          data-testid="model-selector-auto"
+          onClick={() => handleModelSelect("auto")}
+          type="button"
+        >
+          <span className="flex-1 truncate">{t("chat.autoModel")}</span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("chat.autoModelHint")}
+          </span>
+        </button>
         <ModelSelectorList>
           {(() => {
             const allModels = dynamicModels ?? chatModels;
@@ -888,7 +943,7 @@ function PureModelSelectorCompact({
                   <ModelSelectorItem
                     className={cn(
                       "flex w-full",
-                      model.id === selectedModel.id &&
+                      model.id === selectedModel?.id &&
                         "border-b border-dashed border-foreground/50"
                     )}
                     data-testid="model-selector-item"
@@ -899,17 +954,9 @@ function PureModelSelectorCompact({
                   >
                     <ModelSelectorLogo provider={model.provider} />
                     <ModelSelectorName>{model.name}</ModelSelectorName>
-                    <div className="ml-auto flex items-center gap-2 text-foreground/70">
-                      {capabilities?.[model.id]?.tools && (
-                        <WrenchIcon className="size-3.5" />
-                      )}
-                      {capabilities?.[model.id]?.vision && (
-                        <EyeIcon className="size-3.5" />
-                      )}
-                      {capabilities?.[model.id]?.reasoning && (
-                        <BrainIcon className="size-3.5" />
-                      )}
-                    </div>
+                    {capabilities?.[model.id]?.reasoning && (
+                      <BrainIcon className="ml-auto size-3.5 text-foreground/70" />
+                    )}
                   </ModelSelectorItem>
                 ))}
               </ModelSelectorGroup>

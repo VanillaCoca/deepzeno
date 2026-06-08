@@ -1,9 +1,9 @@
-import { formatDistanceToNowStrict } from "date-fns";
-import Link from "next/link";
 import { Suspense } from "react";
 import { requireAuth } from "@/app/(auth)/auth";
 import { CreateProjectModal } from "@/components/create-project-modal";
+import { ProjectCard } from "@/components/project-card";
 import { Button } from "@/components/ui/button";
+import { getHomeTranslator } from "@/lib/i18n/server";
 import { listProjectSummariesByUserId } from "@/lib/workspace/queries";
 import type { WorkspaceProjectSummary } from "@/lib/workspace/types";
 
@@ -19,19 +19,21 @@ function buildWorkspaceHref(project: WorkspaceProjectSummary) {
   return `/chat/new?${params.toString()}`;
 }
 
-function HomepageShell({ children }: { children: React.ReactNode }) {
+async function HomepageShell({ children }: { children: React.ReactNode }) {
+  const t = await getHomeTranslator();
+
   return (
     <main className="min-h-dvh bg-background">
       <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6 py-10">
         <div className="flex items-center justify-between gap-4">
           <span className="text-base font-medium">ZENO</span>
           <CreateProjectModal>
-            <Button size="sm">+ New project</Button>
+            <Button size="sm">+ {t("home.newProject")}</Button>
           </CreateProjectModal>
         </div>
 
         <h2 className="mb-3 mt-8 text-sm font-medium text-muted-foreground">
-          Projects
+          {t("home.projects")}
         </h2>
 
         {children}
@@ -62,15 +64,14 @@ function HomepageFallback() {
 async function HomepageContent() {
   const session = await requireAuth();
   const projects = await listProjectSummariesByUserId(session.user.id);
+  const t = await getHomeTranslator();
 
   if (projects.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-24">
-        <p className="text-sm text-muted-foreground">
-          You haven't started any projects yet.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("home.empty")}</p>
         <CreateProjectModal>
-          <Button>+ New project</Button>
+          <Button>+ {t("home.newProject")}</Button>
         </CreateProjectModal>
       </div>
     );
@@ -79,25 +80,11 @@ async function HomepageContent() {
   return (
     <div className="flex flex-col gap-2">
       {projects.map((project) => (
-        <Link
-          className="cursor-pointer rounded-lg border border-border bg-background p-4 transition-colors hover:bg-muted/30"
+        <ProjectCard
           href={buildWorkspaceHref(project)}
           key={project.id}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <p className="text-base font-medium text-foreground">
-              {project.name}
-            </p>
-            <p className="text-right text-sm text-muted-foreground">
-              {formatDistanceToNowStrict(new Date(project.updatedAt), {
-                addSuffix: true,
-              })}
-            </p>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {project.topicCount} {project.topicCount === 1 ? "topic" : "topics"}
-          </p>
-        </Link>
+          project={project}
+        />
       ))}
     </div>
   );

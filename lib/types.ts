@@ -40,6 +40,7 @@ export type CustomUIDataTypes = {
   clear: null;
   finish: null;
   "chat-title": string;
+  model: string;
 };
 
 export type ChatMessage = UIMessage<

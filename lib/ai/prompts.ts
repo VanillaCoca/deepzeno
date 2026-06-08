@@ -119,17 +119,24 @@ About the origin of user's request:
 export const systemPrompt = ({
   requestHints,
   supportsTools,
+  languageName,
 }: {
   requestHints: RequestHints;
   supportsTools: boolean;
+  languageName?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
+  // The user picks a UI language; reply in it by default, but always defer to
+  // what the user actually writes or explicitly asks for.
+  const languagePrompt = languageName
+    ? `\n\nRespond in ${languageName} by default. If the user writes in or explicitly asks for another language, follow the user's lead.`
+    : "";
 
   if (!supportsTools) {
-    return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}`;
+    return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}${languagePrompt}`;
   }
 
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}\n\n${artifactsPrompt}`;
+  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}\n\n${artifactsPrompt}${languagePrompt}`;
 };
 
 export const codePrompt = `

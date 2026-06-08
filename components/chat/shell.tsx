@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/components/i18n/locale-provider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +30,7 @@ import { MultimodalInput } from "./multimodal-input";
 export function ChatShell() {
   const { restoredSandboxContext, clearRestoredSandboxContext } =
     useWorkspace();
+  const { t } = useLocale();
   const {
     chatId,
     messages,
@@ -48,6 +50,8 @@ export function ChatShell() {
     setCurrentModelId,
     showCreditCardAlert,
     setShowCreditCardAlert,
+    compactedThroughMessageId,
+    modelByMessageId,
   } = useActiveChat();
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
@@ -84,10 +88,12 @@ export function ChatShell() {
             <Messages
               addToolApprovalResponse={addToolApprovalResponse}
               chatId={chatId}
+              compactedThroughMessageId={compactedThroughMessageId}
               isArtifactVisible={isArtifactVisible}
               isLoading={isLoading}
               isReadonly={isReadonly}
               messages={messages}
+              modelByMessageId={modelByMessageId}
               onEditMessage={(msg) => {
                 const text = msg.parts
                   ?.filter((p) => p.type === "text")
@@ -111,11 +117,12 @@ export function ChatShell() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium text-foreground">
-                            将在下一次对话中带入{" "}
-                            {restoredSandboxContext.decisionTitle}
+                            {t("chat.sandboxNextMessage", {
+                              title: restoredSandboxContext.decisionTitle,
+                            })}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            这条节点的结构化内容会作为上下文注入给模型。
+                            {t("chat.sandboxNextMessageHint")}
                           </p>
                         </div>
                         <button

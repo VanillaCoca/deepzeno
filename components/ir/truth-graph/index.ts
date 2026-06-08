@@ -10,4 +10,8 @@ export {
   getEdgesWithinNodeSet,
   getUpstreamNodeIds,
 } from "./data";
-export { TruthGraph, type TruthGraphProps } from "./truth-graph";
+export {
+  TruthGraph,
+  type TruthGraphMode,
+  type TruthGraphProps,
+} from "./truth-graph";

@@ -353,6 +353,53 @@ textarea:focus-visible {
   }
 }
 
+/* "Thinking"-style shimmer for loading text: a bright band sweeps left→right
+   across dimmed text (ChatGPT/Claude feel). Self-contained keyframe + strong
+   contrast (dim → full foreground) so the motion is clearly visible. Uses theme
+   tokens so it adapts to dark/light automatically. */
+@keyframes z-text-shimmer {
+  0% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+.z-shimmer-text {
+  display: inline-block;
+  /* Two SOLID colors (no transparency): the text is always a fully-opaque grey
+     (muted-foreground); a brighter band (foreground) sweeps across it like a
+     flashlight. Because nothing is transparent, the text never fades out. */
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 42%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 58%,
+    var(--muted-foreground) 100%
+  );
+  /* Tiled (NOT no-repeat): the dim grey always covers the text, so characters
+     can never fall outside the gradient and turn transparent — only the bright
+     band sweeps. */
+  background-repeat: repeat;
+  background-size: 200% 100%;
+  background-position: 150% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: z-text-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .z-shimmer-text {
+    animation: none;
+    -webkit-text-fill-color: var(--muted-foreground);
+    color: var(--muted-foreground);
+  }
+}
+
 @keyframes dot-pulse {
   0%,
   60%,

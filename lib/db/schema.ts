@@ -1,5 +1,6 @@
 import { type InferSelectModel, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   foreignKey,
@@ -386,6 +387,11 @@ export const irNode = pgTable("ir_nodes", {
     .notNull()
     .references(() => project.id, { onDelete: "cascade" }),
   topicId: uuid("topic_id").references(() => topic.id, {
+    onDelete: "set null",
+  }),
+  // Optional hierarchy: a node can be a sub-node of another IR node. Self-ref
+  // FK; deleting a parent detaches children (set null) rather than cascading.
+  parentId: text("parent_id").references((): AnyPgColumn => irNode.id, {
     onDelete: "set null",
   }),
   kind: text("kind").notNull(),

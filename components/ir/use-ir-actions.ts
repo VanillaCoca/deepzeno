@@ -34,12 +34,22 @@ export function useIRActions(
   mutateDetail: KeyedMutator<IRDetail>
 ) {
   const { refreshIR, selectNode } = useIR();
-  const { activeTopicId, bringDecisionToSandbox, topics } = useWorkspace();
+  const {
+    activeTopicId,
+    beginSandboxNav,
+    bringDecisionToSandbox,
+    endSandboxNav,
+    requestView,
+    topics,
+  } = useWorkspace();
 
   const [kindChoice, setKindChoice] = useState("plan:decision");
   const [assignmentTopicId, setAssignmentTopicId] = useState("");
   const [newTopicLabel, setNewTopicLabel] = useState("");
   const [isMutating, setIsMutating] = useState(false);
+  // Which action is currently running, so a button can show its own inline
+  // spinner (rather than every button reacting to a shared isMutating flag).
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const assignableTopics = useMemo(
     () =>
@@ -72,9 +82,11 @@ export function useIRActions(
     action: () => Promise<
       { node?: IRNode; new_id?: string } | IRDetail | unknown
     >,
-    successMessage: string
+    successMessage: string,
+    actionKey?: string
   ) {
     setIsMutating(true);
+    setPendingAction(actionKey ?? null);
 
     try {
       const payload = await action();
@@ -96,6 +108,7 @@ export function useIRActions(
       toast.error(error instanceof Error ? error.message : "IR update failed.");
     } finally {
       setIsMutating(false);
+      setPendingAction(null);
     }
   }
 
@@ -132,11 +145,16 @@ export function useIRActions(
             subtype: subtype === "_" ? null : subtype,
           }
         ),
-      "Kind updated."
+      "Kind updated.",
+      "reclassify"
     );
   }
 
   function handleBringToSandbox(node: IRNode) {
+    // Show the blocking veil immediately so the click feels responsive and the
+    // user can't interact while we hand off to the conversation.
+    beginSandboxNav();
+
     const success = bringDecisionToSandbox({
       decisionId: node.id,
       decisionTitle: node.title,
@@ -146,7 +164,12 @@ export function useIRActions(
     });
 
     if (success) {
-      toast.success("Loaded into sandbox.");
+      // Auto-switch to the Conversation view; the veil clears once the chat
+      // (with its prior history) has loaded.
+      requestView("conversation");
+      toast.success("Loaded into the conversation.");
+    } else {
+      endSandboxNav();
     }
   }
 
@@ -162,7 +185,8 @@ export function useIRActions(
         postJSON<IRDetail>(`/api/ir/${node.id}/confirm`, {
           ...assignment,
         }),
-      "Candidate confirmed."
+      "Candidate confirmed.",
+      "confirm"
     );
     setNewTopicLabel("");
   }
@@ -170,21 +194,24 @@ export function useIRActions(
   async function handleDismissCandidate(node: IRNode) {
     await runMutation(
       () => postJSON(`/api/ir/${node.id}/dismiss`),
-      "Candidate ignored."
+      "Candidate ignored.",
+      "dismiss"
     );
   }
 
   async function handlePromoteIdea(node: IRNode) {
     await runMutation(
       () => postJSON(`/api/ir/${node.id}/promote`),
-      "Idea promoted."
+      "Idea promoted.",
+      "promote"
     );
   }
 
   async function handleDismissIdea(node: IRNode) {
     await runMutation(
       () => postJSON(`/api/ir/${node.id}/dismiss`),
-      "Idea dismissed."
+      "Idea dismissed.",
+      "dismiss"
     );
   }
 
@@ -197,6 +224,7 @@ export function useIRActions(
     newTopicLabel,
     setNewTopicLabel,
     isMutating,
+    pendingAction,
     // derived
     assignableTopics,
     // handlers

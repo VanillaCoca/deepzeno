@@ -12,6 +12,12 @@ export type ModelProviderType =
   | "openai-compatible"
   | "gateway";
 
+// Capability/cost tier used by the model-routing policy:
+// - economy: cheap/fast; bulk background work (extraction, summarization, retrieval)
+// - standard: balanced default chat / planning
+// - frontier: most capable; reserved for hard reasoning and final synthesis
+export type ModelTier = "economy" | "standard" | "frontier";
+
 export type ChatModel = {
   id: string;
   name: string;
@@ -20,6 +26,13 @@ export type ChatModel = {
   description: string;
   capabilities: ModelCapabilities;
   providerType: ModelProviderType;
+  // Routing metadata. `tier` drives task→model policy; `contextWindowTokens`
+  // is the single source of truth for compaction budgeting. Costs are USD per
+  // 1M tokens, or null when the underlying model is env-configurable/unknown.
+  tier: ModelTier;
+  contextWindowTokens: number;
+  inputCostPerMTok: number | null;
+  outputCostPerMTok: number | null;
   gatewayOrder?: string[];
   reasoningEffort?: "none" | "minimal" | "low" | "medium" | "high";
 };
@@ -50,6 +63,10 @@ const modelCatalog: ChatModelDefinition[] = [
       reasoning: false,
     },
     providerType: "anthropic",
+    tier: "standard",
+    contextWindowTokens: 200_000,
+    inputCostPerMTok: 3,
+    outputCostPerMTok: 15,
     envKeys: ["ANTHROPIC_API_KEY"],
     staticModelId: "claude-sonnet-4-6",
   },
@@ -66,6 +83,10 @@ const modelCatalog: ChatModelDefinition[] = [
       reasoning: false,
     },
     providerType: "openai",
+    tier: "standard",
+    contextWindowTokens: 1_000_000,
+    inputCostPerMTok: 2,
+    outputCostPerMTok: 8,
     envKeys: ["OPENAI_API_KEY"],
     staticModelId: "gpt-4.1",
   },
@@ -81,6 +102,10 @@ const modelCatalog: ChatModelDefinition[] = [
       reasoning: false,
     },
     providerType: "openai-compatible",
+    tier: "economy",
+    contextWindowTokens: 32_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
     envKeys: ["DASHSCOPE_API_KEY", "DASHSCOPE_BASE_URL", "DASHSCOPE_MODEL"],
     resolveModelId: (env) => env.DASHSCOPE_MODEL ?? null,
     resolveName: (env) => {
@@ -105,6 +130,10 @@ const modelCatalog: ChatModelDefinition[] = [
       reasoning: false,
     },
     providerType: "openai-compatible",
+    tier: "economy",
+    contextWindowTokens: 64_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
     envKeys: ["DEEPSEEK_API_KEY"],
     resolveModelId: (env) => env.DEEPSEEK_MODEL ?? "deepseek-chat",
     resolveName: (env) => {
@@ -125,6 +154,10 @@ const modelCatalog: ChatModelDefinition[] = [
       reasoning: false,
     },
     providerType: "gateway",
+    tier: "standard",
+    contextWindowTokens: 128_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
     envKeys: ["AI_GATEWAY_API_KEY"],
     staticModelId: "moonshotai/kimi-k2.5",
     gatewayOrder: ["fireworks", "bedrock"],

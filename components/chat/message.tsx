@@ -118,7 +118,11 @@ const PurePreviewMessage = ({
       return (
         <MessageContent
           className={cn("text-[13px] leading-[1.65]", {
-            "w-fit max-w-[min(80%,56ch)] overflow-hidden break-words rounded-2xl rounded-br-lg border border-border/30 bg-gradient-to-br from-secondary to-muted px-3.5 py-2 shadow-[var(--shadow-card)]":
+            // Wider, denser user bubble (ChatGPT/Claude-style): a calm solid
+            // surface, comfortable 14px reading text, and a generous max width
+            // so multi-line context (e.g. a decision brought to the sandbox)
+            // reads efficiently instead of wrapping in a thin column.
+            "w-fit max-w-[min(88%,52rem)] overflow-hidden break-words rounded-2xl rounded-br-md border border-border/40 bg-secondary px-4 py-2.5 text-sm leading-[1.6]":
               message.role === "user",
           })}
           data-testid="message-content"

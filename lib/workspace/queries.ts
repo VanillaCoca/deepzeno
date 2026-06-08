@@ -557,6 +557,127 @@ export async function getProjectByIdForUser(projectId: string, userId: string) {
   return row ? mapProject(row as DatabaseRecord) : null;
 }
 
+// Ownership-scoped delete: the user_id filter ensures a user can only delete
+// their own project. Child rows (topics, ir_nodes, ir_edges, …) are removed by
+// the ON DELETE CASCADE foreign keys. Returns true when a row was deleted.
+// Several legacy tables reference a project (or its topics/conversations)
+// WITHOUT ON DELETE CASCADE, so deleting a project that has any conversation or
+// decision data would otherwise be blocked by a foreign-key constraint. We clear
+// those tables by hand, leaf-first, before removing the project itself (whose
+// remaining children — topics, conversations, ir_nodes, ir_edges, api_keys —
+// cascade automatically). Missing legacy tables are tolerated.
+async function clearProjectTable(
+  client: ReturnType<typeof getClient>,
+  table: string,
+  projectId: string
+) {
+  const { error } = await client
+    .from(table)
+    .delete()
+    .eq("project_id", projectId);
+
+  if (error && !isMissingTableError(error)) {
+    console.error(`Failed to clear ${table} for project ${projectId}`, error);
+    throw new ChatbotError(
+      "bad_request:database",
+      `Failed to delete ${table} for project`
+    );
+  }
+}
+
+async function selectProjectRowIds(
+  client: ReturnType<typeof getClient>,
+  table: string,
+  projectId: string
+): Promise<string[]> {
+  const { data, error } = await client
+    .from(table)
+    .select("id")
+    .eq("project_id", projectId);
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+    throw new ChatbotError(
+      "bad_request:database",
+      `Failed to load ${table} for project`
+    );
+  }
+
+  return ((data ?? []) as { id: string }[]).map((row) => row.id);
+}
+
+async function clearDecisionLog(
+  client: ReturnType<typeof getClient>,
+  column: "decision_id" | "candidate_id",
+  ids: string[]
+) {
+  if (ids.length === 0) {
+    return;
+  }
+
+  const { error } = await client.from("decision_log").delete().in(column, ids);
+
+  if (error && !isMissingTableError(error)) {
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to delete decision log for project"
+    );
+  }
+}
+
+export async function deleteProjectForUser(projectId: string, userId: string) {
+  const client = getClient();
+
+  // Only the owner may delete; bail before touching anything otherwise.
+  const owned = await ensureResult(
+    client
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("user_id", userId),
+    "Failed to load project for delete"
+  );
+
+  if (!(Array.isArray(owned) && owned.length > 0)) {
+    return false;
+  }
+
+  // decision_log has no project_id — clear it via its decision/candidate parents.
+  const decisionIds = await selectProjectRowIds(client, "decisions", projectId);
+  const candidateIds = await selectProjectRowIds(
+    client,
+    "candidate_decisions",
+    projectId
+  );
+  await clearDecisionLog(client, "decision_id", decisionIds);
+  await clearDecisionLog(client, "candidate_id", candidateIds);
+
+  // Leaf-first so each delete's foreign keys are already gone.
+  for (const table of [
+    "ir_extraction_events",
+    "edges",
+    "candidate_decisions",
+    "decisions",
+    "messages",
+  ]) {
+    await clearProjectTable(client, table, projectId);
+  }
+
+  const rows = await ensureResult(
+    client
+      .from("projects")
+      .delete()
+      .eq("id", projectId)
+      .eq("user_id", userId)
+      .select("id"),
+    "Failed to delete project"
+  );
+
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 export async function createProjectForUser({
   userId,
   userEmail,
@@ -668,6 +789,63 @@ export async function updateTopicDefaultModelForUser({
   );
 
   return mapTopic(row as DatabaseRecord);
+}
+
+export async function renameTopicForUser({
+  userId,
+  topicId,
+  label,
+}: {
+  userId: string;
+  topicId: string;
+  label: string;
+}) {
+  const topic = await getTopicByIdForUser(topicId, userId);
+
+  if (!topic) {
+    throw new ChatbotError("forbidden:chat", "Topic not found");
+  }
+
+  const row = await ensureResult(
+    getClient()
+      .from("topics")
+      .update({ label })
+      .eq("id", topicId)
+      .select("*")
+      .single(),
+    "Failed to rename topic"
+  );
+
+  return mapTopic(row as DatabaseRecord);
+}
+
+export async function renameProjectForUser({
+  userId,
+  projectId,
+  name,
+}: {
+  userId: string;
+  projectId: string;
+  name: string;
+}) {
+  const project = await getProjectByIdForUser(projectId, userId);
+
+  if (!project) {
+    throw new ChatbotError("forbidden:chat", "Project not found");
+  }
+
+  const row = await ensureResult(
+    getClient()
+      .from("projects")
+      .update({ name })
+      .eq("id", projectId)
+      .eq("user_id", userId)
+      .select("*")
+      .single(),
+    "Failed to rename project"
+  );
+
+  return mapProject(row as DatabaseRecord);
 }
 
 export async function createTopicForProject({
