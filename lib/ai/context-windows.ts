@@ -1,20 +1,13 @@
 // Per-model context-window sizes (in tokens) used to decide when a conversation
 // must be compacted before it overflows the model.
 //
-// These are deliberately *conservative* safety thresholds, not exact spec
-// numbers. ZENO lets each topic pick a different model (and openai-compatible
-// providers like DeepSeek / DashScope can be pointed at arbitrary models via
-// env), so when we cannot identify the exact model we fall back to a small,
-// safe window. Compacting a little early is harmless; overflowing is not.
-//
-// Keys are the registry model ids from `lib/ai/models.ts` (e.g.
-// "anthropic:claude-sonnet-4-6"). Adjust here as providers raise their limits.
+// The per-model value is the `contextWindowTokens` field on the model registry
+// (lib/ai/models.ts) — the single source of truth. This module only adds the
+// fallbacks: a conservative per-provider default for env-configurable/unknown
+// models, and a global floor. Values are deliberately conservative safety
+// thresholds — compacting a little early is harmless; overflowing is not.
 
-const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-  "anthropic:claude-sonnet-4-6": 200_000,
-  "openai:gpt-4.1": 1_000_000,
-  "gateway:moonshotai/kimi-k2.5": 128_000,
-};
+import { chatModels } from "@/lib/ai/models";
 
 const PROVIDER_CONTEXT_WINDOWS: Record<string, number> = {
   anthropic: 200_000,
@@ -34,8 +27,11 @@ export function getContextWindowTokens({
   modelId?: string | null;
   provider?: string | null;
 }): number {
-  if (modelId && MODEL_CONTEXT_WINDOWS[modelId]) {
-    return MODEL_CONTEXT_WINDOWS[modelId];
+  if (modelId) {
+    const model = chatModels.find((entry) => entry.id === modelId);
+    if (model?.contextWindowTokens) {
+      return model.contextWindowTokens;
+    }
   }
 
   if (provider && PROVIDER_CONTEXT_WINDOWS[provider]) {

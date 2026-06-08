@@ -2,7 +2,7 @@ import "server-only";
 
 import { generateText } from "ai";
 import { getContextWindowTokens } from "@/lib/ai/context-windows";
-import { getDefaultModelId } from "@/lib/ai/models";
+import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
 import {
   buildConversationSummaryBlock,
@@ -82,7 +82,7 @@ export async function summarizeConversationSegment({
 
   try {
     const result = await generateText({
-      model: getLanguageModel(getDefaultModelId(process.env)),
+      model: getLanguageModel(selectModelForTask("compaction_summary")),
       system: buildSummarySystemPrompt(),
       prompt: buildSummaryUserPrompt({ previousSummary, transcript }),
       maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,

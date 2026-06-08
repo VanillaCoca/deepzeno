@@ -2,7 +2,7 @@ import "server-only";
 
 import { generateText } from "ai";
 import { z } from "zod";
-import { getDefaultModelId } from "@/lib/ai/models";
+import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
 import {
   createIRNodeForUser,
@@ -474,7 +474,7 @@ async function extractChunk({
   reactivationAnchor: IRNode | null;
   modelSoftTimeoutMs: number;
 }) {
-  const modelId = getDefaultModelId(process.env);
+  const modelId = selectModelForTask("ir_extraction");
 
   try {
     const result = await withModelSoftTimeout(
@@ -709,14 +709,14 @@ export async function runIRSweep({
       chunksProcessed: 0,
       turnsProcessed: 0,
       durationMs: Date.now() - startedAt,
-      model: getDefaultModelId(process.env),
+      model: selectModelForTask("ir_extraction"),
     };
   }
 
   let candidatesCreated = 0;
   let ideasCreated = 0;
   let duplicatesSkipped = 0;
-  let lastModel = getDefaultModelId(process.env);
+  let lastModel = selectModelForTask("ir_extraction");
   const chunks = chunkMessages(unprocessedMessages);
 
   try {
