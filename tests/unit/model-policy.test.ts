@@ -104,6 +104,26 @@ describe("classifyTier", () => {
       "standard"
     );
   });
+
+  it("does NOT send a plain summary/write request to frontier (thinking)", () => {
+    assert.equal(
+      classifyTier(
+        "Please write a short summary of yesterday's meeting notes."
+      ),
+      "standard"
+    );
+  });
+
+  it("sends genuine reasoning requests to frontier (thinking)", () => {
+    assert.equal(
+      classifyTier("Prove that the sum of two even numbers is even"),
+      "frontier"
+    );
+    assert.equal(
+      classifyTier("Think hard about whether this design scales"),
+      "frontier"
+    );
+  });
 });
 
 describe("routeAutoModel", () => {
@@ -121,7 +141,10 @@ describe("routeAutoModel", () => {
   it("routes a hard turn to the top available tier", () => {
     assert.equal(
       routeAutoModel(
-        { text: "Explain and analyze this", hasImage: false },
+        {
+          text: "Debug this algorithm and prove its complexity",
+          hasImage: false,
+        },
         "balanced",
         sonnetAndDeepseek
       ),

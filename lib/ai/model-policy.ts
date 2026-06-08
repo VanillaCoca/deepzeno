@@ -85,17 +85,24 @@ export type AutoRoutingSignals = {
   hasImage: boolean;
 };
 
-const HARD_SIGNAL =
-  /\b(explain|analy[sz]e|design|architect|debug|prove|derive|refactor|optimi[sz]e|research|compare|evaluate|plan)\b/i;
+// The "frontier" tier maps to the strongest available model. Once a reasoning
+// ("thinking") model is registered (tier: "frontier", reasoning: true), this is
+// where Auto sends genuinely hard turns — so the trigger is deliberately narrow:
+// reserve thinking-grade models for reasoning-heavy work, NOT every substantive
+// question, because thinking models are much slower and costlier. Everything
+// else that isn't trivial routes to "standard" (a fast flagship). This is an
+// initial heuristic — tune it against real routing logs (P4).
+const THINKING_SIGNAL =
+  /\b(prove|derive|debug|reason|trade-?offs?|algorithm|complexity|optimi[sz]e|architect|root cause|step[\s-]?by[\s-]?step|think (?:hard|carefully|through)|why (?:does|do|is|are))\b/i;
 const CODE_FENCE = /```/;
 const TRIVIAL_MAX_CHARS = 40;
-const HARD_MAX_CHARS = 2000;
+const COMPLEX_MAX_CHARS = 1500;
 
 export function classifyTier(text: string): ModelTier {
   const trimmed = text.trim();
   if (
-    HARD_SIGNAL.test(trimmed) ||
-    trimmed.length > HARD_MAX_CHARS ||
+    THINKING_SIGNAL.test(trimmed) ||
+    trimmed.length > COMPLEX_MAX_CHARS ||
     CODE_FENCE.test(trimmed)
   ) {
     return "frontier";
