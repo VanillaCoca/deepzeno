@@ -796,6 +796,7 @@ function PureModelSelectorCompact({
   const { activeTopicId, refreshWorkspace } = useWorkspace();
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const selectingModelRef = useRef<string | null>(null);
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
@@ -822,6 +823,7 @@ function PureModelSelectorCompact({
       }
 
       selectingModelRef.current = modelId;
+      setIsSwitching(true);
       onSwitchingChange?.(true);
       onModelChange?.(modelId);
       setCookie("chat-model", modelId);
@@ -861,6 +863,7 @@ function PureModelSelectorCompact({
         })
         .finally(() => {
           selectingModelRef.current = null;
+          setIsSwitching(false);
           onSwitchingChange?.(false);
         });
     },
@@ -879,7 +882,14 @@ function PureModelSelectorCompact({
           data-testid="model-selector"
           variant="ghost"
         >
-          {isAuto ? (
+          {isSwitching ? (
+            <>
+              <Loader2Icon className="size-3.5 shrink-0 animate-spin" />
+              <ModelSelectorName className="animate-pulse text-muted-foreground">
+                {isAuto ? t("chat.autoModel") : selectedModel?.name}
+              </ModelSelectorName>
+            </>
+          ) : isAuto ? (
             <ModelSelectorName>{t("chat.autoModel")}</ModelSelectorName>
           ) : (
             <>
