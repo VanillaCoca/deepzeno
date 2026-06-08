@@ -10,6 +10,10 @@ export const chatMessages: LocaleMessages = {
     "chat.sandboxNextMessageHint":
       "This node's structured content will be injected as context for the model.",
     "chat.compactedDivider": "Earlier conversation summarized",
+    "chat.quality": "Response quality",
+    "chat.qualityEconomy": "Economy",
+    "chat.qualityBalanced": "Balanced",
+    "chat.qualityBest": "Best",
   },
   zh: {
     "chat.loadingWorkspace": "正在加载工作台…",
@@ -20,6 +24,10 @@ export const chatMessages: LocaleMessages = {
     "chat.sandboxNextMessageHint":
       "这条节点的结构化内容会作为上下文注入给模型。",
     "chat.compactedDivider": "已折叠并总结早期对话",
+    "chat.quality": "回复质量",
+    "chat.qualityEconomy": "经济",
+    "chat.qualityBalanced": "均衡",
+    "chat.qualityBest": "最佳",
   },
   fr: {
     "chat.loadingWorkspace": "Chargement de l'espace de travail…",
@@ -30,5 +38,9 @@ export const chatMessages: LocaleMessages = {
     "chat.sandboxNextMessageHint":
       "Le contenu structuré de ce nœud sera injecté comme contexte pour le modèle.",
     "chat.compactedDivider": "Conversation antérieure résumée",
+    "chat.quality": "Qualité des réponses",
+    "chat.qualityEconomy": "Économique",
+    "chat.qualityBalanced": "Équilibré",
+    "chat.qualityBest": "Meilleur",
   },
 };
