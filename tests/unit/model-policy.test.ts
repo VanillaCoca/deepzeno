@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  classifyTier,
   pickModelByTier,
+  routeAutoModel,
   selectModelForTask,
 } from "../../lib/ai/model-policy.ts";
 import { getDefaultModelId } from "../../lib/ai/models.ts";
@@ -76,6 +78,86 @@ describe("selectModelForTask", () => {
     );
     assert.equal(
       selectModelForTask("research_synthesis", { env: sonnetAndDeepseek }),
+      "anthropic:claude-sonnet-4-6"
+    );
+  });
+});
+
+describe("classifyTier", () => {
+  it("treats short plain messages as economy", () => {
+    assert.equal(classifyTier("hi there"), "economy");
+  });
+
+  it("treats reasoning-keyword messages as frontier", () => {
+    assert.equal(classifyTier("Explain the tradeoffs here"), "frontier");
+  });
+
+  it("treats fenced code as frontier", () => {
+    assert.equal(classifyTier("fix this\n```\ncode\n```"), "frontier");
+  });
+
+  it("treats a normal medium sentence as standard", () => {
+    assert.equal(
+      classifyTier(
+        "I want to add a settings page that lists the user's saved topics."
+      ),
+      "standard"
+    );
+  });
+});
+
+describe("routeAutoModel", () => {
+  it("routes a trivial turn to economy (DeepSeek)", () => {
+    assert.equal(
+      routeAutoModel(
+        { text: "hi", hasImage: false },
+        "balanced",
+        sonnetAndDeepseek
+      ),
+      "deepseek:default"
+    );
+  });
+
+  it("routes a hard turn to the top available tier", () => {
+    assert.equal(
+      routeAutoModel(
+        { text: "Explain and analyze this", hasImage: false },
+        "balanced",
+        sonnetAndDeepseek
+      ),
+      "anthropic:claude-sonnet-4-6"
+    );
+  });
+
+  it("Best shifts a trivial turn up a tier", () => {
+    assert.equal(
+      routeAutoModel(
+        { text: "hi", hasImage: false },
+        "best",
+        sonnetAndDeepseek
+      ),
+      "anthropic:claude-sonnet-4-6"
+    );
+  });
+
+  it("Economy keeps a trivial turn at economy", () => {
+    assert.equal(
+      routeAutoModel(
+        { text: "hi", hasImage: false },
+        "economy",
+        sonnetAndDeepseek
+      ),
+      "deepseek:default"
+    );
+  });
+
+  it("requires a vision-capable model when an image is attached", () => {
+    assert.equal(
+      routeAutoModel(
+        { text: "hi", hasImage: true },
+        "balanced",
+        sonnetAndDeepseek
+      ),
       "anthropic:claude-sonnet-4-6"
     );
   });

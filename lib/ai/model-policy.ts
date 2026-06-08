@@ -49,20 +49,84 @@ function tierDistance(modelTier: ModelTier, target: number): number {
 
 // Pick the active model closest to the desired tier (preferring cheaper on a
 // tie), falling back to the default model when nothing is configured.
-export function pickModelByTier(
-  tier: ModelTier,
+// Optionally restrict to vision-capable models.
+export function pickModel(
+  { tier, requireVision = false }: { tier: ModelTier; requireVision?: boolean },
   env: EnvLike = process.env
 ): string {
   const active = getActiveModels(env);
   if (active.length === 0) {
     return getDefaultModelId(env);
   }
-
+  const eligible = requireVision
+    ? active.filter((model) => model.capabilities.vision)
+    : active;
+  const pool = eligible.length > 0 ? eligible : active;
   const target = TIER_RANK[tier];
-  const [best] = [...active].sort(
+  const [best] = [...pool].sort(
     (a, b) => tierDistance(a.tier, target) - tierDistance(b.tier, target)
   );
   return best.id;
+}
+
+export function pickModelByTier(
+  tier: ModelTier,
+  env: EnvLike = process.env
+): string {
+  return pickModel({ tier }, env);
+}
+
+// ---------------------------------------------------------------------------
+// Auto model router (P2)
+// ---------------------------------------------------------------------------
+
+export type AutoRoutingSignals = {
+  text: string;
+  hasImage: boolean;
+};
+
+const HARD_SIGNAL =
+  /\b(explain|analy[sz]e|design|architect|debug|prove|derive|refactor|optimi[sz]e|research|compare|evaluate|plan)\b/i;
+const CODE_FENCE = /```/;
+const TRIVIAL_MAX_CHARS = 40;
+const HARD_MAX_CHARS = 2000;
+
+export function classifyTier(text: string): ModelTier {
+  const trimmed = text.trim();
+  if (
+    HARD_SIGNAL.test(trimmed) ||
+    trimmed.length > HARD_MAX_CHARS ||
+    CODE_FENCE.test(trimmed)
+  ) {
+    return "frontier";
+  }
+  if (trimmed.length < TRIVIAL_MAX_CHARS) {
+    return "economy";
+  }
+  return "standard";
+}
+
+const TIER_BY_RANK: ModelTier[] = ["economy", "standard", "frontier"];
+
+const PREFERENCE_SHIFT: Record<QualityPreference, number> = {
+  economy: -1,
+  balanced: 0,
+  best: 1,
+};
+
+function shiftTier(tier: ModelTier, preference: QualityPreference): ModelTier {
+  const shifted = TIER_RANK[tier] + PREFERENCE_SHIFT[preference];
+  const clamped = Math.max(0, Math.min(TIER_BY_RANK.length - 1, shifted));
+  return TIER_BY_RANK[clamped];
+}
+
+export function routeAutoModel(
+  signals: AutoRoutingSignals,
+  preference: QualityPreference,
+  env: EnvLike = process.env
+): string {
+  const tier = shiftTier(classifyTier(signals.text), preference);
+  return pickModel({ tier, requireVision: signals.hasImage }, env);
 }
 
 export function selectModelForTask(
