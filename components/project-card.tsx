@@ -73,13 +73,19 @@ export function ProjectCard({
           <p className="text-base font-medium text-foreground">
             {project.name}
           </p>
-          <p className="text-right text-sm text-muted-foreground">
+          <p
+            className="text-right text-sm text-muted-foreground"
+            suppressHydrationWarning
+          >
             {formatDistanceToNowStrict(new Date(project.updatedAt), {
               addSuffix: true,
             })}
           </p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p
+          className="mt-2 text-sm text-muted-foreground"
+          suppressHydrationWarning
+        >
           {project.topicCount}{" "}
           {project.topicCount === 1
             ? t("dialog.projectCard.topicSingular")

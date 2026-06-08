@@ -69,20 +69,10 @@ type LocaleContextValue = {
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-export function LocaleProvider({
-  children,
-  initialLocale,
-}: {
-  children: React.ReactNode;
-  // Seeded from the server-read cookie so SSR and the first client render agree
-  // (the homepage's server components also translate from that cookie). Without
-  // this, the server renders the cookie language while the client first renders
-  // the default — a hydration mismatch.
-  initialLocale?: Locale;
-}) {
-  const [locale, setLocaleState] = useState<Locale>(
-    initialLocale ?? defaultLocale
-  );
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
+  // Start from the default so the server and the first client render match;
+  // read the stored choice after mount (avoids a hydration mismatch).
+  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
 
   useEffect(() => {
     const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
