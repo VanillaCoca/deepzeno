@@ -38,6 +38,7 @@ export const postRequestBodySchema = z.object({
   restoredContextMessageIds: z.array(z.string().uuid()).optional(),
   injectedDecisionContext: z.string().max(12_000).nullish(),
   locale: z.enum(["en", "zh", "fr"]).optional(),
+  qualityPreference: z.enum(["economy", "balanced", "best"]).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

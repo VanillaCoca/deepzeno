@@ -12,6 +12,7 @@ import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
 import { auth, type UserType } from "@/app/(auth)/auth";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { routeAutoModel } from "@/lib/ai/model-policy";
 import {
   getActiveModels,
   getCapabilities,
@@ -75,6 +76,18 @@ function getMessageModelOverride(text: string) {
   return activeModels.find((model) => model.id === mentionedModel)?.id ?? null;
 }
 
+function messageHasImage(message?: ChatMessage): boolean {
+  return Boolean(
+    message?.parts?.some((part) => {
+      if (part.type !== "file") {
+        return false;
+      }
+      const mediaType = (part as { mediaType?: unknown }).mediaType;
+      return typeof mediaType === "string" && mediaType.startsWith("image/");
+    })
+  );
+}
+
 function getStreamContext() {
   try {
     return createResumableStreamContext({ waitUntil: after });
@@ -118,6 +131,7 @@ export async function POST(request: Request) {
       restoredContextMessageIds = [],
       injectedDecisionContext,
       locale,
+      qualityPreference,
     } = requestBody;
     console.info("Chat API request received", {
       selectedChatModel,
@@ -173,10 +187,23 @@ export async function POST(request: Request) {
     const messageModelOverride = message?.role
       ? getMessageModelOverride(getTextFromMessage(message))
       : null;
-    const resolvedModel = resolveChatModelSelection(
+    const selectedModelId =
       messageModelOverride ??
-        workspaceSelection.topic.defaultModelId ??
-        selectedChatModel,
+      workspaceSelection.topic.defaultModelId ??
+      selectedChatModel;
+    const effectiveModelId =
+      selectedModelId === "auto"
+        ? routeAutoModel(
+            {
+              text: message ? getTextFromMessage(message) : "",
+              hasImage: messageHasImage(message as ChatMessage | undefined),
+            },
+            qualityPreference ?? "balanced",
+            process.env
+          )
+        : selectedModelId;
+    const resolvedModel = resolveChatModelSelection(
+      effectiveModelId,
       process.env
     );
 
@@ -406,6 +433,8 @@ export async function POST(request: Request) {
             functionId: "stream-text",
           },
         });
+
+        dataStream.write({ type: "data-model", data: chatModel });
 
         dataStream.merge(
           result.toUIMessageStream({ sendReasoning: isReasoningModel })
