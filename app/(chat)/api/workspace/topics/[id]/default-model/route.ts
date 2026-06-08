@@ -22,7 +22,7 @@ export async function POST(
     const { id } = await context.params;
     const body = requestSchema.parse(await request.json());
 
-    if (!getModelById(body.modelId, process.env)) {
+    if (body.modelId !== "auto" && !getModelById(body.modelId, process.env)) {
       return new ChatbotError(
         "bad_request:api",
         "Model is not available."

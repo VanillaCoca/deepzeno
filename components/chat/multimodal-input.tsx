@@ -799,6 +799,8 @@ function PureModelSelectorCompact({
   const dynamicModels: ChatModel[] | undefined = modelsData?.models;
   const activeModels = dynamicModels ?? chatModels;
 
+  const isAuto = selectedModelId === "auto";
+
   const selectedModel =
     activeModels.find((m: ChatModel) => m.id === selectedModelId) ??
     activeModels.find((m: ChatModel) => m.id === DEFAULT_CHAT_MODEL) ??
@@ -854,7 +856,7 @@ function PureModelSelectorCompact({
     [activeTopicId, onModelChange, refreshWorkspace]
   );
 
-  if (!selectedModel) {
+  if (!(selectedModel || isAuto)) {
     return null;
   }
 
@@ -866,13 +868,32 @@ function PureModelSelectorCompact({
           data-testid="model-selector"
           variant="ghost"
         >
-          <ModelSelectorLogo provider={selectedModel.provider} />
-          <ModelSelectorName>{selectedModel.name}</ModelSelectorName>
+          {isAuto ? (
+            <ModelSelectorName>{t("chat.autoModel")}</ModelSelectorName>
+          ) : (
+            <>
+              <ModelSelectorLogo provider={selectedModel?.provider} />
+              <ModelSelectorName>{selectedModel?.name}</ModelSelectorName>
+            </>
+          )}
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
         <ModelSelectorInput placeholder={t("chat.searchModels")} />
         <ModelSelectorList>
+          <ModelSelectorItem
+            className="flex w-full"
+            data-testid="model-selector-item"
+            key="auto"
+            onClick={() => handleModelSelect("auto")}
+            onSelect={() => handleModelSelect("auto")}
+            value="auto"
+          >
+            <ModelSelectorName>{t("chat.autoModel")}</ModelSelectorName>
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              {t("chat.autoModelHint")}
+            </span>
+          </ModelSelectorItem>
           {(() => {
             const allModels = dynamicModels ?? chatModels;
             const grouped: Record<string, ChatModel[]> = {};
@@ -891,7 +912,7 @@ function PureModelSelectorCompact({
                   <ModelSelectorItem
                     className={cn(
                       "flex w-full",
-                      model.id === selectedModel.id &&
+                      model.id === selectedModel?.id &&
                         "border-b border-dashed border-foreground/50"
                     )}
                     data-testid="model-selector-item"

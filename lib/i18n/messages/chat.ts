@@ -14,6 +14,8 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityEconomy": "Economy",
     "chat.qualityBalanced": "Balanced",
     "chat.qualityBest": "Best",
+    "chat.autoModel": "Auto",
+    "chat.autoModelHint": "Picks a model per message",
   },
   zh: {
     "chat.loadingWorkspace": "正在加载工作台…",
@@ -28,6 +30,8 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityEconomy": "经济",
     "chat.qualityBalanced": "均衡",
     "chat.qualityBest": "最佳",
+    "chat.autoModel": "自动",
+    "chat.autoModelHint": "每条消息自动选模型",
   },
   fr: {
     "chat.loadingWorkspace": "Chargement de l'espace de travail…",
@@ -42,5 +46,7 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityEconomy": "Économique",
     "chat.qualityBalanced": "Équilibré",
     "chat.qualityBest": "Meilleur",
+    "chat.autoModel": "Auto",
+    "chat.autoModelHint": "Choisit un modèle par message",
   },
 };
