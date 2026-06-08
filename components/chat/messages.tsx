@@ -4,12 +4,27 @@ import { Fragment, useEffect, useRef } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useMessages } from "@/hooks/use-messages";
+import { chatModels } from "@/lib/ai/models";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDataStream } from "./data-stream-provider";
 import { Greeting } from "./greeting";
 import { PreviewMessage, ThinkingMessage } from "./message";
+
+function modelLabel(id: string): string {
+  const known = chatModels.find((model) => model.id === id);
+  if (known) {
+    return known.name;
+  }
+  return id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
+}
+
+function ModelBadge({ label }: { label: string }) {
+  return (
+    <div className="mt-1 text-[11px] text-muted-foreground/45">{label}</div>
+  );
+}
 
 type MessagesProps = {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
@@ -25,6 +40,7 @@ type MessagesProps = {
   selectedModelId: string;
   onEditMessage?: (message: ChatMessage) => void;
   compactedThroughMessageId?: string | null;
+  modelByMessageId?: Record<string, string>;
 };
 
 function CompactionDivider({ label }: { label: string }) {
@@ -51,6 +67,7 @@ function PureMessages({
   selectedModelId: _selectedModelId,
   onEditMessage,
   compactedThroughMessageId,
+  modelByMessageId,
 }: MessagesProps) {
   const { restoredSandboxContext } = useWorkspace();
   const { t } = useLocale();
@@ -65,7 +82,15 @@ function PureMessages({
     status,
   });
 
-  useDataStream();
+  const { dataStream } = useDataStream();
+  const liveModel = (() => {
+    for (let i = dataStream.length - 1; i >= 0; i -= 1) {
+      if (dataStream[i].type === "data-model") {
+        return dataStream[i].data as string;
+      }
+    }
+    return null;
+  })();
 
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
@@ -127,6 +152,19 @@ function PureMessages({
                     : undefined
                 }
               />
+              {message.role === "assistant" &&
+                (() => {
+                  const modelId =
+                    modelByMessageId?.[message.id] ??
+                    (index === messages.length - 1 ? liveModel : null);
+                  return modelId ? (
+                    <ModelBadge
+                      label={t("chat.answeredVia", {
+                        model: modelLabel(modelId),
+                      })}
+                    />
+                  ) : null;
+                })()}
               {compactedThroughMessageId === message.id &&
                 index < messages.length - 1 && (
                   <CompactionDivider label={t("chat.compactedDivider")} />

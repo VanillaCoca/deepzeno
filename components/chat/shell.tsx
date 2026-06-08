@@ -51,6 +51,7 @@ export function ChatShell() {
     showCreditCardAlert,
     setShowCreditCardAlert,
     compactedThroughMessageId,
+    modelByMessageId,
   } = useActiveChat();
 
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
@@ -92,6 +93,7 @@ export function ChatShell() {
               isLoading={isLoading}
               isReadonly={isReadonly}
               messages={messages}
+              modelByMessageId={modelByMessageId}
               onEditMessage={(msg) => {
                 const text = msg.parts
                   ?.filter((p) => p.type === "text")

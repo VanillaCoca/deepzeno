@@ -16,6 +16,7 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityBest": "Best",
     "chat.autoModel": "Auto",
     "chat.autoModelHint": "Picks a model per message",
+    "chat.answeredVia": "via {model}",
   },
   zh: {
     "chat.loadingWorkspace": "正在加载工作台…",
@@ -32,6 +33,7 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityBest": "最佳",
     "chat.autoModel": "自动",
     "chat.autoModelHint": "每条消息自动选模型",
+    "chat.answeredVia": "由 {model} 回答",
   },
   fr: {
     "chat.loadingWorkspace": "Chargement de l'espace de travail…",
@@ -48,5 +50,6 @@ export const chatMessages: LocaleMessages = {
     "chat.qualityBest": "Meilleur",
     "chat.autoModel": "Auto",
     "chat.autoModelHint": "Choisit un modèle par message",
+    "chat.answeredVia": "via {model}",
   },
 };
