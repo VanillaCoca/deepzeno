@@ -880,22 +880,19 @@ function PureModelSelectorCompact({
       </ModelSelectorTrigger>
       <ModelSelectorContent>
         <ModelSelectorInput placeholder={t("chat.searchModels")} />
+        {/* Auto is a plain button (not a cmdk item) so it is always clickable. */}
+        <button
+          className="mx-1 mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-muted/50"
+          data-testid="model-selector-auto"
+          onClick={() => handleModelSelect("auto")}
+          type="button"
+        >
+          <span className="flex-1 truncate">{t("chat.autoModel")}</span>
+          <span className="text-[11px] text-muted-foreground">
+            {t("chat.autoModelHint")}
+          </span>
+        </button>
         <ModelSelectorList>
-          <ModelSelectorGroup>
-            <ModelSelectorItem
-              className="flex w-full"
-              data-testid="model-selector-item"
-              key="auto"
-              onClick={() => handleModelSelect("auto")}
-              onSelect={() => handleModelSelect("auto")}
-              value="auto"
-            >
-              <ModelSelectorName>{t("chat.autoModel")}</ModelSelectorName>
-              <span className="ml-auto text-[11px] text-muted-foreground">
-                {t("chat.autoModelHint")}
-              </span>
-            </ModelSelectorItem>
-          </ModelSelectorGroup>
           {(() => {
             const allModels = dynamicModels ?? chatModels;
             const grouped: Record<string, ChatModel[]> = {};
