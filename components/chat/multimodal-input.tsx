@@ -3,7 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { ArrowUpIcon, BrainIcon, PlusIcon } from "lucide-react";
+import { ArrowUpIcon, BrainIcon, Loader2Icon, PlusIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -300,6 +300,9 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
+  // True while a model switch is saving (POST default-model + workspace refresh).
+  // The send button shows a spinner and submitting is blocked until it settles.
+  const [isSwitchingModel, setIsSwitchingModel] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
@@ -512,6 +515,9 @@ function PureMultimodalInput({
             "[&>div]:ring-2 [&>div]:ring-foreground/15 [&>div]:shadow-[var(--shadow-composer-focus)]"
         )}
         onSubmit={() => {
+          if (isSwitchingModel) {
+            return;
+          }
           if (isLoading) {
             toast.error(
               "Workspace is still loading. Please try again in a moment."
@@ -643,6 +649,7 @@ function PureMultimodalInput({
             />
             <ModelSelectorCompact
               onModelChange={onModelChange}
+              onSwitchingChange={setIsSwitchingModel}
               selectedModelId={selectedModelId}
             />
           </PromptInputTools>
@@ -653,12 +660,15 @@ function PureMultimodalInput({
             <PromptInputSubmit
               className={cn(
                 "h-7 w-7 rounded-xl transition-all duration-200",
-                input.trim()
-                  ? "bg-foreground text-background hover:opacity-85 active:scale-95"
-                  : "bg-muted text-muted-foreground/25 cursor-not-allowed"
+                isSwitchingModel
+                  ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
+                  : input.trim()
+                    ? "bg-foreground text-background hover:opacity-85 active:scale-95"
+                    : "bg-muted text-muted-foreground/25 cursor-not-allowed"
               )}
               data-testid="send-button"
               disabled={
+                isSwitchingModel ||
                 !input.trim() ||
                 uploadQueue.length > 0 ||
                 Boolean(isLoading) ||
@@ -667,7 +677,11 @@ function PureMultimodalInput({
               status={status}
               variant="secondary"
             >
-              <ArrowUpIcon className="size-4" />
+              {isSwitchingModel ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : (
+                <ArrowUpIcon className="size-4" />
+              )}
             </PromptInputSubmit>
           )}
         </PromptInputFooter>
@@ -773,9 +787,11 @@ function ComposerPlusMenu({
 function PureModelSelectorCompact({
   selectedModelId,
   onModelChange,
+  onSwitchingChange,
 }: {
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
+  onSwitchingChange?: (switching: boolean) => void;
 }) {
   const { activeTopicId, refreshWorkspace } = useWorkspace();
   const { t } = useLocale();
@@ -806,6 +822,7 @@ function PureModelSelectorCompact({
       }
 
       selectingModelRef.current = modelId;
+      onSwitchingChange?.(true);
       onModelChange?.(modelId);
       setCookie("chat-model", modelId);
       setOpen(false);
@@ -844,9 +861,10 @@ function PureModelSelectorCompact({
         })
         .finally(() => {
           selectingModelRef.current = null;
+          onSwitchingChange?.(false);
         });
     },
-    [activeTopicId, onModelChange, refreshWorkspace]
+    [activeTopicId, onModelChange, onSwitchingChange, refreshWorkspace]
   );
 
   if (!(selectedModel || isAuto)) {
