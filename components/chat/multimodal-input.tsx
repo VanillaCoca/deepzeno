@@ -3,13 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import {
-  ArrowUpIcon,
-  BrainIcon,
-  EyeIcon,
-  PlusIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { ArrowUpIcon, BrainIcon, PlusIcon } from "lucide-react";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -27,7 +21,6 @@ import {
   ModelSelector,
   ModelSelectorContent,
   ModelSelectorGroup,
-  ModelSelectorInput,
   ModelSelectorItem,
   ModelSelectorList,
   ModelSelectorLogo,
@@ -879,7 +872,6 @@ function PureModelSelectorCompact({
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <ModelSelectorInput placeholder={t("chat.searchModels")} />
         {/* Auto is a plain button (not a cmdk item) so it is always clickable. */}
         <button
           className="mx-1 mt-1 flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-muted/50"
@@ -922,17 +914,9 @@ function PureModelSelectorCompact({
                   >
                     <ModelSelectorLogo provider={model.provider} />
                     <ModelSelectorName>{model.name}</ModelSelectorName>
-                    <div className="ml-auto flex items-center gap-2 text-foreground/70">
-                      {capabilities?.[model.id]?.tools && (
-                        <WrenchIcon className="size-3.5" />
-                      )}
-                      {capabilities?.[model.id]?.vision && (
-                        <EyeIcon className="size-3.5" />
-                      )}
-                      {capabilities?.[model.id]?.reasoning && (
-                        <BrainIcon className="size-3.5" />
-                      )}
-                    </div>
+                    {capabilities?.[model.id]?.reasoning && (
+                      <BrainIcon className="ml-auto size-3.5 text-foreground/70" />
+                    )}
                   </ModelSelectorItem>
                 ))}
               </ModelSelectorGroup>

@@ -165,9 +165,16 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     DEFAULT_CHAT_MODEL;
 
   useEffect(() => {
-    const availableModelIds = new Set<string>(
-      (modelsData?.models ?? []).map((model: { id: string }) => model.id)
-    );
+    // "auto" is an explicit, valid pseudo-selection — never auto-correct away
+    // from it (e.g. during the async window where the topic's stored default
+    // model hasn't refreshed to "auto" yet).
+    if (currentModelId === "auto") {
+      return;
+    }
+    const availableModelIds = new Set<string>([
+      ...(modelsData?.models ?? []).map((model: { id: string }) => model.id),
+      "auto",
+    ]);
     const defaultModelId = modelsData?.defaultModelId as string | undefined;
     const candidates = [preferredModelSeed, defaultModelId, DEFAULT_CHAT_MODEL];
     let preferredModelId: string | null = null;
