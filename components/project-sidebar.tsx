@@ -96,13 +96,14 @@ function SidebarAccountMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring aria-expanded:bg-sidebar-accent"
+          className="flex w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar px-3 py-2.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring aria-expanded:bg-sidebar-accent group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:px-2"
+          title={name}
           type="button"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/10 text-xs font-semibold text-sidebar-primary ring-1 ring-sidebar-border/60">
             {initial}
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <span className="block truncate text-sm font-medium text-sidebar-foreground">
               {name}
             </span>
@@ -110,7 +111,7 @@ function SidebarAccountMenu({
               {email}
             </span>
           </span>
-          <ChevronsUpDownIcon className="size-4 shrink-0 text-sidebar-foreground/50" />
+          <ChevronsUpDownIcon className="size-4 shrink-0 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />
         </button>
       </DropdownMenuTrigger>
 
@@ -282,23 +283,33 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
 
   return (
     <>
-      <Sidebar
-        className="border-r border-sidebar-border/60"
-        collapsible="offcanvas"
-      >
-        <SidebarHeader className="border-b border-sidebar-border/60 px-4 py-4">
+      <Sidebar className="border-r border-sidebar-border/60" collapsible="icon">
+        <SidebarHeader className="border-b border-sidebar-border/60 px-4 py-4 group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-3">
           <div className="flex items-center justify-between gap-2">
-            <Link
-              aria-label="Back to library"
-              className="rounded-lg outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-              href="/"
-            >
-              <ZenoLogo className="size-8 text-sidebar-foreground" />
-            </Link>
-            <SidebarTrigger className="md:hidden" />
+            {/* Brand: links to the library when expanded; in the collapsed rail
+                it becomes a hover-to-expand control (ChatGPT-style). */}
+            <div className="group/brand relative flex size-8 items-center justify-center">
+              <Link
+                aria-label="Back to library"
+                className="rounded-lg outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:group-hover/brand:opacity-0"
+                href="/"
+              >
+                <ZenoLogo className="size-7 text-sidebar-foreground" />
+              </Link>
+              {/* Expand control — only present in the collapsed rail, on hover. */}
+              <SidebarTrigger
+                aria-label="Expand sidebar"
+                className="absolute inset-0 hidden size-8 opacity-0 transition-opacity group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:group-hover/brand:opacity-100"
+              />
+            </div>
+            {/* Collapse / mobile-close control — hidden once collapsed. */}
+            <SidebarTrigger
+              aria-label="Collapse sidebar"
+              className="group-data-[collapsible=icon]:hidden"
+            />
           </div>
           {/* Project title shows in full (wraps) — never truncated. */}
-          <div className="group/title mt-3 flex items-start gap-1.5">
+          <div className="group/title mt-3 flex items-start gap-1.5 group-data-[collapsible=icon]:hidden">
             <p className="break-words font-semibold text-[15px] leading-snug text-sidebar-foreground">
               {activeProjectName ?? t("nav.projectSelection")}
             </p>
@@ -319,16 +330,19 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
         </SidebarHeader>
 
         <SidebarContent className="gap-0 px-2 py-3">
-          {/* Project utilities */}
+          {/* Project utilities — stay visible (as icons) in the collapsed rail */}
           <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
               <button
                 className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
                 onClick={() => setSearchOpen(true)}
+                title={t("nav.search")}
                 type="button"
               >
                 <SearchIcon className="size-4 shrink-0 opacity-70" />
-                {t("nav.search")}
+                <span className="group-data-[collapsible=icon]:hidden">
+                  {t("nav.search")}
+                </span>
               </button>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -336,17 +350,20 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
                 className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-sidebar-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!activeProjectId}
                 onClick={() => setNotesOpen(true)}
+                title={t("nav.quickNotes")}
                 type="button"
               >
                 <LightbulbIcon className="size-4 shrink-0 opacity-70" />
-                {t("nav.quickNotes")}
+                <span className="group-data-[collapsible=icon]:hidden">
+                  {t("nav.quickNotes")}
+                </span>
               </button>
             </SidebarMenuItem>
           </SidebarMenu>
 
-          <div className="my-2.5 h-px bg-sidebar-border/60" />
+          <div className="my-2.5 h-px bg-sidebar-border/60 group-data-[collapsible=icon]:hidden" />
 
-          <SidebarGroup className="p-0">
+          <SidebarGroup className="p-0 group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel className="px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/50">
               {t("nav.topics")}
             </SidebarGroupLabel>
@@ -456,7 +473,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
           </SidebarGroup>
 
           {archivedTopics.length > 0 && (
-            <SidebarGroup>
+            <SidebarGroup className="group-data-[collapsible=icon]:hidden">
               <SidebarGroupContent className="px-2">
                 <Button
                   className="h-8 w-full justify-start rounded-lg px-2 text-sidebar-foreground/50 hover:text-sidebar-foreground"
@@ -498,7 +515,7 @@ export function ProjectSidebar({ userEmail }: { userEmail: string | null }) {
           )}
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-sidebar-border/60 px-3 py-3">
+        <SidebarFooter className="border-t border-sidebar-border/60 px-3 py-3 group-data-[collapsible=icon]:px-0">
           <SidebarAccountMenu
             isSigningOut={isSigningOut}
             onSignOut={handleSignOut}

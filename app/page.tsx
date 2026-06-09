@@ -61,6 +61,26 @@ function HomepageFallback() {
   );
 }
 
+// HomepageShell reads the locale cookie (dynamic), so under cacheComponents it
+// must render inside a Suspense boundary. This frame skeleton stands in for the
+// brief moment the cookie resolves; "ZENO" is brand text and needs no locale.
+function HomepageFrameFallback() {
+  return (
+    <main className="min-h-dvh bg-background">
+      <div className="mx-auto flex min-h-dvh max-w-3xl flex-col px-6 py-10">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-base font-medium">ZENO</span>
+          <div className="h-8 w-28 animate-pulse rounded bg-muted" />
+        </div>
+
+        <div className="mb-3 mt-8 h-4 w-20 animate-pulse rounded bg-muted" />
+
+        <HomepageFallback />
+      </div>
+    </main>
+  );
+}
+
 async function HomepageContent() {
   const session = await requireAuth();
   const projects = await listProjectSummariesByUserId(session.user.id);
@@ -92,10 +112,12 @@ async function HomepageContent() {
 
 export default function Page() {
   return (
-    <HomepageShell>
-      <Suspense fallback={<HomepageFallback />}>
-        <HomepageContent />
-      </Suspense>
-    </HomepageShell>
+    <Suspense fallback={<HomepageFrameFallback />}>
+      <HomepageShell>
+        <Suspense fallback={<HomepageFallback />}>
+          <HomepageContent />
+        </Suspense>
+      </HomepageShell>
+    </Suspense>
   );
 }

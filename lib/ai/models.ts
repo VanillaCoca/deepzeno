@@ -10,7 +10,8 @@ export type ModelProviderType =
   | "anthropic"
   | "openai"
   | "openai-compatible"
-  | "gateway";
+  | "gateway"
+  | "bedrock";
 
 // Capability/cost tier used by the model-routing policy:
 // - economy: cheap/fast; bulk background work (extraction, summarization, retrieval)
@@ -89,6 +90,106 @@ const modelCatalog: ChatModelDefinition[] = [
     outputCostPerMTok: 8,
     envKeys: ["OPENAI_API_KEY"],
     staticModelId: "gpt-4.1",
+  },
+  // --- Amazon Bedrock: Anthropic-native transport via @ai-sdk/amazon-bedrock
+  //     (Bearer API key auth, no IAM SigV4). Region + key come from env; model
+  //     ids are us.* cross-region inference profiles. Sonnet is active now;
+  //     flagships below stay hidden until BEDROCK_FLAGSHIPS_ENABLED is set
+  //     (grant day = flip one env var + redeploy, zero code change). ---
+  {
+    id: "bedrock:claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6 (Bedrock)",
+    provider: "anthropic",
+    providerLabel: "Amazon Bedrock",
+    description:
+      "Claude Sonnet 4.6 served through Amazon Bedrock for unified billing.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: false,
+    },
+    providerType: "bedrock",
+    tier: "standard",
+    contextWindowTokens: 200_000,
+    inputCostPerMTok: 3,
+    outputCostPerMTok: 15,
+    envKeys: ["BEDROCK_API_KEY", "AWS_REGION"],
+    staticModelId: "us.anthropic.claude-sonnet-4-6",
+  },
+  {
+    id: "bedrock:claude-opus-4-8",
+    name: "Claude Opus 4.8",
+    provider: "anthropic",
+    providerLabel: "Amazon Bedrock",
+    description:
+      "Most capable Claude model; reserved for hard reasoning and final synthesis.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: true,
+    },
+    providerType: "bedrock",
+    tier: "frontier",
+    contextWindowTokens: 200_000,
+    inputCostPerMTok: 15,
+    outputCostPerMTok: 75,
+    reasoningEffort: "medium",
+    envKeys: ["BEDROCK_API_KEY", "AWS_REGION", "BEDROCK_FLAGSHIPS_ENABLED"],
+    staticModelId: "us.anthropic.claude-opus-4-8",
+  },
+  // --- OpenAI flagships via Bedrock's mantle endpoint. These speak the
+  //     OpenAI Chat Completions shape (Bearer auth), so they reuse the existing
+  //     openai-compatible transport with a Bedrock-specific baseURL. ---
+  {
+    id: "bedrock-openai:gpt-5.5",
+    name: "GPT-5.5",
+    provider: "openai",
+    providerLabel: "Amazon Bedrock",
+    description:
+      "OpenAI flagship via Bedrock; strong reasoning for hard problems.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: true,
+    },
+    providerType: "openai-compatible",
+    tier: "frontier",
+    // TODO(pricing): confirm GPT-5.5 Bedrock rates before relying on cost routing.
+    contextWindowTokens: 400_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
+    reasoningEffort: "medium",
+    envKeys: [
+      "BEDROCK_MANTLE_API_KEY",
+      "BEDROCK_MANTLE_BASE_URL",
+      "BEDROCK_FLAGSHIPS_ENABLED",
+    ],
+    staticModelId: "openai.gpt-5.5",
+  },
+  {
+    id: "bedrock-openai:gpt-5.4",
+    name: "GPT-5.4",
+    provider: "openai",
+    providerLabel: "Amazon Bedrock",
+    description:
+      "Fast OpenAI flagship via Bedrock for everyday substantive chat.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: false,
+    },
+    providerType: "openai-compatible",
+    tier: "standard",
+    // TODO(pricing): confirm GPT-5.4 Bedrock rates before relying on cost routing.
+    contextWindowTokens: 400_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
+    envKeys: [
+      "BEDROCK_MANTLE_API_KEY",
+      "BEDROCK_MANTLE_BASE_URL",
+      "BEDROCK_FLAGSHIPS_ENABLED",
+    ],
+    staticModelId: "openai.gpt-5.4",
   },
   {
     id: "dashscope:default",

@@ -1,3 +1,4 @@
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -12,6 +13,26 @@ const anthropicProvider = createAnthropic({
 const openaiProvider = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Amazon Bedrock, Anthropic-native transport. Bearer API key takes precedence
+// over SigV4, so we only need BEDROCK_API_KEY + AWS_REGION (us-east-2).
+const bedrockProvider = process.env.BEDROCK_API_KEY
+  ? createAmazonBedrock({
+      apiKey: process.env.BEDROCK_API_KEY,
+      region: process.env.AWS_REGION ?? "us-east-2",
+    })
+  : null;
+
+// OpenAI flagships on Bedrock speak the OpenAI Chat Completions shape through
+// the mantle endpoint, so they ride the openai-compatible transport.
+const bedrockMantleProvider =
+  process.env.BEDROCK_MANTLE_API_KEY && process.env.BEDROCK_MANTLE_BASE_URL
+    ? createOpenAICompatible({
+        apiKey: process.env.BEDROCK_MANTLE_API_KEY,
+        baseURL: process.env.BEDROCK_MANTLE_BASE_URL,
+        name: "bedrock-openai",
+      })
+    : null;
 
 const dashscopeProvider =
   process.env.DASHSCOPE_API_KEY && process.env.DASHSCOPE_BASE_URL
@@ -60,6 +81,12 @@ export function getLanguageModel(modelId: string) {
       return anthropicProvider.chat(model.providerModelId);
     case "openai":
       return openaiProvider.chat(model.providerModelId);
+    case "bedrock":
+      if (!bedrockProvider) {
+        throw new Error("Amazon Bedrock is not configured.");
+      }
+
+      return bedrockProvider(model.providerModelId);
     case "openai-compatible":
       if (model.id.startsWith("dashscope:")) {
         if (!dashscopeProvider) {
@@ -75,6 +102,14 @@ export function getLanguageModel(modelId: string) {
         }
 
         return deepseekProvider.chatModel(model.providerModelId);
+      }
+
+      if (model.id.startsWith("bedrock-openai:")) {
+        if (!bedrockMantleProvider) {
+          throw new Error("Bedrock (OpenAI) is not configured.");
+        }
+
+        return bedrockMantleProvider.chatModel(model.providerModelId);
       }
 
       throw new Error("Unsupported OpenAI-compatible provider.");

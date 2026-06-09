@@ -83,8 +83,12 @@ export function WorkspaceHeader({
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-14">
       <div className="absolute top-2.5 left-3 flex items-center gap-2">
         <span className={cn(ISLAND, "pr-2.5")}>
+          {/* Desktop toggles from inside the sidebar; this header trigger stays
+              only on mobile, where the sidebar is a bottom sheet with no other
+              way to open it. */}
           <Button
             aria-label={t("header.toggleSidebar")}
+            className="md:hidden"
             onClick={toggleSidebar}
             size="icon-sm"
             variant="ghost"
