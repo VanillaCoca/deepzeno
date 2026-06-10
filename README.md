@@ -115,7 +115,7 @@ V1 is not for everyone. It assumes:
 ### What V1 deliberately does not do
 
 - No auto-writing to project truth — every entry requires user confirmation
-- No autonomous agents or tool execution inside ZENO
+- No execution and no write-side autonomy — read-only autonomous research is core (see Iron Law 0); executing code or tools is not
 - No BYOK (bring your own key) — platform keys only
 - No conversation import — projects start fresh in ZENO
 - No general-purpose knowledge base — ZENO stores project judgment, not arbitrary notes
@@ -171,10 +171,13 @@ A judgment is not just text. It has a kind, a status, a rationale, relations to 
 
 ## Design principles
 
-ZENO follows four iron laws that guide every design decision:
+ZENO follows one duty and four iron laws that guide every design decision:
+
+- **Iron Law 0 — Proactive diligence.**
+  ZENO must act on the project unprompted: decompose, research, verify, report. Its autonomy is always read-only — everything it produces enters the funnel as idea / candidate / evidence, never becomes truth on its own, and nothing is ever executed. Laws 1–4 are boundaries; when the duty conflicts with a boundary, the boundary wins.
 
 - **Iron Law 1 — Never own the execution environment, only judgment.**
-  ZENO does not run code, write files, or do automated tasks. It maintains decision truth. Coding agents do execution; ZENO supplies their context.
+  ZENO does not run code, write files, or do automated tasks. It maintains decision truth. Coding agents do execution; ZENO supplies their context. This is a neutrality commitment — agents trust ZENO precisely because it never executes and never competes with them.
 
 - **Iron Law 2 — Prefer to miss than to make up.**
   Trust-preserving recall beats maximum recall. A wrong truth poisons all downstream work; a missed truth can be added later.
@@ -187,7 +190,7 @@ ZENO follows four iron laws that guide every design decision:
 
 Beyond the iron laws:
 
-- **Confirmation over automation** — ZENO never auto-writes; the user always reviews.
+- **Automate investigation; confirm truth; ration confirmation** — investigation can be unlimited, but confirmation is a scarce resource: ZENO never auto-writes truth, and never converts investigation volume into confirmation-request volume.
 - **Project state is the source of truth, not any single conversation.**
 - **Build only what must be built — no unnecessary wheels.**
 
@@ -204,9 +207,12 @@ These are designed but **not implemented yet** — listed for context, not commi
 | Agent-handoff blocking sweep before MCP read | V1 |
 | Reactivation-anchor decay over turns | V1 |
 | Credit-based pricing / billing | V1 |
+| **L1 Kickoff** — intake interview + seeded topic decomposition on project creation | V1 |
+| **L2 Research Brief** — "Research this" on a node → sourced evidence brief | V1.x |
 | Multi-model `@mentions` (`@opus`, `@gpt54`) | V1.5+ |
 | Mobile UI | V1.5 |
-| **Council** — structured multi-model deliberation on one judgment | V2 |
+| **Watchtower (L3)** — scheduled re-verification of externally exposed assumptions | V1.5 |
+| **Council (redefined)** — adversarial check on high-stakes candidates before confirmation | V1.5+ |
 | **Multi-user collaboration** — team-level decision substrate | V2 |
 
 ---
