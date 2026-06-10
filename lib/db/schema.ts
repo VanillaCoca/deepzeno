@@ -60,6 +60,10 @@ export const vote = pgTable(
 
 export type Vote = InferSelectModel<typeof vote>;
 
+// DEPRECATED (constitution E2 — no free-floating documents): the artifact
+// subsystem was removed and nothing reads or writes these two tables anymore.
+// They are kept only so existing rows survive until a data-retention decision;
+// drop them in a dedicated migration, never reuse them.
 export const document = pgTable(
   "Document",
   {

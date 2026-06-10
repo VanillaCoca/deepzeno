@@ -27,7 +27,6 @@ function ModelBadge({ label }: { label: string }) {
 }
 
 type MessagesProps = {
-  addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
   status: UseChatHelpers<ChatMessage>["status"];
   votes: Vote[] | undefined;
@@ -35,7 +34,6 @@ type MessagesProps = {
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   isReadonly: boolean;
-  isArtifactVisible: boolean;
   isLoading?: boolean;
   selectedModelId: string;
   onEditMessage?: (message: ChatMessage) => void;
@@ -54,7 +52,6 @@ function CompactionDivider({ label }: { label: string }) {
 }
 
 function PureMessages({
-  addToolApprovalResponse,
   chatId,
   status,
   votes,
@@ -62,7 +59,6 @@ function PureMessages({
   setMessages,
   regenerate,
   isReadonly,
-  isArtifactVisible,
   isLoading,
   selectedModelId: _selectedModelId,
   onEditMessage,
@@ -114,7 +110,6 @@ function PureMessages({
         )}
         data-testid="messages-viewport"
         ref={messagesContainerRef}
-        style={isArtifactVisible ? { scrollbarWidth: "none" } : undefined}
       >
         <div className="mx-auto flex min-h-full min-w-0 max-w-4xl flex-col gap-5 px-2 py-6 pt-16 md:gap-7 md:px-4">
           {restoredSandboxContext && (
@@ -133,7 +128,6 @@ function PureMessages({
           {messages.map((message, index) => (
             <Fragment key={message.id}>
               <PreviewMessage
-                addToolApprovalResponse={addToolApprovalResponse}
                 chatId={chatId}
                 isLoading={
                   status === "streaming" && messages.length - 1 === index
