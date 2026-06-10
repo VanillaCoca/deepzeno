@@ -198,6 +198,17 @@ function ActionColumn({
               {t("detail.supersedeWarning")}
             </div>
           ) : null}
+          {detail?.edges.some(
+            (edge) =>
+              edge.relation === "contradicts" &&
+              (edge.fromNode === selectedNode.id ||
+                edge.toNode === selectedNode.id)
+          ) ? (
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--ir-warning-stripe)] bg-[var(--ir-warning-bg)] px-2 py-2 text-xs text-[var(--ir-warning-fg)]">
+              <ShieldAlertIcon className="mt-0.5 size-3.5 shrink-0" />
+              {t("detail.contradictsWarning")}
+            </div>
+          ) : null}
           {selectedNode.topicId ? null : (
             <div className="flex flex-col gap-2 rounded-lg border border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-2 py-2">
               <p className="text-xs font-medium text-[var(--ir-text-primary)]">

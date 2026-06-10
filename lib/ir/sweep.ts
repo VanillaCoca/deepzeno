@@ -4,7 +4,9 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
+import { resolveGovernorConfig } from "@/lib/extraction-governor";
 import {
+  countIRNodesByStatus,
   createIRNodeForUser,
   findDuplicateIRCandidate,
   getChatSessionSweepState,
@@ -93,6 +95,8 @@ export type IRSweepResult = {
   candidatesCreated: number;
   ideasCreated: number;
   duplicatesSkipped: number;
+  governorDemoted: number;
+  governorDropped: number;
   chunksProcessed: number;
   turnsProcessed: number;
   durationMs: number;
@@ -692,6 +696,20 @@ export async function runIRSweep({
       : null;
   const reactivationAnchorId = reactivationAnchor?.id ?? null;
   const contextNodes = await loadContextNodes({ userId, projectId, topicId });
+  const governor = resolveGovernorConfig();
+  let pendingPoolSize = 0;
+
+  try {
+    pendingPoolSize = await countIRNodesByStatus({
+      projectId,
+      status: "pending",
+      createdBy: "ai",
+    });
+  } catch {
+    // An unreadable pool must not block the sweep; treat it as empty.
+  }
+
+  const pendingBackpressure = pendingPoolSize >= governor.pendingPoolSoftCap;
 
   if (unprocessedMessages.length === 0) {
     await upsertChatSessionSweepState({
@@ -706,6 +724,8 @@ export async function runIRSweep({
       candidatesCreated: 0,
       ideasCreated: 0,
       duplicatesSkipped: 0,
+      governorDemoted: 0,
+      governorDropped: 0,
       chunksProcessed: 0,
       turnsProcessed: 0,
       durationMs: Date.now() - startedAt,
@@ -716,6 +736,8 @@ export async function runIRSweep({
   let candidatesCreated = 0;
   let ideasCreated = 0;
   let duplicatesSkipped = 0;
+  let governorDemoted = 0;
+  let governorDropped = 0;
   let lastModel = selectModelForTask("ir_extraction");
   const chunks = chunkMessages(unprocessedMessages);
 
@@ -730,9 +752,24 @@ export async function runIRSweep({
       lastModel = extraction.modelId;
 
       for (const item of extraction.object.high_confidence) {
+        // Governor (principle 2a): once this run has filled its pending
+        // quota — or the user's confirm queue is backlogged and this item
+        // doesn't clear the raised confidence bar — land it as an idea
+        // instead of growing the confirmation queue.
+        const effectiveConfidence = item.confidence ?? FALLBACK_CONFIDENCE.high;
+        const demote =
+          candidatesCreated >= governor.maxSweepPending ||
+          (pendingBackpressure &&
+            effectiveConfidence < governor.backpressureMinConfidence);
+
+        if (demote && ideasCreated >= governor.maxSweepIdeas) {
+          governorDropped += 1;
+          continue;
+        }
+
         const result = await persistSweepItem({
           item,
-          tier: "high",
+          tier: demote ? "medium" : "high",
           userId,
           projectId,
           topicId,
@@ -744,12 +781,20 @@ export async function runIRSweep({
 
         if (result === "candidate") {
           candidatesCreated += 1;
+        } else if (result === "idea") {
+          ideasCreated += 1;
+          governorDemoted += 1;
         } else if (result === "duplicate") {
           duplicatesSkipped += 1;
         }
       }
 
       for (const item of extraction.object.medium_confidence) {
+        if (ideasCreated >= governor.maxSweepIdeas) {
+          governorDropped += 1;
+          continue;
+        }
+
         const result = await persistSweepItem({
           item,
           tier: "medium",
@@ -785,6 +830,10 @@ export async function runIRSweep({
         candidatesCreated,
         ideasCreated,
         duplicatesSkipped,
+        governorDemoted,
+        governorDropped,
+        pendingPoolSize,
+        pendingBackpressure,
         chunksProcessed: chunks.length,
         turnsProcessed: unprocessedMessages.length,
         model: lastModel,
@@ -797,6 +846,8 @@ export async function runIRSweep({
       candidatesCreated,
       ideasCreated,
       duplicatesSkipped,
+      governorDemoted,
+      governorDropped,
       chunksProcessed: chunks.length,
       turnsProcessed: unprocessedMessages.length,
       durationMs: Date.now() - startedAt,
@@ -822,6 +873,8 @@ export async function runIRSweep({
       candidatesCreated,
       ideasCreated,
       duplicatesSkipped,
+      governorDemoted,
+      governorDropped,
       chunksProcessed: chunks.length,
       turnsProcessed: unprocessedMessages.length,
       durationMs: Date.now() - startedAt,

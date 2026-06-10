@@ -372,12 +372,10 @@ export function IRBulkImportDialog({
   async function confirmRows({
     rowsToPersist,
     confirmationSource,
-    bulkTruthAcknowledged,
     successMessage,
   }: {
     rowsToPersist: ImportConfirmRow[];
-    confirmationSource?: "review_truth_row" | "confirm_all_modal";
-    bulkTruthAcknowledged?: boolean;
+    confirmationSource?: "review_truth_row";
     successMessage: string;
   }) {
     if (!(activeProjectId && importSessionId)) {
@@ -400,7 +398,6 @@ export function IRBulkImportDialog({
         source_document: sourceDocument,
         rows: rowsToPersist,
         confirmation_source: confirmationSource,
-        bulk_truth_acknowledged: bulkTruthAcknowledged,
         telemetry: {
           user_edit_count: userEditCount,
           status_downgrade_count: statusDowngradeCount,
@@ -498,27 +495,31 @@ export function IRBulkImportDialog({
   }
 
   async function confirmAllAsSuggested() {
-    const selectedRows = visibleRows.map((row) =>
-      rowToConfirmPayload(
+    // Confirmation is a thinking act (constitution 2c): the bulk path never
+    // writes truth. Truth suggestions are demoted to candidates here; the
+    // per-row "Review truth" flow is the only way to confirm them as active.
+    const demotedTruthCount = visibleRows.filter(
+      (row) => row.current_status === "active"
+    ).length;
+    const selectedRows = visibleRows.map((row) => {
+      const isActive = row.current_status === "active";
+
+      return rowToConfirmPayload(
         {
           ...row,
-          action_state:
-            row.current_status === "active" ? "confirmed" : row.action_state,
-          active_confirmed: row.current_status === "active",
+          action_state: isActive ? "demoted" : row.action_state,
+          active_confirmed: false,
         },
-        row.current_status
-      )
-    );
+        isActive ? "pending" : row.current_status
+      );
+    });
 
     await confirmRows({
       rowsToPersist: selectedRows,
-      confirmationSource: selectedRows.some(
-        (row) => row.final_status === "active"
-      )
-        ? "confirm_all_modal"
-        : undefined,
-      bulkTruthAcknowledged: true,
-      successMessage: "Bulk import confirmed.",
+      successMessage:
+        demotedTruthCount > 0
+          ? `Bulk import confirmed. ${demotedTruthCount} truth suggestion(s) landed as candidates for individual review.`
+          : "Bulk import confirmed.",
     });
   }
 
@@ -967,14 +968,19 @@ export function IRBulkImportDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm bulk import</AlertDialogTitle>
             <AlertDialogDescription className="text-left leading-6">
-              This will write {confirmAllCounts.active} items as truth,{" "}
-              {confirmAllCounts.pending} as candidates, {confirmAllCounts.idea}{" "}
-              as ideas - including {confirmAllCounts.caveatActive} truth items
-              the AI flagged with concerns.
-              <br />
-              <br />
-              Truth items skip individual review in this flow. You remain
-              accountable for each judgment.
+              This will import{" "}
+              {confirmAllCounts.pending + confirmAllCounts.active} items as
+              candidates and {confirmAllCounts.idea} as ideas.
+              {confirmAllCounts.active > 0 ? (
+                <>
+                  <br />
+                  <br />
+                  {confirmAllCounts.active} truth suggestion(s) will land as
+                  candidates instead of truth — confirming truth requires
+                  individual review. Use "Review truth" to confirm them one by
+                  one.
+                </>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -254,12 +254,11 @@ export function validateImportConfirmationRequest(
         );
       }
 
-      if (
-        request.confirmation_source === "confirm_all_modal" &&
-        request.bulk_truth_acknowledged !== true
-      ) {
+      if (request.confirmation_source === "confirm_all_modal") {
+        // Constitution 2c: bulk confirmation never writes truth. Active rows
+        // must go through per-row review (review_truth_row) or be demoted.
         errors.push(
-          `${row.client_id}: confirm-all active rows require bulk_truth_acknowledged`
+          `${row.client_id}: bulk confirmation cannot write truth; demote to pending or review each truth row individually`
         );
       }
 

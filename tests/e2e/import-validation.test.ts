@@ -130,7 +130,7 @@ test.describe("Bulk Import validation", () => {
     ).toThrow(ImportValidationError);
   });
 
-  test("confirm-all active rows without bulk ack are rejected", () => {
+  test("confirm-all can never write truth, even with bulk acknowledgement", () => {
     expect(() =>
       validateImportConfirmationRequest({
         project_id: "11111111-1111-4111-8111-111111111111",
@@ -138,9 +138,28 @@ test.describe("Bulk Import validation", () => {
         import_session_id: "22222222-2222-4222-8222-222222222222",
         source_document: sourceDocument,
         confirmation_source: "confirm_all_modal",
-        rows: [confirmRow({ final_status: "active" })],
+        bulk_truth_acknowledged: true,
+        rows: [confirmRow({ final_status: "active", active_confirmed: true })],
       })
     ).toThrow(ImportValidationError);
+  });
+
+  test("confirm-all demoted truth rows import as pending", () => {
+    const rows = validateImportConfirmationRequest({
+      project_id: "11111111-1111-4111-8111-111111111111",
+      topic_id: null,
+      import_session_id: "22222222-2222-4222-8222-222222222222",
+      source_document: sourceDocument,
+      rows: [
+        confirmRow({
+          final_status: "pending",
+          action_state: "demoted",
+          active_confirmed: false,
+        }),
+      ],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].final_status).toBe("pending");
   });
 
   test("review truth unhandled rows can be demoted to pending", () => {

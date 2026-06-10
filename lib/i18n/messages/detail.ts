@@ -8,6 +8,8 @@ export const detailMessages: LocaleMessages = {
     "detail.reEvaluate": "Re-evaluate",
     "detail.supersedeWarning":
       "Confirming this will mark an older IR node as superseded.",
+    "detail.contradictsWarning":
+      "This conflicts with another IR node. Review the contradiction before confirming.",
     "detail.assignJudgment": "Assign to a judgment before confirming",
     "detail.newJudgmentPlaceholder": "or create a new judgment",
     "detail.needsDiscussion":
@@ -59,6 +61,8 @@ export const detailMessages: LocaleMessages = {
     "detail.unknown": "未知",
     "detail.reEvaluate": "重新评估",
     "detail.supersedeWarning": "确认后会把一个较旧的 IR 节点标记为已被取代。",
+    "detail.contradictsWarning":
+      "该节点与另一个 IR 节点存在矛盾。确认前请先审视这条冲突。",
     "detail.assignJudgment": "确认前请先归入一个主题",
     "detail.newJudgmentPlaceholder": "或创建一个新主题",
     "detail.needsDiscussion": "这其实是一个待决问题 —— 继续讨论吧。",
@@ -105,6 +109,8 @@ export const detailMessages: LocaleMessages = {
     "detail.reEvaluate": "Réévaluer",
     "detail.supersedeWarning":
       "Confirmer ceci marquera un nœud IR plus ancien comme remplacé.",
+    "detail.contradictsWarning":
+      "Ceci contredit un autre nœud IR. Examinez la contradiction avant de confirmer.",
     "detail.assignJudgment": "Affectez à un sujet avant de confirmer",
     "detail.newJudgmentPlaceholder": "ou créer un nouveau sujet",
     "detail.needsDiscussion":

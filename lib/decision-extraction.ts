@@ -10,12 +10,17 @@ import {
   isDecisionKind,
 } from "@/lib/decision-kinds";
 import { serializeDecisionGraph } from "@/lib/decision-serializer";
+import {
+  governExtractionCandidates,
+  resolveGovernorConfig,
+} from "@/lib/extraction-governor";
 import { extractionSystemPrompt } from "@/lib/prompting";
 import {
   getCandidateByContentHash,
   insertCandidateDecisions,
   listDecisionsByTopicId,
   listEdgesByTopicId,
+  listPendingCandidatesByTopicId,
   listRecentWorkspaceMessagesByConversationId,
 } from "@/lib/workspace/queries";
 import type { WorkspaceMessageRecord } from "@/lib/workspace/types";
@@ -280,7 +285,35 @@ export async function extractDecisions({
       );
     }
 
-    for (const candidate of normalized) {
+    const governor = resolveGovernorConfig();
+    let pendingPoolSize = 0;
+
+    try {
+      pendingPoolSize = (await listPendingCandidatesByTopicId(topicId)).length;
+    } catch {
+      // An unreadable pool must not block extraction; treat it as empty.
+    }
+
+    const backpressured = pendingPoolSize >= governor.pendingPoolSoftCap;
+    const { admitted, droppedByBackpressure, droppedByCap } =
+      governExtractionCandidates(normalized, {
+        maxCandidates: governor.maxExtractionCandidates,
+        backpressured,
+        minConfidence: governor.backpressureMinConfidence,
+      });
+
+    if (droppedByBackpressure + droppedByCap > 0) {
+      console.warn("Extraction governor limited candidate admission", {
+        topicId,
+        extracted: normalized.length,
+        admitted: admitted.length,
+        droppedByBackpressure,
+        droppedByCap,
+        pendingPoolSize,
+      });
+    }
+
+    for (const candidate of admitted) {
       const contentHash = computeContentHash({
         conversationId,
         messageId,

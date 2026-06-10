@@ -22,33 +22,19 @@ export async function POST(request: Request) {
     const statusCounts = summarizeImportStatuses(rows);
     const caveatCount = rows.filter((row) => row.confidence_caveat).length;
 
-    if (
-      body.confirmation_source === "confirm_all_modal" &&
-      statusCounts.active > 0
-    ) {
-      await logIREvent({
-        projectId: body.project_id,
-        topicId: body.topic_id ?? null,
-        event: "import_bulk_modal_continued",
-        layer: "manual",
-        metadata: {
-          importSessionId: body.import_session_id,
-          activeCount: statusCounts.active,
-          pendingCount: statusCounts.pending,
-          ideaCount: statusCounts.idea,
-          caveatCount,
-        },
-      });
-    }
-
     const nodes = await createImportedIRNodesForUser({
       userId: session.user.id,
       projectId: body.project_id,
       topicId: body.topic_id ?? null,
       importSessionId: body.import_session_id,
       rows,
+      // Validation already rejected active rows with any other source, so
+      // only the per-row review source ever reaches the write layer.
       confirmationSource:
-        statusCounts.active > 0 ? body.confirmation_source : undefined,
+        statusCounts.active > 0 &&
+        body.confirmation_source === "review_truth_row"
+          ? "review_truth_row"
+          : undefined,
     });
 
     await logIREvent({

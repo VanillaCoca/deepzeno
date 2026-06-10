@@ -422,6 +422,38 @@ export async function listIRNodesForUser({
   return (rows ?? []).map(mapIRNode);
 }
 
+export async function countIRNodesByStatus({
+  projectId,
+  status,
+  createdBy,
+}: {
+  projectId: string;
+  status: IRStatus;
+  createdBy?: IRCreatedBy;
+}) {
+  let query = getClient()
+    .from("ir_nodes")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId)
+    .eq("status", status);
+
+  if (createdBy) {
+    query = query.eq("created_by", createdBy);
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    if (isMissingIRTableError(error)) {
+      throw new IRNotReadyError("IR schema has not been migrated yet.");
+    }
+
+    throw new ChatbotError("bad_request:database", "Failed to count IR nodes");
+  }
+
+  return count ?? 0;
+}
+
 export async function listIREdgesForProject({
   userId,
   projectId,
@@ -580,7 +612,7 @@ export async function createImportedIRNodesForUser({
   topicId?: string | null;
   importSessionId: string;
   rows: ImportConfirmRow[];
-  confirmationSource?: "review_truth_row" | "confirm_all_modal";
+  confirmationSource?: "review_truth_row";
 }) {
   await assertProjectAccess(userId, projectId);
   await assertTopicAccess({ userId, projectId, topicId });
@@ -602,10 +634,14 @@ export async function createImportedIRNodesForUser({
       throw new ChatbotError("bad_request:api", "source_text_span is required");
     }
 
-    if (row.final_status === "active" && !confirmationSource) {
+    // Constitution 2c: truth is only written through per-row review.
+    if (
+      row.final_status === "active" &&
+      confirmationSource !== "review_truth_row"
+    ) {
       throw new ChatbotError(
         "bad_request:api",
-        "Active import rows require explicit confirmation metadata"
+        "Truth rows require individual review confirmation"
       );
     }
 
