@@ -9,7 +9,6 @@ import type { CodeAnchor } from "@/lib/decision-anchors";
 import { normalizeCodeAnchors } from "@/lib/decision-anchors";
 import { type DecisionKind, isDecisionKind } from "@/lib/decision-kinds";
 import { ChatbotError } from "@/lib/errors";
-import { classifyWrite } from "@/lib/mcp/write-routing";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { WorkspaceApiKey } from "@/lib/workspace/types";
 
@@ -19,16 +18,6 @@ type AgentWriteContext = {
   agent: string;
   sessionId?: string | null;
   requestId?: string;
-};
-
-type DecisionPatch = {
-  title?: string;
-  content?: string;
-  rationale?: string | null;
-  kind?: DecisionKind;
-  weight?: DecisionWeight;
-  status?: string;
-  codeAnchors?: CodeAnchor[] | null;
 };
 
 const decisionWeights = ["low", "normal", "high"] as const;
@@ -267,134 +256,6 @@ async function getEdgeRow(edgeId: string) {
   return mapEdge(data as DatabaseRecord);
 }
 
-async function insertDecisionRow(input: {
-  projectId: string;
-  topicId: string;
-  title: string;
-  content: string;
-  rationale?: string | null;
-  kind: DecisionKind;
-  weight?: DecisionWeight | null;
-  status?: string | null;
-  relevantMessageIds?: string[] | null;
-  codeAnchors?: CodeAnchor[] | null;
-}) {
-  const client = getClient();
-  const { data, error } = await client
-    .from("decisions")
-    .insert({
-      project_id: input.projectId,
-      topic_id: input.topicId,
-      title: input.title,
-      content: input.content,
-      rationale: input.rationale ?? null,
-      kind: input.kind,
-      weight: input.weight ?? "normal",
-      status: input.status ?? "active",
-      sensitivity: "normal",
-      relevant_message_ids: input.relevantMessageIds ?? null,
-      code_anchors: input.codeAnchors ?? null,
-      created_from_message_id: null,
-      confirmed_by_user_id: null,
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to insert MCP decision", error);
-    throw new ChatbotError("bad_request:database", "Failed to insert decision");
-  }
-
-  return mapDecision(data as DatabaseRecord);
-}
-
-async function updateDecisionRow(decisionId: string, patch: DecisionPatch) {
-  const update: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (patch.title !== undefined) {
-    update.title = patch.title;
-  }
-
-  if (patch.content !== undefined) {
-    update.content = patch.content;
-  }
-
-  if (patch.rationale !== undefined) {
-    update.rationale = patch.rationale;
-  }
-
-  if (patch.kind !== undefined) {
-    update.kind = patch.kind;
-  }
-
-  if (patch.weight !== undefined) {
-    update.weight = patch.weight;
-  }
-
-  if (patch.status !== undefined) {
-    update.status = patch.status;
-  }
-
-  if (patch.codeAnchors !== undefined) {
-    update.code_anchors = patch.codeAnchors;
-  }
-
-  const client = getClient();
-  const { data, error } = await client
-    .from("decisions")
-    .update(update)
-    .eq("id", decisionId)
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to update MCP decision", error);
-    throw new ChatbotError("bad_request:database", "Failed to update decision");
-  }
-
-  return mapDecision(data as DatabaseRecord);
-}
-
-async function insertEdgeRow(input: {
-  projectId: string;
-  topicId: string;
-  sourceDecisionId: string;
-  targetDecisionId: string;
-  type: string;
-}) {
-  const client = getClient();
-  const { data, error } = await client
-    .from("edges")
-    .insert({
-      project_id: input.projectId,
-      topic_id: input.topicId,
-      source_decision_id: input.sourceDecisionId,
-      target_decision_id: input.targetDecisionId,
-      type: input.type,
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    console.error("Failed to insert MCP edge", error);
-    throw new ChatbotError("bad_request:database", "Failed to insert edge");
-  }
-
-  return mapEdge(data as DatabaseRecord);
-}
-
-async function deleteEdgeRow(edgeId: string) {
-  const client = getClient();
-  const { error } = await client.from("edges").delete().eq("id", edgeId);
-
-  if (error) {
-    console.error("Failed to delete MCP edge", error);
-    throw new ChatbotError("bad_request:database", "Failed to delete edge");
-  }
-}
-
 async function findIdenticalEdge(input: {
   projectId: string;
   sourceDecisionId: string;
@@ -500,6 +361,7 @@ async function insertCandidateRow(input: {
   proposedForDecisionId?: string | null;
   proposedStatus?: string | null;
   proposedIntent?: string | null;
+  suggestedEdges?: Array<{ type: string; targetDecisionId: string }> | null;
   relevantMessageIds?: string[] | null;
   sourceMetadata?: Record<string, unknown> | null;
   externalEvidence?: string | null;
@@ -518,6 +380,7 @@ async function insertCandidateRow(input: {
       proposed_for_decision_id: input.proposedForDecisionId ?? null,
       proposed_status: input.proposedStatus ?? null,
       proposed_intent: input.proposedIntent ?? "create",
+      suggested_edges: input.suggestedEdges ?? null,
       confidence: 1,
       pre_selected: input.proposedKind !== "rejection",
       status: "pending",
@@ -540,6 +403,9 @@ async function insertCandidateRow(input: {
   return String((data as DatabaseRecord).id);
 }
 
+// Iron Law 4 (constitution amendment #1): every MCP write is candidate-first.
+// This is the only write primitive in this service — there is no direct path
+// to the decisions/edges tables, so the funnel cannot be bypassed.
 async function submitRoutedCandidate(input: {
   apiKey: WorkspaceApiKey;
   projectId: string;
@@ -551,7 +417,14 @@ async function submitRoutedCandidate(input: {
   proposedWeight?: DecisionWeight | null;
   proposedForDecisionId?: string | null;
   proposedStatus?: string | null;
-  proposedIntent: "create" | "update" | "archive" | "supersede";
+  proposedIntent:
+    | "create"
+    | "update"
+    | "archive"
+    | "supersede"
+    | "create_edge"
+    | "delete_edge";
+  suggestedEdges?: Array<{ type: string; targetDecisionId: string }> | null;
   relevantMessageIds?: string[] | null;
   codeAnchors?: CodeAnchor[] | null;
   write: AgentWriteContext;
@@ -597,6 +470,7 @@ async function submitRoutedCandidate(input: {
     proposedForDecisionId: input.proposedForDecisionId,
     proposedStatus: input.proposedStatus,
     proposedIntent: input.proposedIntent,
+    suggestedEdges: input.suggestedEdges,
     relevantMessageIds: input.relevantMessageIds,
     sourceMetadata: logMetadata,
   });
@@ -1070,64 +944,22 @@ export async function createMcpDecision({
   await ensureTopicInProject({ topicId, projectId });
 
   const write = externalAgentContext({ agent, sessionId });
-  const route = classifyWrite({
-    tool: "create_decision",
-    proposed_kind: kind,
-  });
 
-  if (route === "candidate") {
-    return submitRoutedCandidate({
-      apiKey,
-      projectId,
-      topicId,
-      proposedTitle: title,
-      proposedContent: content,
-      proposedKind: kind,
-      proposedRationale: rationale,
-      proposedWeight: normalizedWeight,
-      proposedIntent: "create",
-      relevantMessageIds,
-      codeAnchors,
-      write,
-      tool: "create_decision",
-    });
-  }
-
-  const decision = await insertDecisionRow({
+  return submitRoutedCandidate({
+    apiKey,
     projectId,
     topicId,
-    title,
-    content,
-    rationale,
-    kind,
-    weight: normalizedWeight,
+    proposedTitle: title,
+    proposedContent: content,
+    proposedKind: kind,
+    proposedRationale: rationale,
+    proposedWeight: normalizedWeight,
+    proposedIntent: "create",
     relevantMessageIds,
     codeAnchors,
-  });
-  const metadata = buildAgentMetadata({
-    apiKey,
     write,
     tool: "create_decision",
-    codeAnchors,
-    inputSummary: buildInputSummary({ title, kind, action: "create" }),
-    extra: {
-      route,
-      after: decision,
-    },
   });
-  const logId = await insertDecisionLog({
-    decisionId: decision.id,
-    action: "create",
-    actorType: "external_agent",
-    metadata,
-  });
-
-  return {
-    ok: true,
-    route,
-    decision_id: decision.id,
-    log_id: logId,
-  };
 }
 
 export async function updateMcpDecision({
@@ -1180,16 +1012,6 @@ export async function updateMcpDecision({
   ensureProjectScope(apiKey, current.project_id);
 
   const write = externalAgentContext({ agent, sessionId });
-  const nextKind = kind && kind !== current.kind ? kind : undefined;
-  const route = classifyWrite({
-    tool: "update_decision",
-    target_decision: {
-      confirmed_by_user_id: current.confirmed_by_user_id,
-      weight: current.weight,
-      kind: current.kind,
-    },
-    next_kind: nextKind,
-  });
   const nextTitle = title ?? current.title;
   const nextContent = content ?? current.content;
   const nextKindValue = (kind ?? current.kind) as DecisionKind;
@@ -1197,73 +1019,32 @@ export async function updateMcpDecision({
   const nextCodeAnchors =
     codeAnchors === undefined ? current.code_anchors : codeAnchors;
 
-  if (route === "candidate") {
-    return submitRoutedCandidate({
-      apiKey,
-      projectId: current.project_id,
-      topicId: current.topic_id,
-      proposedTitle: nextTitle,
-      proposedContent: nextContent,
-      proposedKind: nextKindValue,
-      proposedRationale:
-        rationale === undefined ? current.rationale : rationale,
-      proposedWeight: nextWeight,
-      proposedForDecisionId: current.id,
-      proposedIntent: "update",
-      codeAnchors: nextCodeAnchors,
-      write,
-      tool: "update_decision",
-      metadata: {
-        before: current,
-        patch: {
-          title: title ?? null,
-          content: content ?? null,
-          rationale: rationale ?? null,
-          kind: kind ?? null,
-          weight: weight ?? null,
-          code_anchors: codeAnchors ?? null,
-        },
-      },
-    });
-  }
-
-  const updated = await updateDecisionRow(current.id, {
-    title,
-    content,
-    rationale,
-    kind: kind as DecisionKind | undefined,
-    weight: weight as DecisionWeight | undefined,
-    codeAnchors,
-  });
-  const metadata = buildAgentMetadata({
+  return submitRoutedCandidate({
     apiKey,
+    projectId: current.project_id,
+    topicId: current.topic_id,
+    proposedTitle: nextTitle,
+    proposedContent: nextContent,
+    proposedKind: nextKindValue,
+    proposedRationale: rationale === undefined ? current.rationale : rationale,
+    proposedWeight: nextWeight,
+    proposedForDecisionId: current.id,
+    proposedIntent: "update",
+    codeAnchors: nextCodeAnchors,
     write,
     tool: "update_decision",
-    codeAnchors: updated.code_anchors,
-    inputSummary: buildInputSummary({
-      title: updated.title,
-      kind: updated.kind,
-      action: "update",
-    }),
-    extra: {
-      route,
+    metadata: {
       before: current,
-      after: updated,
+      patch: {
+        title: title ?? null,
+        content: content ?? null,
+        rationale: rationale ?? null,
+        kind: kind ?? null,
+        weight: weight ?? null,
+        code_anchors: codeAnchors ?? null,
+      },
     },
   });
-  const logId = await insertDecisionLog({
-    decisionId: current.id,
-    action: "update",
-    actorType: "external_agent",
-    metadata,
-  });
-
-  return {
-    ok: true,
-    route,
-    decision_id: updated.id,
-    log_id: logId,
-  };
 }
 
 export async function archiveMcpDecision({
@@ -1283,69 +1064,27 @@ export async function archiveMcpDecision({
   ensureProjectScope(apiKey, current.project_id);
 
   const write = externalAgentContext({ agent, sessionId });
-  const route = classifyWrite({
-    tool: "archive_decision",
-    target_decision: {
-      confirmed_by_user_id: current.confirmed_by_user_id,
-      weight: current.weight,
-      kind: current.kind,
-    },
-  });
 
-  if (route === "candidate") {
-    return submitRoutedCandidate({
-      apiKey,
-      projectId: current.project_id,
-      topicId: current.topic_id,
-      proposedTitle: current.title,
-      proposedContent: current.content,
-      proposedKind: current.kind as DecisionKind,
-      proposedRationale: current.rationale,
-      proposedWeight: current.weight as DecisionWeight,
-      proposedForDecisionId: current.id,
-      proposedStatus: "archived",
-      proposedIntent: "archive",
-      codeAnchors: current.code_anchors,
-      write,
-      tool: "archive_decision",
-      metadata: {
-        reason: reason ?? null,
-        before: current,
-      },
-    });
-  }
-
-  const archived = await updateDecisionRow(current.id, { status: "archived" });
-  const metadata = buildAgentMetadata({
+  return submitRoutedCandidate({
     apiKey,
+    projectId: current.project_id,
+    topicId: current.topic_id,
+    proposedTitle: current.title,
+    proposedContent: current.content,
+    proposedKind: current.kind as DecisionKind,
+    proposedRationale: current.rationale,
+    proposedWeight: current.weight as DecisionWeight,
+    proposedForDecisionId: current.id,
+    proposedStatus: "archived",
+    proposedIntent: "archive",
+    codeAnchors: current.code_anchors,
     write,
     tool: "archive_decision",
-    codeAnchors: current.code_anchors,
-    inputSummary: buildInputSummary({
-      title: current.title,
-      kind: current.kind,
-      action: "archive",
-    }),
-    extra: {
-      route,
+    metadata: {
       reason: reason ?? null,
       before: current,
-      after: archived,
     },
   });
-  const logId = await insertDecisionLog({
-    decisionId: current.id,
-    action: "archive",
-    actorType: "external_agent",
-    metadata,
-  });
-
-  return {
-    ok: true,
-    route,
-    decision_id: current.id,
-    log_id: logId,
-  };
 }
 
 export async function supersedeMcpDecision({
@@ -1387,114 +1126,26 @@ export async function supersedeMcpDecision({
   const nextKind = (newKind ?? oldDecision.kind) as DecisionKind;
   const nextWeight = (newWeight ?? oldDecision.weight) as DecisionWeight;
   const write = externalAgentContext({ agent, sessionId });
-  const route = classifyWrite({
-    tool: "supersede_decision",
-    proposed_kind: nextKind,
-    target_decision: {
-      confirmed_by_user_id: oldDecision.confirmed_by_user_id,
-      weight: oldDecision.weight,
-      kind: oldDecision.kind,
-    },
-  });
 
-  if (route === "candidate") {
-    return submitRoutedCandidate({
-      apiKey,
-      projectId: oldDecision.project_id,
-      topicId: oldDecision.topic_id,
-      proposedTitle: newTitle,
-      proposedContent: newContent,
-      proposedKind: nextKind,
-      proposedRationale: newRationale,
-      proposedWeight: nextWeight,
-      proposedForDecisionId: oldDecision.id,
-      proposedIntent: "supersede",
-      codeAnchors: newCodeAnchors ?? null,
-      write,
-      tool: "supersede_decision",
-      metadata: {
-        reason,
-        before: oldDecision,
-      },
-    });
-  }
-
-  const newDecision = await insertDecisionRow({
+  return submitRoutedCandidate({
+    apiKey,
     projectId: oldDecision.project_id,
     topicId: oldDecision.topic_id,
-    title: newTitle,
-    content: newContent,
-    rationale: newRationale,
-    kind: nextKind,
-    weight: nextWeight,
+    proposedTitle: newTitle,
+    proposedContent: newContent,
+    proposedKind: nextKind,
+    proposedRationale: newRationale,
+    proposedWeight: nextWeight,
+    proposedForDecisionId: oldDecision.id,
+    proposedIntent: "supersede",
     codeAnchors: newCodeAnchors ?? null,
-  });
-  const superseded = await updateDecisionRow(oldDecision.id, {
-    status: "superseded",
-  });
-  const edge = await insertEdgeRow({
-    projectId: oldDecision.project_id,
-    topicId: oldDecision.topic_id,
-    sourceDecisionId: newDecision.id,
-    targetDecisionId: oldDecision.id,
-    type: "supersedes",
-  });
-  const baseMetadata = {
-    route,
-    reason,
-    superseded_decision_id: oldDecision.id,
-    new_decision_id: newDecision.id,
-    edge_id: edge.id,
-    before: oldDecision,
-    after: {
-      new_decision: newDecision,
-      superseded_decision: superseded,
-      edge,
+    write,
+    tool: "supersede_decision",
+    metadata: {
+      reason,
+      before: oldDecision,
     },
-  };
-  const newLogId = await insertDecisionLog({
-    decisionId: newDecision.id,
-    action: "supersede",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "supersede_decision",
-      codeAnchors: newDecision.code_anchors,
-      inputSummary: buildInputSummary({
-        title: newDecision.title,
-        kind: newDecision.kind,
-        action: "supersede",
-      }),
-      extra: baseMetadata,
-    }),
   });
-  const oldLogId = await insertDecisionLog({
-    decisionId: oldDecision.id,
-    action: "supersede",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "supersede_decision",
-      codeAnchors: oldDecision.code_anchors,
-      inputSummary: buildInputSummary({
-        title: oldDecision.title,
-        kind: oldDecision.kind,
-        action: "supersede",
-      }),
-      extra: baseMetadata,
-    }),
-  });
-
-  return {
-    ok: true,
-    route,
-    new_decision_id: newDecision.id,
-    superseded_decision_id: oldDecision.id,
-    edge_id: edge.id,
-    log_ids: [newLogId, oldLogId],
-  };
 }
 
 export async function resolveMcpOpenQuestion({
@@ -1540,38 +1191,26 @@ export async function resolveMcpOpenQuestion({
   const write = externalAgentContext({ agent, sessionId });
 
   if (resolution === "no_longer_relevant") {
-    const archived = await updateDecisionRow(question.id, {
-      status: "archived",
+    return submitRoutedCandidate({
+      apiKey,
+      projectId: question.project_id,
+      topicId: question.topic_id,
+      proposedTitle: question.title,
+      proposedContent: question.content,
+      proposedKind: question.kind as DecisionKind,
+      proposedRationale: question.rationale,
+      proposedWeight: question.weight as DecisionWeight,
+      proposedForDecisionId: question.id,
+      proposedStatus: "archived",
+      proposedIntent: "archive",
+      codeAnchors: question.code_anchors,
+      write,
+      tool: "resolve_open_question",
+      metadata: {
+        resolution,
+        before: question,
+      },
     });
-    const logId = await insertDecisionLog({
-      decisionId: question.id,
-      action: "resolve_open_question",
-      actorType: "external_agent",
-      metadata: buildAgentMetadata({
-        apiKey,
-        write,
-        tool: "resolve_open_question",
-        codeAnchors: question.code_anchors,
-        inputSummary: buildInputSummary({
-          title: question.title,
-          kind: question.kind,
-          action: resolution,
-        }),
-        extra: {
-          route: "direct",
-          resolution,
-          before: question,
-          after: archived,
-        },
-      }),
-    });
-
-    return {
-      ok: true,
-      route: "direct" as const,
-      question_decision_id: question.id,
-      log_id: logId,
-    };
   }
 
   if (!answerTitle?.trim() || !answerContent?.trim()) {
@@ -1583,82 +1222,30 @@ export async function resolveMcpOpenQuestion({
 
   const nextKind = answerKind ?? "plan";
   ensureDecisionKind(nextKind);
-  const answer = await insertDecisionRow({
-    projectId: question.project_id,
-    topicId: question.topic_id,
-    title: answerTitle,
-    content: answerContent,
-    rationale: answerRationale,
-    kind: nextKind,
-    weight: question.weight as DecisionWeight,
-    codeAnchors: answerCodeAnchors ?? null,
-  });
-  const archivedQuestion = await updateDecisionRow(question.id, {
-    status: "archived",
-  });
-  const edge = await insertEdgeRow({
-    projectId: question.project_id,
-    topicId: question.topic_id,
-    sourceDecisionId: answer.id,
-    targetDecisionId: question.id,
-    type: "resolves",
-  });
-  const metadata = {
-    route: "direct",
-    resolution,
-    question_decision_id: question.id,
-    answer_decision_id: answer.id,
-    edge_id: edge.id,
-    before: question,
-    after: {
-      answer,
-      question: archivedQuestion,
-      edge,
-    },
-  };
-  const answerLogId = await insertDecisionLog({
-    decisionId: answer.id,
-    action: "resolve_open_question",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "resolve_open_question",
-      codeAnchors: answer.code_anchors,
-      inputSummary: buildInputSummary({
-        title: answer.title,
-        kind: answer.kind,
-        action: resolution,
-      }),
-      extra: metadata,
-    }),
-  });
-  const questionLogId = await insertDecisionLog({
-    decisionId: question.id,
-    action: "resolve_open_question",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "resolve_open_question",
-      codeAnchors: question.code_anchors,
-      inputSummary: buildInputSummary({
-        title: question.title,
-        kind: question.kind,
-        action: resolution,
-      }),
-      extra: metadata,
-    }),
-  });
 
-  return {
-    ok: true,
-    route: "direct" as const,
-    question_decision_id: question.id,
-    answer_decision_id: answer.id,
-    edge_id: edge.id,
-    log_ids: [answerLogId, questionLogId],
-  };
+  // The answer is proposed as a create candidate carrying a resolves edge;
+  // on confirmation the funnel creates the answer, links it, and closes the
+  // question (see confirmCreateCandidate's resolves handling).
+  return submitRoutedCandidate({
+    apiKey,
+    projectId: question.project_id,
+    topicId: question.topic_id,
+    proposedTitle: answerTitle,
+    proposedContent: answerContent,
+    proposedKind: nextKind,
+    proposedRationale: answerRationale,
+    proposedWeight: question.weight as DecisionWeight,
+    proposedIntent: "create",
+    suggestedEdges: [{ type: "resolves", targetDecisionId: question.id }],
+    codeAnchors: answerCodeAnchors ?? null,
+    write,
+    tool: "resolve_open_question",
+    metadata: {
+      resolution,
+      question_decision_id: question.id,
+      before: question,
+    },
+  });
 }
 
 export async function createMcpEdge({
@@ -1703,40 +1290,28 @@ export async function createMcpEdge({
     throw new ChatbotError("bad_request:api", "Identical edge already exists");
   }
 
-  const edge = await insertEdgeRow({
+  const write = externalAgentContext({ agent, sessionId });
+
+  return submitRoutedCandidate({
+    apiKey,
     projectId,
     topicId: source.topic_id,
-    sourceDecisionId,
-    targetDecisionId,
-    type,
-  });
-  const write = externalAgentContext({ agent, sessionId });
-  const logId = await insertDecisionLog({
-    decisionId: source.id,
-    action: "create_edge",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "create_edge",
-      inputSummary: buildInputSummary({
-        title: source.title,
-        kind: source.kind,
-        action: "create_edge",
-      }),
-      extra: {
-        route: "direct",
-        edge,
+    proposedTitle: `Link: ${truncateText(source.title, 60)} -[${type}]-> ${truncateText(target.title, 60)}`,
+    proposedContent: `Proposed edge: "${source.title}" ${type} "${target.title}".`,
+    proposedKind: source.kind as DecisionKind,
+    proposedForDecisionId: source.id,
+    proposedIntent: "create_edge",
+    suggestedEdges: [{ type, targetDecisionId: target.id }],
+    write,
+    tool: "create_edge",
+    metadata: {
+      edge_proposal: {
+        source_decision_id: source.id,
+        target_decision_id: target.id,
+        type,
       },
-    }),
+    },
   });
-
-  return {
-    ok: true,
-    route: "direct" as const,
-    edge_id: edge.id,
-    log_id: logId,
-  };
 }
 
 export async function deleteMcpEdge({
@@ -1754,33 +1329,28 @@ export async function deleteMcpEdge({
 }) {
   const edge = await getEdgeRow(edgeId);
   ensureProjectScope(apiKey, edge.project_id);
-  await deleteEdgeRow(edge.id);
 
+  const [source, target] = await Promise.all([
+    getDecisionRow(edge.source_decision_id),
+    getDecisionRow(edge.target_decision_id),
+  ]);
   const write = externalAgentContext({ agent, sessionId });
-  const logId = await insertDecisionLog({
-    decisionId: edge.source_decision_id,
-    action: "delete_edge",
-    actorType: "external_agent",
-    metadata: buildAgentMetadata({
-      apiKey,
-      write,
-      tool: "delete_edge",
-      inputSummary: buildInputSummary({
-        title: edge.id,
-        action: "delete_edge",
-      }),
-      extra: {
-        route: "direct",
-        reason: reason ?? null,
-        deleted_edge: edge,
-      },
-    }),
-  });
 
-  return {
-    ok: true,
-    route: "direct" as const,
-    edge_id: edge.id,
-    log_id: logId,
-  };
+  return submitRoutedCandidate({
+    apiKey,
+    projectId: edge.project_id,
+    topicId: source.topic_id,
+    proposedTitle: `Remove link: ${truncateText(source.title, 60)} -[${edge.type}]-> ${truncateText(target.title, 60)}`,
+    proposedContent: `Proposed removal of edge "${source.title}" ${edge.type} "${target.title}".${reason ? ` Reason: ${reason}` : ""}`,
+    proposedKind: source.kind as DecisionKind,
+    proposedForDecisionId: edge.source_decision_id,
+    proposedIntent: "delete_edge",
+    write,
+    tool: "delete_edge",
+    metadata: {
+      edge_id: edge.id,
+      deleted_edge: edge,
+      reason: reason ?? null,
+    },
+  });
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { normalizeCodeAnchors } from "@/lib/decision-anchors";
 import { ChatbotError } from "@/lib/errors";
 import {
+  deleteEdgeById,
   getTopicByIdForUser,
   insertDecision,
   insertDecisionLog,
@@ -16,6 +17,66 @@ import type { WorkspaceCandidateDecision } from "@/lib/workspace/types";
 
 function supersedesTarget(edgeType: string) {
   return edgeType === "supersedes" || edgeType === "replaces";
+}
+
+// Creates a user-confirmed edge and applies its status side effects:
+// supersedes/replaces marks the target superseded; resolves closes the target
+// (mirrors the resolve_open_question semantics — the MCP side validates that
+// resolves targets are active open questions before proposing).
+async function applyConfirmedEdge({
+  projectId,
+  topicId,
+  sourceDecisionId,
+  targetDecisionId,
+  type,
+  candidateId,
+}: {
+  projectId: string;
+  topicId: string;
+  sourceDecisionId: string;
+  targetDecisionId: string;
+  type: string;
+  candidateId: string;
+}) {
+  await insertEdge({
+    projectId,
+    topicId,
+    sourceDecisionId,
+    targetDecisionId,
+    type,
+  });
+
+  if (supersedesTarget(type)) {
+    await updateDecisionStatus({
+      decisionId: targetDecisionId,
+      status: "superseded",
+    });
+    await insertDecisionLog({
+      decisionId: targetDecisionId,
+      candidateId,
+      action: "superseded",
+      actorType: "user",
+      metadata: {
+        supersededByDecisionId: sourceDecisionId,
+      },
+    });
+  }
+
+  if (type === "resolves") {
+    await updateDecisionStatus({
+      decisionId: targetDecisionId,
+      status: "archived",
+    });
+    await insertDecisionLog({
+      decisionId: targetDecisionId,
+      candidateId,
+      action: "archived",
+      actorType: "user",
+      metadata: {
+        resolvedByDecisionId: sourceDecisionId,
+      },
+    });
+  }
 }
 
 function getCandidateCodeAnchors(candidate: WorkspaceCandidateDecision) {
@@ -62,30 +123,104 @@ async function confirmCreateCandidate({
       continue;
     }
 
-    await insertEdge({
+    await applyConfirmedEdge({
       projectId: candidate.projectId,
       topicId: candidate.topicId,
       sourceDecisionId: createdDecision.id,
       targetDecisionId: suggestedEdge.targetDecisionId,
       type: suggestedEdge.type,
+      candidateId: candidate.id,
     });
-
-    if (supersedesTarget(suggestedEdge.type)) {
-      await updateDecisionStatus({
-        decisionId: suggestedEdge.targetDecisionId,
-        status: "superseded",
-      });
-      await insertDecisionLog({
-        decisionId: suggestedEdge.targetDecisionId,
-        candidateId: candidate.id,
-        action: "superseded",
-        actorType: "user",
-        metadata: {
-          supersededByDecisionId: createdDecision.id,
-        },
-      });
-    }
   }
+}
+
+async function confirmCreateEdgeCandidate({
+  candidate,
+}: {
+  candidate: WorkspaceCandidateDecision;
+}) {
+  if (!candidate.proposedForDecisionId) {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Edge candidate is missing proposed_for_decision_id"
+    );
+  }
+
+  const suggestedEdges = (candidate.suggestedEdges ?? []).filter(
+    (edge): edge is { type: string; targetDecisionId: string } =>
+      Boolean(edge.targetDecisionId)
+  );
+
+  if (suggestedEdges.length === 0) {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Edge candidate is missing suggested_edges"
+    );
+  }
+
+  for (const edge of suggestedEdges) {
+    await applyConfirmedEdge({
+      projectId: candidate.projectId,
+      topicId: candidate.topicId,
+      sourceDecisionId: candidate.proposedForDecisionId,
+      targetDecisionId: edge.targetDecisionId,
+      type: edge.type,
+      candidateId: candidate.id,
+    });
+  }
+
+  await updateCandidateResolution({
+    candidateId: candidate.id,
+    status: "accepted",
+    resolvedDecisionId: candidate.proposedForDecisionId,
+  });
+
+  await insertDecisionLog({
+    decisionId: candidate.proposedForDecisionId,
+    candidateId: candidate.id,
+    action: "create_edge",
+    actorType: "user",
+    metadata: {
+      proposedIntent: "create_edge",
+    },
+  });
+}
+
+async function confirmDeleteEdgeCandidate({
+  candidate,
+}: {
+  candidate: WorkspaceCandidateDecision;
+}) {
+  const edgeId =
+    typeof candidate.sourceMetadata?.edge_id === "string"
+      ? candidate.sourceMetadata.edge_id
+      : null;
+
+  if (!edgeId) {
+    throw new ChatbotError(
+      "bad_request:api",
+      "Delete-edge candidate is missing edge_id"
+    );
+  }
+
+  await deleteEdgeById(edgeId);
+
+  await updateCandidateResolution({
+    candidateId: candidate.id,
+    status: "accepted",
+    resolvedDecisionId: candidate.proposedForDecisionId,
+  });
+
+  await insertDecisionLog({
+    decisionId: candidate.proposedForDecisionId,
+    candidateId: candidate.id,
+    action: "delete_edge",
+    actorType: "user",
+    metadata: {
+      proposedIntent: "delete_edge",
+      edgeId,
+    },
+  });
 }
 
 async function confirmUpdateCandidate({
@@ -271,6 +406,12 @@ export async function confirmCandidates({
         break;
       case "supersede":
         await confirmSupersedeCandidate({ candidate, userId });
+        break;
+      case "create_edge":
+        await confirmCreateEdgeCandidate({ candidate });
+        break;
+      case "delete_edge":
+        await confirmDeleteEdgeCandidate({ candidate });
         break;
       default:
         await confirmCreateCandidate({ candidate, userId });

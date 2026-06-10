@@ -1501,6 +1501,16 @@ export async function insertEdge(edgeInput: InsertEdge) {
   return mapEdge(row as DatabaseRecord);
 }
 
+export async function deleteEdgeById(edgeId: string) {
+  const client = getClient();
+  const { error } = await client.from("edges").delete().eq("id", edgeId);
+
+  if (error) {
+    console.error(`Failed to delete edge ${edgeId}`, error);
+    throw new ChatbotError("bad_request:database", "Failed to delete edge");
+  }
+}
+
 export async function updateDecisionStatus({
   decisionId,
   status,

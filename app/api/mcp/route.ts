@@ -1,8 +1,9 @@
 /**
  * ZENO MCP route
  *
- * V1 boundary: external agents may directly mutate routine truth, while
- * high-blast-radius writes are routed into candidate review.
+ * Boundary (Iron Law 4): every MCP write is candidate-first. External agents
+ * propose; proposals land in the user's review queue and become truth only
+ * after explicit user confirmation. There is no direct mutation path.
  */
 
 import { z } from "zod";
@@ -431,7 +432,7 @@ function getToolDefinitions() {
     {
       name: "create_decision",
       description:
-        "Create a truth decision directly unless the kind requires human approval.",
+        "Propose a new decision. Lands as a candidate in the user's review queue; becomes truth only after user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -467,7 +468,7 @@ function getToolDefinitions() {
     {
       name: "update_decision",
       description:
-        "Update title, content, rationale, kind, weight, or code anchors for an existing decision.",
+        "Propose an update to title, content, rationale, kind, weight, or code anchors of an existing decision. Lands as a candidate for user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -491,7 +492,7 @@ function getToolDefinitions() {
     {
       name: "archive_decision",
       description:
-        "Archive a decision directly unless it is user-confirmed high-weight truth.",
+        "Propose archiving a decision. Lands as a candidate for user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -507,7 +508,7 @@ function getToolDefinitions() {
     {
       name: "supersede_decision",
       description:
-        "Create a replacement decision, mark the old decision superseded, and connect them.",
+        "Propose a replacement decision. On user confirmation the replacement is created, the old decision is marked superseded, and they are linked.",
       inputSchema: {
         type: "object",
         properties: {
@@ -538,7 +539,7 @@ function getToolDefinitions() {
     {
       name: "resolve_open_question",
       description:
-        "Resolve an active open question by archiving it, optionally creating an answer decision.",
+        "Propose resolving an active open question (answered, with an answer decision, or no longer relevant). Lands as a candidate for user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -565,7 +566,7 @@ function getToolDefinitions() {
     {
       name: "create_edge",
       description:
-        "Create a relationship edge between two decisions in the same project.",
+        "Propose a relationship edge between two decisions in the same project. Lands as a candidate for user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -600,7 +601,8 @@ function getToolDefinitions() {
     },
     {
       name: "delete_edge",
-      description: "Delete a decision relationship edge.",
+      description:
+        "Propose deleting a decision relationship edge. Lands as a candidate for user confirmation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -913,7 +915,7 @@ async function handleRequest(payload: JsonRpcRequest, request: Request) {
         version: "1.0.0",
       },
       instructions:
-        "Read confirmed truth with the read tools. Routine truth writes may use the write tools directly; high-risk writes return requires_approval and must be approved in Zeno.",
+        "Read confirmed truth with the read tools. All write tools are candidate-first: every write lands as a candidate (requires_approval=true) and becomes truth only after the user confirms it in Zeno. Nothing you write takes effect immediately.",
     });
   }
 

@@ -79,7 +79,7 @@ The right panel renders your project's judgment as an interactive **graph canvas
 Every new conversation in the same project automatically receives the relevant confirmed truth as context. The AI knows what you've decided, what you've rejected, and why — without you pasting anything.
 
 ### 6. Coding agents read your truth via MCP
-When you hand off to a coding agent (Claude Code, Cursor, Codex), ZENO's MCP server gives it the same project truth. It exposes **read tools** (project/topic context, decisions, open questions, rejections, IR search/get) plus **write tools** — `submit_candidate` (candidate-only) and a set of controlled decision/edge mutations. The design intent is **candidate-first**: external agents propose; the user confirms what becomes truth.
+When you hand off to a coding agent (Claude Code, Cursor, Codex), ZENO's MCP server gives it the same project truth. It exposes **read tools** (project/topic context, decisions, open questions, rejections, IR search/get) plus **write tools**, all of them **candidate-first and enforced server-side**: every MCP write — create, update, archive, supersede, resolve, edges — lands as a candidate in your review queue and becomes truth only after you confirm it (Iron Law 4). There is no direct mutation path.
 
 ---
 
