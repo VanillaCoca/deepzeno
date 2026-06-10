@@ -1,53 +1,35 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Authentication Pages", () => {
-  test("login page renders the current single-page auth flow", async ({
-    page,
-  }) => {
+  test("login page renders the passwordless sign-in flow", async ({ page }) => {
     await page.goto("/login");
 
     await expect(
       page.getByRole("heading", { name: "Welcome to ZENO" })
     ).toBeVisible();
     await expect(
-      page.getByText("Sign in to enter the workspace", { exact: false })
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Sign in" }).first()
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Create account" }).first()
+      page.getByRole("button", { name: "Continue with Google" })
     ).toBeVisible();
     await expect(page.getByLabel("Email")).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeVisible();
     await expect(page.locator('form button[type="submit"]')).toHaveText(
-      "Sign in"
+      "Continue with email"
     );
+    // Passwordless: there is no password field anymore.
+    await expect(page.getByLabel("Password")).toHaveCount(0);
   });
 
-  test("register route redirects into login page register mode", async ({
+  test("register route redirects to the unified login page", async ({
     page,
   }) => {
     await page.goto("/register");
 
-    await expect(page).toHaveURL(/\/login\?mode=register$/);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(
+      page.getByRole("button", { name: "Continue with Google" })
+    ).toBeVisible();
     await expect(page.locator('form button[type="submit"]')).toHaveText(
-      "Create account"
+      "Continue with email"
     );
-  });
-
-  test("auth mode toggles update the submit action on the same page", async ({
-    page,
-  }) => {
-    await page.goto("/login");
-
-    const submitButton = page.locator('form button[type="submit"]');
-
-    await expect(submitButton).toHaveText("Sign in");
-    await page.getByRole("button", { name: "Create account" }).first().click();
-    await expect(submitButton).toHaveText("Create account");
-    await page.getByRole("button", { name: "Sign in" }).first().click();
-    await expect(submitButton).toHaveText("Sign in");
   });
 
   test("unauthenticated users are redirected to login", async ({ page }) => {
