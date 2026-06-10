@@ -471,11 +471,33 @@ function useOverviewPanZoom(
     [animateTo]
   );
 
+  // Click-to-focus: glide a node's box to the viewport center. Only zooms in
+  // when we're far out (scale < 0.6), so it never yanks the zoom around.
+  const focusBox = useCallback(
+    (box: { x: number; y: number; width: number; height: number }) => {
+      const element = containerRef.current;
+      if (!element) {
+        return;
+      }
+      const current = transformRef.current;
+      const scale = clampScale(current.scale < 0.6 ? 0.9 : current.scale);
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      animateTo({
+        scale,
+        x: element.clientWidth / 2 - cx * scale,
+        y: element.clientHeight / 2 - cy * scale,
+      });
+    },
+    [animateTo]
+  );
+
   return {
     containerRef,
     transform,
     panHandlers: { onPointerDown, onPointerMove, onPointerUp },
     fit: fitToView,
+    focusBox,
     zoomIn: () => zoomByButton(OVERVIEW_ZOOM.step),
     zoomOut: () => zoomByButton(1 / OVERVIEW_ZOOM.step),
   };
@@ -968,6 +990,20 @@ export function TruthGraph({
     overviewHeight,
     useCallback(() => onSelect(null), [onSelect])
   );
+
+  // Click-to-focus: when a node becomes selected, glide the canvas so it sits
+  // centered (the eased tween lives in the pan/zoom hook). Deselecting leaves
+  // the view where it is.
+  const { focusBox } = overviewPanZoom;
+  useEffect(() => {
+    if (!(activeSelectedNodeId && layout.overview)) {
+      return;
+    }
+    const box = absoluteBoxes(layout.overview).get(activeSelectedNodeId);
+    if (box) {
+      focusBox(box);
+    }
+  }, [activeSelectedNodeId, layout.overview, focusBox]);
 
   if (nodes.length === 0) {
     // Empty state — new users land here first, so explain what this canvas is
