@@ -140,6 +140,18 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.login.emailPlaceholder": "you@example.com",
     "dialog.login.password": "Password",
     "dialog.login.passwordPlaceholder": "At least 6 characters",
+    "dialog.login.continueWithGoogle": "Continue with Google",
+    "dialog.login.or": "or",
+    "dialog.login.continueWithEmail": "Continue with email",
+    "dialog.login.checkEmailTitle": "Check your email",
+    "dialog.login.checkEmailBody": "Enter the 6-digit code we sent to",
+    "dialog.login.code": "Verification code",
+    "dialog.login.codePlaceholder": "6-digit code",
+    "dialog.login.verifyContinue": "Verify and continue",
+    "dialog.login.resendCode": "Resend code",
+    "dialog.login.changeEmail": "Use a different email",
+    "dialog.login.codeSentToast": "Code sent. Check your inbox.",
+    "dialog.login.googleFailedToast": "Couldn't start Google sign-in.",
     "dialog.login.supabaseConfigHint":
       "Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to enable authentication.",
 
@@ -281,6 +293,18 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.login.emailPlaceholder": "you@example.com",
     "dialog.login.password": "密码",
     "dialog.login.passwordPlaceholder": "至少 6 个字符",
+    "dialog.login.continueWithGoogle": "使用 Google 继续",
+    "dialog.login.or": "或",
+    "dialog.login.continueWithEmail": "使用邮箱继续",
+    "dialog.login.checkEmailTitle": "查看你的邮箱",
+    "dialog.login.checkEmailBody": "输入我们发送到以下邮箱的 6 位验证码",
+    "dialog.login.code": "验证码",
+    "dialog.login.codePlaceholder": "6 位验证码",
+    "dialog.login.verifyContinue": "验证并继续",
+    "dialog.login.resendCode": "重新发送验证码",
+    "dialog.login.changeEmail": "更换邮箱",
+    "dialog.login.codeSentToast": "验证码已发送，请查收邮箱。",
+    "dialog.login.googleFailedToast": "无法启动 Google 登录。",
     "dialog.login.supabaseConfigHint":
       "添加 `NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 以启用身份验证。",
 
@@ -433,6 +457,20 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.login.emailPlaceholder": "vous@exemple.com",
     "dialog.login.password": "Mot de passe",
     "dialog.login.passwordPlaceholder": "Au moins 6 caractères",
+    "dialog.login.continueWithGoogle": "Continuer avec Google",
+    "dialog.login.or": "ou",
+    "dialog.login.continueWithEmail": "Continuer avec l'e-mail",
+    "dialog.login.checkEmailTitle": "Vérifiez votre e-mail",
+    "dialog.login.checkEmailBody": "Saisissez le code à 6 chiffres envoyé à",
+    "dialog.login.code": "Code de vérification",
+    "dialog.login.codePlaceholder": "Code à 6 chiffres",
+    "dialog.login.verifyContinue": "Vérifier et continuer",
+    "dialog.login.resendCode": "Renvoyer le code",
+    "dialog.login.changeEmail": "Utiliser une autre adresse",
+    "dialog.login.codeSentToast":
+      "Code envoyé. Vérifiez votre boîte de réception.",
+    "dialog.login.googleFailedToast":
+      "Impossible de démarrer la connexion Google.",
     "dialog.login.supabaseConfigHint":
       "Ajoutez `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY` pour activer l'authentification.",
 
