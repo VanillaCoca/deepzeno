@@ -1,7 +1,6 @@
 import { PlusIcon } from "lucide-react";
 import { Suspense } from "react";
 import { requireAuth } from "@/app/(auth)/auth";
-import { CreateProjectModal } from "@/components/create-project-modal";
 import { DeferredCreateProject } from "@/components/home/deferred-create-project";
 import { HomeGreeting } from "@/components/home/home-greeting";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
@@ -68,12 +67,12 @@ async function HomepageShell({ children }: { children: React.ReactNode }) {
           <BrandLockup />
           <div className="flex items-center gap-2">
             <LocaleSwitcher />
-            <CreateProjectModal>
+            <DeferredCreateProject>
               <Button size="sm">
                 <PlusIcon className="size-4" />
                 {t("home.newProject")}
               </Button>
-            </CreateProjectModal>
+            </DeferredCreateProject>
           </div>
         </header>
 
