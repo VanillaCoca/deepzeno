@@ -13,15 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useActiveChat } from "@/hooks/use-active-chat";
-import {
-  initialArtifactData,
-  useArtifact,
-  useArtifactSelector,
-} from "@/hooks/use-artifact";
 import type { Attachment, ChatMessage } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { useWorkspace } from "../workspace/workspace-provider";
-import { Artifact } from "./artifact";
 import { DataStreamHandler } from "./data-stream-handler";
 import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
@@ -39,7 +32,6 @@ export function ChatShell() {
     status,
     stop,
     regenerate,
-    addToolApprovalResponse,
     input,
     setInput,
     visibilityType,
@@ -58,8 +50,6 @@ export function ChatShell() {
     null
   );
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
-  const { setArtifact } = useArtifact();
 
   const stopRef = useRef(stop);
   stopRef.current = stop;
@@ -69,27 +59,19 @@ export function ChatShell() {
     if (prevChatIdRef.current !== chatId) {
       prevChatIdRef.current = chatId;
       stopRef.current();
-      setArtifact(initialArtifactData);
       setEditingMessage(null);
       setAttachments([]);
     }
-  }, [chatId, setArtifact]);
+  }, [chatId]);
 
   return (
     <>
       <div className="flex h-full w-full flex-row overflow-hidden">
-        <div
-          className={cn(
-            "flex min-w-0 flex-col bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-            isArtifactVisible ? "w-[40%]" : "w-full"
-          )}
-        >
+        <div className="flex w-full min-w-0 flex-col bg-sidebar">
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:rounded-tl-[12px] md:border-t md:border-l md:border-border/40">
             <Messages
-              addToolApprovalResponse={addToolApprovalResponse}
               chatId={chatId}
               compactedThroughMessageId={compactedThroughMessageId}
-              isArtifactVisible={isArtifactVisible}
               isLoading={isLoading}
               isReadonly={isReadonly}
               messages={messages}
@@ -175,25 +157,6 @@ export function ChatShell() {
             </div>
           </div>
         </div>
-
-        <Artifact
-          addToolApprovalResponse={addToolApprovalResponse}
-          attachments={attachments}
-          chatId={chatId}
-          input={input}
-          isReadonly={isReadonly}
-          messages={messages}
-          regenerate={regenerate}
-          selectedModelId={currentModelId}
-          selectedVisibilityType={visibilityType}
-          sendMessage={sendMessage}
-          setAttachments={setAttachments}
-          setInput={setInput}
-          setMessages={setMessages}
-          status={status}
-          stop={stop}
-          votes={votes}
-        />
       </div>
 
       <DataStreamHandler />

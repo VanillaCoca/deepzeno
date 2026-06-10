@@ -20,11 +20,6 @@ import {
 } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
-import { createDocument } from "@/lib/ai/tools/create-document";
-import { editDocument } from "@/lib/ai/tools/edit-document";
-import { getWeather } from "@/lib/ai/tools/get-weather";
-import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
-import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
 import { prepareCompactedContext } from "@/lib/context/compaction";
 import { assembleContext } from "@/lib/context-assembly";
@@ -332,7 +327,6 @@ export async function POST(request: Request) {
     const modelCapabilities = getCapabilities(process.env);
     const capabilities = modelCapabilities[chatModel];
     const isReasoningModel = capabilities?.reasoning === true;
-    const supportsTools = capabilities?.tools === true;
 
     const [decisionContext, restoredWorkspaceMessages] = await Promise.all([
       shouldInjectWorkspaceContext
@@ -362,7 +356,6 @@ export async function POST(request: Request) {
     const baseSystemText = [
       systemPrompt({
         requestHints,
-        supportsTools,
         languageName: locale ? localePromptName[locale] : undefined,
       }),
       shouldInjectWorkspaceContext
@@ -415,38 +408,6 @@ export async function POST(request: Request) {
               openai: { reasoningEffort: resolvedModel.reasoningEffort },
             }),
           },
-          ...(supportsTools
-            ? {
-                experimental_activeTools: [
-                  "getWeather",
-                  "createDocument",
-                  "editDocument",
-                  "updateDocument",
-                  "requestSuggestions",
-                ],
-                tools: {
-                  getWeather,
-                  createDocument: createDocument({
-                    session,
-                    dataStream,
-                    modelId: chatModel,
-                  }),
-                  editDocument: editDocument({ dataStream, session }),
-                  updateDocument: updateDocument({
-                    session,
-                    dataStream,
-                    modelId: chatModel,
-                  }),
-                  requestSuggestions: requestSuggestions({
-                    session,
-                    dataStream,
-                    modelId: chatModel,
-                  }),
-                },
-              }
-            : {
-                experimental_activeTools: isReasoningModel ? [] : undefined,
-              }),
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
             functionId: "stream-text",
