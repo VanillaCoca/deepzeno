@@ -37,14 +37,14 @@ function normalizeName(value: string, fallback: string) {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-export async function createBlankProject() {
+export async function createBlankProject(name: string) {
   const session = await auth();
   const userId = ensureAuthenticatedUserId(session);
   const userEmail = session?.user?.email ?? null;
   const bundle = await createProjectWithDefaults({
     userId,
     userEmail,
-    name: "Untitled project",
+    name: normalizeName(name, "Untitled project"),
   });
 
   revalidatePath("/");

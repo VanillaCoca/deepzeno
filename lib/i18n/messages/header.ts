@@ -17,6 +17,7 @@ export const headerMessages: LocaleMessages = {
     "header.exploreConfirm": "Yes, explore new",
     "header.exploreProcessing": "Starting…",
     "header.exploreFailed": "Couldn't start a new idea. Please try again.",
+    "header.exploreDisabledEmpty": "Start the conversation first",
   },
   zh: {
     "header.toggleSidebar": "切换侧边栏",
@@ -34,6 +35,7 @@ export const headerMessages: LocaleMessages = {
     "header.exploreConfirm": "好，探索新想法",
     "header.exploreProcessing": "正在开始…",
     "header.exploreFailed": "无法开始新想法，请重试。",
+    "header.exploreDisabledEmpty": "请先开始对话",
   },
   fr: {
     "header.toggleSidebar": "Basculer la barre latérale",
@@ -52,5 +54,6 @@ export const headerMessages: LocaleMessages = {
     "header.exploreProcessing": "Démarrage…",
     "header.exploreFailed":
       "Impossible de démarrer une nouvelle idée. Réessayez.",
+    "header.exploreDisabledEmpty": "Commencez d'abord la conversation",
   },
 };

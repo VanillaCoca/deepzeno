@@ -43,6 +43,8 @@ export const dialogsMessages: LocaleMessages = {
       "Paste notes, drop a pitch deck, or describe the project. ZENO extracts goals, constraints, and open questions for you to confirm.",
     "dialog.createProject.inputPlaceholder":
       "Describe the project, or paste anything you have...",
+    "dialog.createProject.titleLabel": "Project title",
+    "dialog.createProject.titlePlaceholder": "Name your project",
     "dialog.createProject.attachFiles": "Attach files",
     "dialog.createProject.creatingWorkspace": "Creating workspace...",
     "dialog.createProject.startBlank": "Start blank",
@@ -186,6 +188,8 @@ export const dialogsMessages: LocaleMessages = {
       "粘贴笔记、拖入路演文稿，或直接描述项目。ZENO 会提取目标、约束与待解决的问题，供你确认。",
     "dialog.createProject.inputPlaceholder":
       "描述项目，或粘贴你已有的任何内容…",
+    "dialog.createProject.titleLabel": "项目标题",
+    "dialog.createProject.titlePlaceholder": "给项目起个名字",
     "dialog.createProject.attachFiles": "附加文件",
     "dialog.createProject.creatingWorkspace": "正在创建工作区…",
     "dialog.createProject.startBlank": "从空白开始",
@@ -327,6 +331,8 @@ export const dialogsMessages: LocaleMessages = {
       "Collez des notes, déposez un pitch deck ou décrivez le projet. ZENO extrait les objectifs, contraintes et questions ouvertes pour que vous les confirmiez.",
     "dialog.createProject.inputPlaceholder":
       "Décrivez le projet, ou collez tout ce que vous avez...",
+    "dialog.createProject.titleLabel": "Titre du projet",
+    "dialog.createProject.titlePlaceholder": "Nommez votre projet",
     "dialog.createProject.attachFiles": "Joindre des fichiers",
     "dialog.createProject.creatingWorkspace":
       "Création de l'espace de travail...",

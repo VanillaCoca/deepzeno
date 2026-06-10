@@ -75,7 +75,7 @@ type CreateProjectState = {
 type CreateProjectAction =
   | { type: "set_input"; value: string }
   | { type: "start_extracting" }
-  | { type: "extract_success"; result: ExtractionResult }
+  | { type: "extract_success"; result: ExtractionResult; title: string }
   | { type: "extract_error"; message: string }
   | { type: "back_to_input" }
   | { type: "rename_project"; value: string }
@@ -95,9 +95,15 @@ const initialState: CreateProjectState = {
   review: null,
 };
 
-function createReviewState(result: ExtractionResult): ReviewState {
+function createReviewState(
+  result: ExtractionResult,
+  titleOverride?: string
+): ReviewState {
   return {
-    projectName: result.projectName.trim() || "Untitled project",
+    // The user-entered title is authoritative (it's now required); fall back to
+    // the model's suggestion only if somehow empty.
+    projectName:
+      titleOverride?.trim() || result.projectName.trim() || "Untitled project",
     topics: result.topics.map((topic) => ({
       id: generateUUID(),
       name: topic.name,
@@ -132,7 +138,7 @@ function reducer(
         ...state,
         stage: "review",
         error: null,
-        review: createReviewState(action.result),
+        review: createReviewState(action.result, action.title),
       };
     case "extract_error":
       return {
@@ -228,6 +234,9 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [topicNameDraft, setTopicNameDraft] = useState("");
+  // Required project title — every start path (blank or extract) needs it.
+  const [projectTitle, setProjectTitle] = useState("");
+  const hasTitle = projectTitle.trim().length > 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const extractAbortControllerRef = useRef<AbortController | null>(null);
   const review = state.review;
@@ -270,6 +279,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
     setEditingTopicId(null);
     setProjectNameDraft("");
     setTopicNameDraft("");
+    setProjectTitle("");
     dispatch({ type: "reset" });
   }
 
@@ -283,7 +293,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
   }
 
   async function handleExtract() {
-    if (state.input.trim().length === 0) {
+    if (state.input.trim().length === 0 || !hasTitle) {
       return;
     }
 
@@ -309,7 +319,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
       }
 
       const result = (await response.json()) as ExtractionResult;
-      dispatch({ type: "extract_success", result });
+      dispatch({ type: "extract_success", result, title: projectTitle });
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -404,9 +414,12 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
   }
 
   function handleStartBlank() {
+    if (!hasTitle) {
+      return;
+    }
     startMutation(async () => {
       try {
-        const { projectId, topicId } = await createBlankProject();
+        const { projectId, topicId } = await createBlankProject(projectTitle);
         resetModalState();
         setOpen(false);
         router.push(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
@@ -481,6 +494,21 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
               {state.error ? (
                 <p className="text-sm text-destructive">{state.error}</p>
               ) : null}
+              <div className="space-y-1.5">
+                <label
+                  className="font-medium text-foreground text-sm"
+                  htmlFor="create-project-title"
+                >
+                  {t("dialog.createProject.titleLabel")}
+                </label>
+                <Input
+                  autoFocus
+                  id="create-project-title"
+                  onChange={(event) => setProjectTitle(event.target.value)}
+                  placeholder={t("dialog.createProject.titlePlaceholder")}
+                  value={projectTitle}
+                />
+              </div>
               <Textarea
                 className="min-h-32 max-h-[40dvh] resize-none overflow-y-auto sm:max-h-[320px]"
                 onChange={(event) =>
@@ -512,7 +540,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
               <div className="flex items-center justify-end gap-2">
                 <Button
                   aria-busy={isMutating}
-                  disabled={isMutating}
+                  disabled={isMutating || !hasTitle}
                   onClick={handleStartBlank}
                   size="sm"
                   type="button"
@@ -527,7 +555,7 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
                 </Button>
                 <Button
                   className="bg-foreground text-background hover:bg-foreground/90"
-                  disabled={state.input.trim().length === 0}
+                  disabled={state.input.trim().length === 0 || !hasTitle}
                   onClick={() => {
                     handleExtract().catch(console.error);
                   }}

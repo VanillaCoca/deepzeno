@@ -154,6 +154,11 @@ export function WorkspaceHeader({
             }
             onClick={() => setExploreOpen(true)}
             size="icon-sm"
+            title={
+              isActiveConversationEmpty
+                ? t("header.exploreDisabledEmpty")
+                : t("header.exploreNewIdea")
+            }
             variant="ghost"
           >
             <SparklesIcon className="size-4" />

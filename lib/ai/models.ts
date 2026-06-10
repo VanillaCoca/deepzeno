@@ -375,6 +375,10 @@ export function getDefaultModelId(env: EnvLike = process.env) {
 
 export function getTitleModelId(env: EnvLike = process.env) {
   const preferredIds = [
+    // Bedrock first: it's the deployment's reachable provider (direct OpenAI /
+    // Anthropic can be geo-blocked), so titles get AI-generated instead of
+    // falling back to the message text.
+    "bedrock:claude-sonnet-4-6",
     "openai:gpt-4.1",
     "anthropic:claude-sonnet-4-6",
     "deepseek:default",
