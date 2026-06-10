@@ -3,7 +3,6 @@
 import {
   ArchiveIcon,
   ChevronsUpDownIcon,
-  GaugeIcon,
   HashIcon,
   LanguagesIcon,
   LightbulbIcon,
@@ -23,7 +22,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { ProjectSearchDialog } from "@/components/project-search-dialog";
-import { useQuality } from "@/components/quality/quality-provider";
 import { QuickNotesDialog } from "@/components/quick-notes-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,7 +81,6 @@ function SidebarAccountMenu({
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const { locale, setLocale, t } = useLocale();
-  const { quality, setQuality } = useQuality();
 
   useEffect(() => setMounted(true), []);
 
@@ -148,30 +145,6 @@ function SidebarAccountMenu({
                   {option.label}
                 </DropdownMenuRadioItem>
               ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <GaugeIcon />
-            {t("chat.quality")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup
-              onValueChange={(value) =>
-                setQuality(value as "economy" | "balanced" | "best")
-              }
-              value={quality}
-            >
-              <DropdownMenuRadioItem value="economy">
-                {t("chat.qualityEconomy")}
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="balanced">
-                {t("chat.qualityBalanced")}
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="best">
-                {t("chat.qualityBest")}
-              </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
