@@ -19,7 +19,13 @@ export const irStatuses = [
   "dismissed",
 ] as const;
 
-export const irSourceLayers = ["inline", "sweep", "manual", "mcp"] as const;
+export const irSourceLayers = [
+  "inline",
+  "sweep",
+  "manual",
+  "mcp",
+  "kickoff",
+] as const;
 
 export const irCreatedByValues = ["ai", "user", "mcp"] as const;
 

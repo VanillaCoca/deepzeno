@@ -14,10 +14,16 @@ export type ImportedIRCreationInput = {
 };
 
 export function validateStandardIRCreation(input: StandardIRCreationInput) {
-  if (input.initialStatus === "idea" && input.sourceLayer !== "sweep") {
+  // Ideas come only from AI funnels that triage by confidence: the chat sweep
+  // and the project-kickoff synthesis. Everything else proposes pending.
+  if (
+    input.initialStatus === "idea" &&
+    input.sourceLayer !== "sweep" &&
+    input.sourceLayer !== "kickoff"
+  ) {
     return {
       ok: false as const,
-      message: "Only sweep extraction can create idea nodes",
+      message: "Only sweep or kickoff extraction can create idea nodes",
     };
   }
 

@@ -205,4 +205,28 @@ test.describe("Bulk Import validation", () => {
       }).ok
     ).toBe(true);
   });
+
+  test("kickoff layer can create pending and idea nodes", () => {
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "kickoff",
+        initialStatus: "pending",
+      }).ok
+    ).toBe(true);
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "kickoff",
+        initialStatus: "idea",
+      }).ok
+    ).toBe(true);
+  });
+
+  test("inline layer still cannot create idea nodes", () => {
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "inline",
+        initialStatus: "idea",
+      }).ok
+    ).toBe(false);
+  });
 });
