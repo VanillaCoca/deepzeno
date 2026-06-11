@@ -10,14 +10,12 @@ import {
   irKinds,
   irPlanSubtypes,
   irRelations,
-  irSourceLayers,
   irStatuses,
 } from "@/lib/ir/types";
 
 export const irKindSchema = z.enum(irKinds);
 export const irSubtypeSchema = z.enum(irPlanSubtypes);
 export const irStatusSchema = z.enum(irStatuses);
-export const irSourceLayerSchema = z.enum(irSourceLayers);
 export const irCreatedBySchema = z.enum(irCreatedByValues);
 export const irRelationSchema = z.enum(irRelations);
 

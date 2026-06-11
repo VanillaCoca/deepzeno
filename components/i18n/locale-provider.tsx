@@ -12,6 +12,7 @@ import { detailMessages } from "@/lib/i18n/messages/detail";
 import { dialogsMessages } from "@/lib/i18n/messages/dialogs";
 import { graphMessages } from "@/lib/i18n/messages/graph";
 import { headerMessages } from "@/lib/i18n/messages/header";
+import { kickoffMessages } from "@/lib/i18n/messages/kickoff";
 import { renameMessages } from "@/lib/i18n/messages/rename";
 
 export const LOCALE_STORAGE_KEY = "zeno-locale";
@@ -27,6 +28,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...graphMessages.en,
     ...chatMessages.en,
     ...headerMessages.en,
+    ...kickoffMessages.en,
     ...renameMessages.en,
   },
   zh: {
@@ -36,6 +38,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...graphMessages.zh,
     ...chatMessages.zh,
     ...headerMessages.zh,
+    ...kickoffMessages.zh,
     ...renameMessages.zh,
   },
   fr: {
@@ -45,6 +48,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...graphMessages.fr,
     ...chatMessages.fr,
     ...headerMessages.fr,
+    ...kickoffMessages.fr,
     ...renameMessages.fr,
   },
 };

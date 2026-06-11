@@ -2,6 +2,7 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import { ArrowDownIcon } from "lucide-react";
 import { Fragment, useEffect, useRef } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { KickoffBanner } from "@/components/kickoff/kickoff-banner";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useMessages } from "@/hooks/use-messages";
 import { chatModels } from "@/lib/ai/models";
@@ -124,6 +125,8 @@ function PureMessages({
               </p>
             </div>
           )}
+
+          <KickoffBanner />
 
           {messages.map((message, index) => (
             <Fragment key={message.id}>
