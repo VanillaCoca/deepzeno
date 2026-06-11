@@ -21,7 +21,9 @@ export function KickoffBanner() {
     fetcher
   );
   const [isProposing, setIsProposing] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
   const [proposal, setProposal] = useState<KickoffProposal | null>(null);
+  const [proposalVersion, setProposalVersion] = useState(0);
   const [reviewOpen, setReviewOpen] = useState(false);
 
   if (!(activeProjectId && isGeneral) || data?.state !== "intake") {
@@ -45,6 +47,7 @@ export function KickoffBanner() {
       }
 
       setProposal(result.proposal);
+      setProposalVersion((v) => v + 1);
       setReviewOpen(true);
     } catch (error) {
       console.error(error);
@@ -60,12 +63,15 @@ export function KickoffBanner() {
           ? t("kickoff.needsAnswers")
           : t("kickoff.failedToast"),
       });
+      await mutate();
     } finally {
       setIsProposing(false);
     }
   }
 
   async function handleSkip() {
+    setIsSkipping(true);
+
     try {
       await fetchWithErrorHandlers("/api/kickoff/skip", {
         method: "POST",
@@ -77,6 +83,8 @@ export function KickoffBanner() {
     } catch (error) {
       console.error(error);
       toast({ type: "error", description: t("kickoff.failedToast") });
+    } finally {
+      setIsSkipping(false);
     }
   }
 
@@ -88,11 +96,15 @@ export function KickoffBanner() {
         </p>
         <p className="mt-1 text-muted-foreground">{t("kickoff.bannerBody")}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button disabled={isProposing} onClick={handlePropose} size="sm">
+          <Button
+            disabled={isProposing || isSkipping}
+            onClick={handlePropose}
+            size="sm"
+          >
             {isProposing ? t("kickoff.proposing") : t("kickoff.propose")}
           </Button>
           <Button
-            disabled={isProposing}
+            disabled={isProposing || isSkipping}
             onClick={handleSkip}
             size="sm"
             variant="ghost"
@@ -103,7 +115,7 @@ export function KickoffBanner() {
       </div>
       {proposal ? (
         <KickoffReviewDialog
-          key={activeProjectId}
+          key={proposalVersion}
           onConfirmed={() => mutate()}
           onOpenChange={setReviewOpen}
           open={reviewOpen}

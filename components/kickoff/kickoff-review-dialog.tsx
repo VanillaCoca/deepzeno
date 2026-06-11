@@ -20,7 +20,10 @@ import {
 } from "@/lib/kickoff/proposal";
 import { fetchWithErrorHandlers } from "@/lib/utils";
 
-type ReviewTopic = KickoffProposal["topics"][number] & { checked: boolean };
+type ReviewTopic = KickoffProposal["topics"][number] & {
+  checked: boolean;
+  rowId: number;
+};
 
 export function KickoffReviewDialog({
   proposal,
@@ -36,7 +39,7 @@ export function KickoffReviewDialog({
   const { t } = useLocale();
   const { activeProjectId, refreshWorkspace } = useWorkspace();
   const [topics, setTopics] = useState<ReviewTopic[]>(() =>
-    proposal.topics.map((topic) => ({ ...topic, checked: true }))
+    proposal.topics.map((topic, i) => ({ ...topic, checked: true, rowId: i }))
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -62,7 +65,12 @@ export function KickoffReviewDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project_id: activeProjectId,
-          topics: checkedTopics.map(({ checked: _checked, ...topic }) => topic),
+          topics: checkedTopics.map(
+            ({ checked: _checked, rowId: _rowId, ...topic }) => ({
+              ...topic,
+              name: topic.name.trim(),
+            })
+          ),
         }),
       });
       const result = (await response.json()) as {
@@ -108,10 +116,11 @@ export function KickoffReviewDialog({
             return (
               <div
                 className="rounded-lg border border-border/60 p-3"
-                key={`${topic.name}-${index}`}
+                key={topic.rowId}
               >
                 <div className="flex items-center gap-2">
                   <input
+                    aria-label={topic.name}
                     checked={topic.checked}
                     className="size-4 shrink-0 accent-foreground"
                     onChange={(event) =>
@@ -126,7 +135,9 @@ export function KickoffReviewDialog({
                     type="checkbox"
                   />
                   <Input
+                    aria-label={t("kickoff.reviewTitle")}
                     className="h-8 flex-1 text-sm font-medium"
+                    maxLength={120}
                     onChange={(event) =>
                       setTopics((current) =>
                         current.map((entry, i) =>
