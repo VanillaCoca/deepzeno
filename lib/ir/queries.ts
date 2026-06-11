@@ -1143,6 +1143,40 @@ export async function getChatSessionSweepState(chatSessionId: string) {
   };
 }
 
+export type KickoffState = "none" | "intake" | "confirmed" | "skipped";
+
+export async function getKickoffStateForProject(
+  projectId: string
+): Promise<KickoffState> {
+  const rows = await ensureResult<DatabaseRecord[]>(
+    getClient()
+      .from("ir_extraction_events")
+      .select("event")
+      .eq("project_id", projectId)
+      .in("event", [
+        "kickoff_intake_seeded",
+        "kickoff_confirmed",
+        "kickoff_skipped",
+      ]),
+    "Failed to read kickoff state"
+  );
+  const events = new Set((rows ?? []).map((row) => String(row.event)));
+
+  if (events.has("kickoff_confirmed")) {
+    return "confirmed";
+  }
+
+  if (events.has("kickoff_skipped")) {
+    return "skipped";
+  }
+
+  if (events.has("kickoff_intake_seeded")) {
+    return "intake";
+  }
+
+  return "none";
+}
+
 export async function logIREvent({
   projectId,
   topicId = null,
