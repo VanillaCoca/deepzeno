@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import type { IRType } from "@/lib/ir-types";
+import { seedKickoffIntake } from "@/lib/kickoff/intake";
 import {
   createProjectFromExtraction,
   createProjectWithDefaults,
@@ -41,11 +42,25 @@ export async function createBlankProject(name: string) {
   const session = await auth();
   const userId = ensureAuthenticatedUserId(session);
   const userEmail = session?.user?.email ?? null;
+  const projectName = normalizeName(name, "Untitled project");
   const bundle = await createProjectWithDefaults({
     userId,
     userEmail,
-    name: normalizeName(name, "Untitled project"),
+    name: projectName,
   });
+
+  try {
+    await seedKickoffIntake({
+      userId,
+      projectId: bundle.project.id,
+      topicId: bundle.generalTopic.id,
+      conversationId: bundle.firstConversation.id,
+      projectName,
+    });
+  } catch (error) {
+    // Kickoff is an optional on-ramp; project creation never blocks on it.
+    console.warn("Kickoff intake seeding failed", error);
+  }
 
   revalidatePath("/");
 
