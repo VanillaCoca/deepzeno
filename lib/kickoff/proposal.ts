@@ -98,7 +98,9 @@ export function normalizeKickoffProposal(raw: {
         .filter((node): node is KickoffNodeProposal => Boolean(node))
         .slice(0, KICKOFF_LIMITS.maxNodesPerTopic);
 
-      if (!name) {
+      // The confirm API requires both (charter is the topic's reason to
+      // exist); admitting a charterless topic here would only 400 later.
+      if (!(name && charter)) {
         return null;
       }
 

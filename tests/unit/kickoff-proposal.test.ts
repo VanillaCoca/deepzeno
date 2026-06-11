@@ -64,10 +64,11 @@ describe("normalizeKickoffProposal", () => {
     );
   });
 
-  it("drops topics with empty names and trims fields", () => {
+  it("drops topics with empty names or charters and trims fields", () => {
     const result = normalizeKickoffProposal({
       topics: [
         { name: "   ", charter: "x", nodes: [node()] },
+        { name: "No charter", charter: "  ", nodes: [node()] },
         {
           name: "  Pricing  ",
           charter: "  How do we price?  ",
