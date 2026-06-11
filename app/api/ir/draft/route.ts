@@ -6,7 +6,6 @@ import {
   irErrorToResponse,
   irKindSchema,
   irRelationInputSchema,
-  irSourceLayerSchema,
   irSubtypeSchema,
   normalizeRelationInput,
 } from "@/lib/ir/api";
@@ -26,7 +25,10 @@ const draftSchema = z.object({
   topic_id: z.string().uuid().nullable().optional(),
   source_chat_id: z.string().uuid().nullable().optional(),
   source_turn_id: z.string().uuid().nullable().optional(),
-  source_layer: irSourceLayerSchema,
+  // Drafts come from the user/UI (manual, inline) or test fixtures exercising
+  // the sweep idea path. Server-side funnels (mcp, kickoff) have their own
+  // write paths and must not be spoofable through this route.
+  source_layer: z.enum(["manual", "inline", "sweep"]),
   created_by: irCreatedBySchema,
   initial_status: z.enum(["pending", "idea"]).default("pending"),
   extraction_confidence: z.number().nullable().optional(),

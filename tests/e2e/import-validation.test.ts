@@ -221,6 +221,15 @@ test.describe("Bulk Import validation", () => {
     ).toBe(true);
   });
 
+  test("mcp layer cannot create idea nodes", () => {
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "mcp",
+        initialStatus: "idea",
+      }).ok
+    ).toBe(false);
+  });
+
   test("inline layer still cannot create idea nodes", () => {
     expect(
       validateStandardIRCreation({
