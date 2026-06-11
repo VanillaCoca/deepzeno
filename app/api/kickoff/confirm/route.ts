@@ -4,16 +4,19 @@ import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import {
   createIRNodeForUser,
+  findDuplicateIRCandidate,
   getKickoffStateForProject,
   logIREvent,
 } from "@/lib/ir/queries";
-import type { IRKind } from "@/lib/ir/types";
 import {
   KICKOFF_LIMITS,
   kickoffNodeKinds,
   statusForConfidence,
 } from "@/lib/kickoff/proposal";
-import { getProjectByIdForUser } from "@/lib/workspace/queries";
+import {
+  getProjectByIdForUser,
+  listTopicsByProjectId,
+} from "@/lib/workspace/queries";
 import { createTopicWithConversation } from "@/lib/workspace/service";
 
 const bodySchema = z.object({
@@ -77,27 +80,52 @@ export async function POST(request: Request) {
     let ideasCreated = 0;
     const createdTopics: Array<{ id: string; label: string }> = [];
 
+    // Retry safety: load existing topics once so we can reuse any that were
+    // already created by a previous partially-failed confirm run.
+    const existingTopics = await listTopicsByProjectId(body.project_id);
+
     for (const topicProposal of body.topics) {
-      const bundle = await createTopicWithConversation({
-        userId,
-        projectId: body.project_id,
-        label: topicProposal.name,
-        description: topicProposal.charter,
-      });
-      createdTopics.push({ id: bundle.topic.id, label: bundle.topic.label });
+      // Retry safety: a previous partially-failed confirm may already have
+      // created this topic. Reuse it instead of duplicating.
+      const existingTopic = existingTopics.find(
+        (topic) => !topic.archivedAt && topic.label === topicProposal.name
+      );
+      const topicRecord = existingTopic
+        ? { id: existingTopic.id, label: existingTopic.label }
+        : await createTopicWithConversation({
+            userId,
+            projectId: body.project_id,
+            label: topicProposal.name,
+            description: topicProposal.charter,
+          }).then((bundle) => ({
+            id: bundle.topic.id,
+            label: bundle.topic.label,
+          }));
+      createdTopics.push(topicRecord);
 
       for (const node of topicProposal.nodes) {
+        const duplicate = await findDuplicateIRCandidate({
+          projectId: body.project_id,
+          kind: node.kind,
+          subtype: null,
+          title: node.title,
+        });
+
+        if (duplicate) {
+          continue;
+        }
+
         const initialStatus = statusForConfidence(node.confidence);
 
         await createIRNodeForUser({
           userId,
           projectId: body.project_id,
-          topicId: bundle.topic.id,
-          kind: node.kind as IRKind,
+          topicId: topicRecord.id,
+          kind: node.kind,
           subtype: null,
           title: node.title,
-          content: node.content ?? null,
-          rationale: node.rationale ?? null,
+          content: node.content,
+          rationale: node.rationale,
           sourceLayer: "kickoff",
           createdBy: "ai",
           initialStatus,
