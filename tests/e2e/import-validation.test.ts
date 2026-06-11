@@ -238,4 +238,19 @@ test.describe("Bulk Import validation", () => {
       }).ok
     ).toBe(false);
   });
+
+  test("research layer can create pending and idea nodes", () => {
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "research",
+        initialStatus: "pending",
+      }).ok
+    ).toBe(true);
+    expect(
+      validateStandardIRCreation({
+        sourceLayer: "research",
+        initialStatus: "idea",
+      }).ok
+    ).toBe(true);
+  });
 });

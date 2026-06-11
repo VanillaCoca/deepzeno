@@ -25,6 +25,7 @@ export const irSourceLayers = [
   "manual",
   "mcp",
   "kickoff",
+  "research",
 ] as const;
 
 export const irCreatedByValues = ["ai", "user", "mcp"] as const;
