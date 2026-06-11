@@ -86,9 +86,12 @@ export async function POST(request: Request) {
 
     for (const topicProposal of body.topics) {
       // Retry safety: a previous partially-failed confirm may already have
-      // created this topic. Reuse it instead of duplicating.
+      // created this topic. Reuse it instead of duplicating. Never capture
+      // the General topic — a proposal named "General" must create its own.
       const existingTopic = existingTopics.find(
-        (topic) => !topic.archivedAt && topic.label === topicProposal.name
+        (topic) =>
+          !(topic.archivedAt || topic.isGeneral) &&
+          topic.label === topicProposal.name
       );
       const topicRecord = existingTopic
         ? { id: existingTopic.id, label: existingTopic.label }
