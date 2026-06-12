@@ -26,7 +26,11 @@ import {
   insertEvidence,
   updateResearchRun,
 } from "./queries";
-import { ResearchToolUnavailableError, searchWeb } from "./search";
+import {
+  ResearchToolUnavailableError,
+  resolveSearchProvider,
+  searchWeb,
+} from "./search";
 import { verifyQuote } from "./text";
 
 // ---------------------------------------------------------------------------
@@ -554,6 +558,15 @@ export async function runResearchPipeline({
     throw new ChatbotError(
       "bad_request:api",
       "Research runs only on open questions and hypotheses"
+    );
+  }
+
+  // Pre-flight: without a search provider the run is doomed — fail before
+  // creating a run row or spending plan-phase tokens (the route maps this
+  // to a 503).
+  if (!resolveSearchProvider()) {
+    throw new ResearchToolUnavailableError(
+      "No web search provider is configured (need ANTHROPIC_API_KEY, OPENAI_API_KEY, or AI_GATEWAY_API_KEY)."
     );
   }
 
