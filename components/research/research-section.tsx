@@ -72,8 +72,9 @@ export function ResearchSection({
   const { t } = useLocale();
   const { mutate } = useSWRConfig();
   const [isStarting, setIsStarting] = useState(false);
-  const runsKey = `/api/research/runs?nodeId=${encodeURIComponent(nodeId)}`;
-  const evidenceKey = `/api/research/evidence?nodeId=${encodeURIComponent(nodeId)}`;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const runsKey = `${basePath}/api/research/runs?nodeId=${encodeURIComponent(nodeId)}`;
+  const evidenceKey = `${basePath}/api/research/evidence?nodeId=${encodeURIComponent(nodeId)}`;
   const { data: runsData, mutate: mutateRuns } = useSWR<{
     runs: ResearchRun[];
   }>(runsKey, fetcher, {
@@ -111,7 +112,7 @@ export function ResearchSection({
     setIsStarting(true);
 
     try {
-      const response = await fetch("/api/research/run", {
+      const response = await fetch(`${basePath}/api/research/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ node_id: nodeId }),

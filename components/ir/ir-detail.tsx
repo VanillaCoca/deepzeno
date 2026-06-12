@@ -487,6 +487,7 @@ export function IRDetailPane({
         {(selectedNode.kind === "open_question" ||
           selectedNode.kind === "hypothesis") && (
           <ResearchSection
+            key={selectedNode.id}
             nodeId={selectedNode.id}
             onLanded={() => {
               refreshIR().catch(console.error);
