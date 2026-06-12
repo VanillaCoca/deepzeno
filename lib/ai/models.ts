@@ -373,6 +373,13 @@ export function getDefaultModelId(env: EnvLike = process.env) {
   );
 }
 
+// Look up a catalog entry by id without requiring env configuration.
+// Used by the research pipeline to price token usage after a run completes.
+// Returns null when the id is not in the catalog (e.g. "search:gateway-perplexity").
+export function findModelById(id: string): ChatModelDefinition | null {
+  return modelCatalog.find((m) => m.id === id) ?? null;
+}
+
 export function getTitleModelId(env: EnvLike = process.env) {
   const preferredIds = [
     // Bedrock first: it's the deployment's reachable provider (direct OpenAI /

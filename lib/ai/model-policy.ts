@@ -156,8 +156,8 @@ export function selectModelForTask(
     case "title":
       return getTitleModelId(env);
 
-    // kickoff_synthesis is wired (L1 Kickoff); research_* / semantic_search
-    // are not yet wired (P2/P3) — tier-based groundwork only.
+    // kickoff_synthesis (L1 Kickoff) and research_* (L2 Research pipeline)
+    // are wired; semantic_search is still groundwork (P3).
     case "kickoff_synthesis":
     case "research_synthesis":
       return pickModelByTier("frontier", env);

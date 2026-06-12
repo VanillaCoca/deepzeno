@@ -487,3 +487,51 @@ export const chatSessionState = pgTable("chat_session_state", {
 });
 
 export type ChatSessionState = InferSelectModel<typeof chatSessionState>;
+
+export const researchRun = pgTable("research_run", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  topicId: uuid("topic_id").references(() => topic.id, {
+    onDelete: "set null",
+  }),
+  originNodeId: text("origin_node_id")
+    .notNull()
+    .references(() => irNode.id),
+  plan: jsonb("plan"),
+  brief: text("brief"),
+  status: text("status").notNull().default("running"),
+  error: text("error"),
+  budget: jsonb("budget"),
+  costEstimate: real("cost_estimate"),
+  modelsUsed: jsonb("models_used"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+});
+export type ResearchRunRow = InferSelectModel<typeof researchRun>;
+
+export const evidence = pgTable("evidence", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  runId: uuid("run_id")
+    .notNull()
+    .references(() => researchRun.id, { onDelete: "cascade" }),
+  nodeId: text("node_id")
+    .notNull()
+    .references(() => irNode.id),
+  url: text("url").notNull(),
+  title: text("title"),
+  quote: text("quote").notNull(),
+  claim: text("claim").notNull(),
+  stance: text("stance").notNull(),
+  retrievedAt: timestamp("retrieved_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export type EvidenceRow = InferSelectModel<typeof evidence>;
