@@ -12,6 +12,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { useIR } from "@/components/ir/ir-provider";
 import { kindPresentation } from "@/components/ir/kind-presentation";
 import type { useIRActions } from "@/components/ir/use-ir-actions";
+import { ResearchSection } from "@/components/research/research-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -381,7 +382,7 @@ export function IRDetailPane({
   subNodes = [],
 }: IRDetailPaneProps) {
   const { t } = useLocale();
-  const { selectNode } = useIR();
+  const { refreshIR, selectNode } = useIR();
 
   if (!selectedNode) {
     return (
@@ -482,6 +483,17 @@ export function IRDetailPane({
             </div>
           </section>
         ) : null}
+
+        {(selectedNode.kind === "open_question" ||
+          selectedNode.kind === "hypothesis") && (
+          <ResearchSection
+            key={selectedNode.id}
+            nodeId={selectedNode.id}
+            onLanded={() => {
+              refreshIR().catch(console.error);
+            }}
+          />
+        )}
 
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
