@@ -10,7 +10,7 @@ import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { KickoffProposal } from "@/lib/kickoff/proposal";
 import { fetcher, fetchWithErrorHandlers } from "@/lib/utils";
 
-export function KickoffBanner() {
+export function KickoffBanner({ hasAnswers }: { hasAnswers: boolean }) {
   const { t } = useLocale();
   const { activeProjectId, activeTopic } = useWorkspace();
   const isGeneral = Boolean(activeTopic?.isGeneral);
@@ -97,7 +97,7 @@ export function KickoffBanner() {
         <p className="mt-1 text-muted-foreground">{t("kickoff.bannerBody")}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
-            disabled={isProposing || isSkipping}
+            disabled={!hasAnswers || isProposing || isSkipping}
             onClick={handlePropose}
             size="sm"
           >
@@ -112,6 +112,11 @@ export function KickoffBanner() {
             {t("kickoff.skip")}
           </Button>
         </div>
+        {hasAnswers ? null : (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("kickoff.needsAnswers")}
+          </p>
+        )}
       </div>
       {proposal ? (
         <KickoffReviewDialog

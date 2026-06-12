@@ -126,7 +126,15 @@ function PureMessages({
             </div>
           )}
 
-          <KickoffBanner />
+          <KickoffBanner
+            hasAnswers={messages.some(
+              (message) =>
+                message.role === "user" &&
+                message.parts.some(
+                  (part) => part.type === "text" && part.text.trim().length > 0
+                )
+            )}
+          />
 
           {messages.map((message, index) => (
             <Fragment key={message.id}>
