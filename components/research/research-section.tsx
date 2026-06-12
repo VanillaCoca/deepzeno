@@ -1,10 +1,11 @@
 "use client";
 
 import { GlobeIcon } from "lucide-react";
-import { useState } from "react";
-import useSWR from "swr";
+import { useEffect, useRef, useState } from "react";
+import useSWR, { useSWRConfig } from "swr";
 import { toast } from "@/components/chat/toast";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { irNodeKey } from "@/components/ir/ir-provider";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { fetcher } from "@/lib/utils";
@@ -69,6 +70,7 @@ export function ResearchSection({
   onLanded: () => void;
 }) {
   const { t } = useLocale();
+  const { mutate } = useSWRConfig();
   const [isStarting, setIsStarting] = useState(false);
   const runsKey = `/api/research/runs?nodeId=${encodeURIComponent(nodeId)}`;
   const evidenceKey = `/api/research/evidence?nodeId=${encodeURIComponent(nodeId)}`;
@@ -87,6 +89,23 @@ export function ResearchSection({
   const latestRun = runsData?.runs[0] ?? null;
   const isRunning = isStarting || latestRun?.status === "running";
   const evidence = evidenceData?.evidence ?? [];
+
+  // Fix 2: revalidate evidence when a background-polled run transitions to a
+  // terminal state (done / partial / failed).  A ref guards against the initial
+  // mount so we only trigger on an actual status change.
+  const prevRunStatusRef = useRef<ResearchRunStatus | null | undefined>(
+    undefined
+  );
+  useEffect(() => {
+    const prev = prevRunStatusRef.current;
+    const next = latestRun?.status;
+    prevRunStatusRef.current = next;
+    // Skip the first render (prev === undefined) and only fire when the run
+    // leaves "running" for a terminal state.
+    if (prev === "running" && next !== undefined && next !== "running") {
+      mutateEvidence().catch(console.error);
+    }
+  }, [latestRun?.status, mutateEvidence]);
 
   async function handleResearch() {
     setIsStarting(true);
@@ -115,6 +134,9 @@ export function ResearchSection({
           candidates: payload.candidates_created,
         }),
       });
+      // Fix 1: also revalidate the open node's detail SWR key so the Relations
+      // section reflects any newly-landed candidate edges immediately.
+      await mutate(irNodeKey(nodeId));
       onLanded();
     } catch (error) {
       console.error(error);
@@ -161,7 +183,7 @@ export function ResearchSection({
       {evidence.length > 0 ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-[var(--ir-text-secondary)]">
-            {t("detail.researchEvidence")} ({evidence.length})
+            {t("detail.researchEvidence", { count: evidence.length })}
           </p>
           <ul className="space-y-2">
             {evidence.map((item) => (
