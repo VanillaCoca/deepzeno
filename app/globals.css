@@ -103,6 +103,9 @@
   --ir-warning-bg: rgba(217, 119, 6, 0.1);
   --ir-warning-stripe: #d97706;
 
+  --ir-success-fg: #15803d;
+  --ir-success-bg: rgba(21, 128, 61, 0.1);
+
   /* Truth tree v1.3 — kind pill + edge label colors (light mode) */
   --ir-glyph-goal: #15803d;
   --ir-glyph-decision: #1d4ed8;
@@ -186,6 +189,10 @@
   --ir-glyph-question: #facc15;
   --ir-glyph-rejection: #f87171;
   --ir-edge-contradicts: #ef4444;
+
+  /* Brighter success for dark panels (mirrors --ir-glyph-goal). */
+  --ir-success-fg: #4ade80;
+  --ir-success-bg: rgba(74, 222, 128, 0.12);
 
   --shadow-card:
     inset 0 1px 0 oklch(1 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.2),

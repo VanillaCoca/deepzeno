@@ -48,10 +48,12 @@ type EvidenceItem = {
 
 const POLL_MS = 5000;
 
+// Stance colors come from the IR design tokens (globals.css) so they track the
+// light/dark panel theme, like the rest of this component.
 const STANCE_STYLE: Record<EvidenceItem["stance"], string> = {
-  supports: "bg-emerald-500/10 text-emerald-600",
-  contradicts: "bg-amber-500/10 text-amber-600",
-  neutral: "bg-muted text-muted-foreground",
+  supports: "bg-[var(--ir-success-bg)] text-[var(--ir-success-fg)]",
+  contradicts: "bg-[var(--ir-warning-bg)] text-[var(--ir-warning-fg)]",
+  neutral: "bg-[var(--ir-bg-hover)] text-[var(--ir-text-tertiary)]",
 };
 
 function hostOf(url: string) {
@@ -89,7 +91,12 @@ export function ResearchSection({
 
   const latestRun = runsData?.runs[0] ?? null;
   const isRunning = isStarting || latestRun?.status === "running";
-  const evidence = evidenceData?.evidence ?? [];
+  // The evidence endpoint returns every row for the node across all runs; scope
+  // the display to the latest run so it stays consistent with the run summary
+  // (which only shows the latest run) instead of mixing evidence from old runs.
+  const evidence = (evidenceData?.evidence ?? []).filter(
+    (item) => latestRun !== null && item.runId === latestRun.id
+  );
 
   // Fix 2: revalidate evidence when a background-polled run transitions to a
   // terminal state (done / partial / failed).  A ref guards against the initial

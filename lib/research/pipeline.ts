@@ -29,6 +29,7 @@ import {
 import {
   ResearchToolUnavailableError,
   resolveSearchProvider,
+  SEARCH_PROVIDER_MISSING_MESSAGE,
   searchWeb,
 } from "./search";
 import { verifyQuote } from "./text";
@@ -356,30 +357,39 @@ async function collectPhase(
 // Phase 3 — Judge
 // ---------------------------------------------------------------------------
 
-const judgeSchema = z.object({
-  brief: z.string().min(50).max(6000),
-  candidates: z
-    .array(
-      z.object({
-        kind: z.enum(["hypothesis", "constraint", "plan", "rejection"]),
-        subtype: z.string().nullable(),
-        title: z.string().min(3).max(200),
-        content: z.string().max(2000).nullable(),
-        rationale: z.string().max(2000).nullable(),
-        confidence: z.number().min(0).max(1),
-        relation_to_origin: z.enum([
-          "resolves",
-          "refines",
-          "contradicts",
-          "depends_on",
-        ]),
-        evidence_indexes: z.array(z.number().int().min(0)).max(8),
-      })
-    )
-    .max(5), // will be sliced to budget.maxCandidates after
-});
+// Built per-run from the resolved budget so the candidate cap and the
+// evidence-index range actually track ZENO_RESEARCH_MAX_CANDIDATES /
+// MAX_EVIDENCE — a hardcoded .max(5) silently capped the budget knob at 5.
+function makeJudgeSchema(maxCandidates: number, evidenceCount: number) {
+  return z.object({
+    brief: z.string().min(50).max(6000),
+    candidates: z
+      .array(
+        z.object({
+          kind: z.enum(["hypothesis", "constraint", "plan", "rejection"]),
+          subtype: z.string().nullable(),
+          title: z.string().min(3).max(200),
+          content: z.string().max(2000).nullable(),
+          rationale: z.string().max(2000).nullable(),
+          confidence: z.number().min(0).max(1),
+          relation_to_origin: z.enum([
+            "resolves",
+            "refines",
+            "contradicts",
+            "depends_on",
+          ]),
+          evidence_indexes: z
+            .array(z.number().int().min(0))
+            .max(Math.max(1, evidenceCount)),
+        })
+      )
+      .max(maxCandidates),
+  });
+}
 
-type JudgeCandidate = z.infer<typeof judgeSchema>["candidates"][number];
+type JudgeCandidate = z.infer<
+  ReturnType<typeof makeJudgeSchema>
+>["candidates"][number];
 
 async function judgePhase(
   originNode: {
@@ -391,9 +401,13 @@ async function judgePhase(
   verifiedRows: VerifiedRow[],
   budget: ReturnType<typeof resolveResearchBudget>,
   modelsUsed: ModelsUsedAccumulator
-): Promise<{ brief: string; candidates: JudgeCandidate[]; partial: boolean }> {
+): Promise<{ brief: string; candidates: JudgeCandidate[] }> {
   const modelId = selectModelForTask("research_synthesis");
   const model = getLanguageModel(modelId);
+  const judgeSchema = makeJudgeSchema(
+    budget.maxCandidates,
+    verifiedRows.length
+  );
 
   const evidenceList = verifiedRows
     .map(
@@ -434,13 +448,12 @@ async function judgePhase(
 
   addUsage(modelsUsed, modelId, result.usage);
 
-  const allCandidates = result.object.candidates;
-  const judgePartial = allCandidates.length > budget.maxCandidates;
-
+  // The schema now caps candidates at budget.maxCandidates, so there is no
+  // candidate-overflow "partial" to report here — partial reflects only the
+  // collect-phase budget ceilings, which is the honest meaning of the flag.
   return {
     brief: result.object.brief,
-    candidates: allCandidates.slice(0, budget.maxCandidates),
-    partial: judgePartial,
+    candidates: result.object.candidates,
   };
 }
 
@@ -565,9 +578,7 @@ export async function runResearchPipeline({
   // creating a run row or spending plan-phase tokens (the route maps this
   // to a 503).
   if (!resolveSearchProvider()) {
-    throw new ResearchToolUnavailableError(
-      "No web search provider is configured (need ANTHROPIC_API_KEY, OPENAI_API_KEY, or AI_GATEWAY_API_KEY)."
-    );
+    throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
   }
 
   const budget = resolveResearchBudget();
@@ -621,7 +632,7 @@ export async function runResearchPipeline({
       modelsUsed
     );
 
-    let partial = collectPartial;
+    const partial = collectPartial;
 
     // ── 5. Judge phase ────────────────────────────────────────────────────────
     if (verifiedRows.length === 0) {
@@ -662,11 +673,7 @@ export async function runResearchPipeline({
       };
     }
 
-    const {
-      brief,
-      candidates,
-      partial: judgePartial,
-    } = await judgePhase(
+    const { brief, candidates } = await judgePhase(
       {
         kind: node.kind,
         title: node.title,
@@ -677,7 +684,6 @@ export async function runResearchPipeline({
       budget,
       modelsUsed
     );
-    partial = partial || judgePartial;
 
     // ── 6. Land phase ─────────────────────────────────────────────────────────
     const { candidatesCreated, skippedDuplicates, candidatesFailed } =

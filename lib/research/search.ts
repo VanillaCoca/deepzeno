@@ -4,10 +4,17 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { gateway, generateText, type ToolSet } from "ai";
 
-import { resolveSearchProvider, type SearchProvider } from "./search-provider";
+import {
+  resolveSearchProvider,
+  SEARCH_PROVIDER_MISSING_MESSAGE,
+  type SearchProvider,
+} from "./search-provider";
 
 export type { SearchProvider } from "./search-provider";
-export { resolveSearchProvider } from "./search-provider";
+export {
+  resolveSearchProvider,
+  SEARCH_PROVIDER_MISSING_MESSAGE,
+} from "./search-provider";
 
 // ---------------------------------------------------------------------------
 // Error
@@ -58,9 +65,7 @@ export async function searchWeb(query: string): Promise<WebSearchOutcome> {
   const provider = resolveSearchProvider();
 
   if (!provider) {
-    throw new ResearchToolUnavailableError(
-      "No web search provider is configured (need ANTHROPIC_API_KEY, OPENAI_API_KEY, or AI_GATEWAY_API_KEY)."
-    );
+    throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
   }
 
   if (provider === "anthropic") {
