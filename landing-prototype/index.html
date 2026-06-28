@@ -217,6 +217,21 @@
   .nlab.dim{fill:var(--dim)}
   .ntag{font-family:var(--mono);font-size:9px;letter-spacing:.08em}
 
+  /* partner / programs strip */
+  .partners{border-top:1px solid var(--line-2)}
+  .partners .wrap{padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:18px}
+  .plabel{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .plogos{display:flex;align-items:center;gap:42px;flex-wrap:wrap;justify-content:center}
+  .plogo{display:inline-flex;align-items:center;justify-content:center;opacity:.85;transition:opacity .2s}
+  .plogo:hover{opacity:1}
+  .plogo .txt{color:var(--dim);font-weight:600;font-size:16px;letter-spacing:-.01em;white-space:nowrap}
+  .plogo img{width:auto;display:block}
+  .plogo.p-nvidia img{height:46px}
+  .plogo.p-aws img{height:40px}
+  .plogo.p-google img{height:30px}
+  .plogo.p-ms img{height:26px}
+  @media(max-width:620px){.plogos{gap:26px}.plogo.p-nvidia img{height:34px}.plogo.p-aws img{height:30px}.plogo.p-google img{height:22px}.plogo.p-ms img{height:19px}}
+
   /* reveal */
   .reveal{opacity:0;transform:translateY(16px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1)}
   .reveal.in{opacity:1;transform:none}
@@ -244,7 +259,7 @@
     <div class="wrap">
       <span class="eyebrow reveal">Insight-first AI</span>
       <h1 class="reveal">Make your research<br/>and planning more insightful.</h1>
-      <p class="sub reveal">Most AI tools answer your question and forget it. ZENO treats your project as a serious one — it does the digging, surfaces the assumptions worth a second look, and keeps every judgment you confirm, even as the goal shifts under you. So your research builds on itself, and your plans rest on what you've actually decided.</p>
+      <p class="sub reveal">Other AI tools answer one question and forget it. ZENO researches your whole project, remembers every decision you confirm, and keeps the thread as your goal shifts — so your thinking builds instead of starting over.</p>
       <div class="hero-cta reveal">
         <a class="btn btn-primary" href="#waitlist">Request early access <span class="arr">→</span></a>
         <a class="btn btn-ghost" href="#how">See how it works</a>
@@ -298,6 +313,19 @@
       </div>
     </div>
   </section>
+
+  <!-- PARTNER / PROGRAMS STRIP -->
+  <div class="partners reveal">
+    <div class="wrap">
+      <div class="plabel">Partners &amp; programs</div>
+      <div class="plogos">
+        <span class="plogo p-nvidia"><img src="assets/partners/nvidia-inception-white.svg" alt="NVIDIA Inception Program" /></span>
+        <span class="plogo p-aws"><img src="assets/partners/aws-white.png" alt="AWS Partner Network" /></span>
+        <span class="plogo p-ms"><img src="assets/partners/microsoft-white.png" alt="Microsoft for Startups" /></span>
+        <span class="plogo p-google"><img src="assets/partners/google-white.png" alt="Google for Startups" /></span>
+      </div>
+    </div>
+  </div>
 
   <!-- FOR strip -->
   <div class="forstrip reveal">
@@ -353,7 +381,7 @@
     <div class="wrap reveal">
       <div class="eyebrow" style="justify-content:center;margin-bottom:22px">The unit is the project</div>
       <p class="vq">The question is what you search.<br/>The project is what you keep.</p>
-      <p class="vs">A project catches a vague idea, follows it wherever it turns, researches each branch, and accumulates what you've confirmed — so the thread never breaks, no matter how far the goal moves.</p>
+      <p class="vs">It catches a vague idea, follows it wherever it turns, and keeps what you confirm — so the thread never breaks, however far the goal moves.</p>
       <div class="vcred">From the ZENO manifesto</div>
     </div>
   </section>
@@ -370,8 +398,7 @@
         <div class="ftext reveal">
           <div class="fnum">01</div>
           <h3>It does the research</h3>
-          <p>ZENO decomposes your project and chases the open questions to ground — breaking a fuzzy idea into topics and sub-questions, then investigating them for you instead of waiting for a perfectly-formed prompt.</p>
-          <div class="mech">mechanism · proactive diligence + kickoff decomposition</div>
+          <p>Bring a half-formed idea. ZENO breaks it into the real questions underneath and goes and researches them — no perfect prompt required.</p>
         </div>
         <div class="fvis reveal">
           <svg viewBox="0 0 460 280" aria-hidden="true">
@@ -401,8 +428,7 @@
         <div class="ftext reveal">
           <div class="fnum">02</div>
           <h3>It keeps what you confirm</h3>
-          <p>Findings move through a three-stage funnel — <em>Idea → Candidate → Truth</em> — and nothing becomes truth without your explicit confirmation. Every judgment you lock in carries into every later conversation, and into every AI agent you hand the project to.</p>
-          <div class="mech">mechanism · Truth Substrate · prefer to miss than to make up</div>
+          <p>Every finding waits as a candidate until you confirm it. What you confirm sticks — and follows you into every later session and every AI agent you work with.</p>
         </div>
         <div class="fvis reveal">
           <svg viewBox="0 0 460 280" aria-hidden="true">
@@ -425,8 +451,7 @@
         <div class="ftext reveal">
           <div class="fnum">03</div>
           <h3>You see how it connects</h3>
-          <p>Your judgments are laid out as a graph you can actually read — topics, findings, and open questions positioned by how they relate. Trace any branch back to the question that spawned it, even after the goal has turned. One place where details live: no modals, no nested panels.</p>
-          <div class="mech">mechanism · Truth Graph · "understand it at a glance"</div>
+          <p>Everything you've decided sits in one graph you can actually read. Trace any branch back to the question that started it — even after the goal has turned.</p>
         </div>
         <div class="fvis reveal">
           <svg viewBox="0 0 460 280" aria-hidden="true">
@@ -476,12 +501,12 @@
         <h2>Built around the project,<br/>not the chat.</h2>
       </div>
       <div class="bgrid">
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div><h4>A project, not a question</h4><p>Topics, findings, and open questions held as one living structure — not a fresh chat each time.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h4>Confirmed before it's truth</h4><p>Nothing enters project truth on its own. You promote a candidate; ZENO never auto-writes.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div><h4>A project, not a question</h4><p>Topics, findings, and open questions in one place — not a new chat every time.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h4>Confirmed before it's truth</h4><p>Nothing is saved as true until you confirm it. ZENO never writes truth on its own.</p></div>
         <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="9" r="2.4"/><circle cx="9" cy="18" r="2.4"/><path d="M8 7l8 1M8 8l1 8"/></svg></div><h4>A graph you can read</h4><p>See how every branch connects back to the question that spawned it — at a glance.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/></svg></div><h4>Context that inherits</h4><p>Future sessions arrive already knowing what you decided, ruled out, and why — no pasting.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></div><h4>Re-research on a schedule</h4><p>Standing checks, not one-time passes — ZENO flags when a confirmed assumption no longer holds.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="m8 16-4-4 4-4M16 8l4 4-4 4M14 5l-4 14"/></svg></div><h4>Feeds coding agents</h4><p>If the project ends in something to build, the same confirmed truth feeds Claude Code, Cursor, or Codex via MCP — downstream, not the point.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/></svg></div><h4>Context that inherits</h4><p>Every new session already knows what you decided and why. No pasting context.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></div><h4>Re-research on a schedule</h4><p>ZENO can re-check key assumptions on a schedule and flag when one stops holding.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="m8 16-4-4 4-4M16 8l4 4-4 4M14 5l-4 14"/></svg></div><h4>Feeds coding agents</h4><p>When it's time to build, the same confirmed truth feeds Claude Code, Cursor, or Codex via MCP.</p></div>
       </div>
     </div>
   </section>
@@ -495,7 +520,7 @@
         <p>It's a narrow tool on purpose. Knowing what it refuses to be is the fastest way to know if it's for you.</p>
       </div>
       <div class="notgrid">
-        <div class="notitem reveal"><span class="x">×</span><div><b>Not a single-question research tool.</b> Perplexity, Deep Research, and plain chat answer one question and forget the rest. ZENO holds the whole project.</div></div>
+        <div class="notitem reveal"><span class="x">×</span><div><b>Not a single-question research tool.</b> Perplexity and plain chat answer one question and drop the rest. ZENO holds the whole project.</div></div>
         <div class="notitem reveal"><span class="x">×</span><div><b>Not a chat-history wrapper</b> with "memory" branding. Truth is what you explicitly confirm — not whatever's left in the window.</div></div>
         <div class="notitem reveal"><span class="x">×</span><div><b>Not a task manager.</b> ZENO helps you think a decision through; it doesn't run your to-dos or execute anything.</div></div>
         <div class="notitem reveal"><span class="x">×</span><div><b>Not a coding-agent competitor.</b> It can feed them context, but that's a downstream path — not why ZENO exists.</div></div>
