@@ -78,9 +78,11 @@ About the origin of user's request:
 export const systemPrompt = ({
   requestHints,
   languageName,
+  modelName,
 }: {
   requestHints: RequestHints;
   languageName?: string;
+  modelName?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   // The user picks a UI language; reply in it by default, but always defer to
@@ -89,7 +91,18 @@ export const systemPrompt = ({
     ? `\n\nRespond in ${languageName} by default. If the user writes in or explicitly asks for another language, follow the user's lead.`
     : "";
 
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}${languagePrompt}`;
+  // Model transparency: ZENO is the product identity, but if the user asks which
+  // underlying model powers it, answer honestly instead of deflecting. Strip any
+  // trailing provider suffix (e.g. "(OpenRouter)") so the disclosed name is just
+  // the model — "Claude Opus 4.8", not "Claude Opus 4.8 (OpenRouter)".
+  const cleanModelName = modelName
+    ? (modelName.replace(/\s*\([^)]*\)\s*$/, "").trim() || modelName)
+    : undefined;
+  const modelIdentityPrompt = cleanModelName
+    ? `\n\nUnderlying model: you are currently running on "${cleanModelName}". If the user asks which model or engine powers you, answer plainly — you are ZENO, currently running on ${cleanModelName}. Do not deny or dodge the question, and do not volunteer this unprompted.`
+    : "";
+
+  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}${languagePrompt}${modelIdentityPrompt}`;
 };
 
 export const titlePrompt = `Generate a short chat title (2-5 words) summarizing the user's message.

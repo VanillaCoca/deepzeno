@@ -191,6 +191,55 @@ const modelCatalog: ChatModelDefinition[] = [
     ],
     staticModelId: "openai.gpt-5.4",
   },
+  // --- OpenRouter (OpenAI-compatible): temporary stand-in for the Bedrock
+  //     flagships while AWS model access is pending. Gated only on
+  //     OPENROUTER_API_KEY, so they light up the moment the key is present and
+  //     vanish when it's removed — no BEDROCK_FLAGSHIPS_ENABLED involved. The
+  //     model slugs are env-overridable; confirm the exact slugs on
+  //     https://openrouter.ai/models . ---
+  {
+    id: "openrouter:claude-opus-4-8",
+    name: "Claude Opus 4.8 (OpenRouter)",
+    provider: "anthropic",
+    providerLabel: "OpenRouter",
+    description:
+      "Most capable Claude model via OpenRouter; stand-in until Bedrock access lands.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: true,
+    },
+    providerType: "openai-compatible",
+    tier: "frontier",
+    contextWindowTokens: 200_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
+    reasoningEffort: "medium",
+    envKeys: ["OPENROUTER_API_KEY"],
+    resolveModelId: (env) =>
+      env.OPENROUTER_OPUS_MODEL ?? "anthropic/claude-opus-4.8",
+  },
+  {
+    id: "openrouter:gpt-5.5",
+    name: "GPT-5.5 (OpenRouter)",
+    provider: "openai",
+    providerLabel: "OpenRouter",
+    description:
+      "OpenAI flagship via OpenRouter; stand-in until Bedrock access lands.",
+    capabilities: {
+      tools: true,
+      vision: true,
+      reasoning: true,
+    },
+    providerType: "openai-compatible",
+    tier: "frontier",
+    contextWindowTokens: 400_000,
+    inputCostPerMTok: null,
+    outputCostPerMTok: null,
+    reasoningEffort: "medium",
+    envKeys: ["OPENROUTER_API_KEY"],
+    resolveModelId: (env) => env.OPENROUTER_GPT_MODEL ?? "openai/gpt-5.5",
+  },
   {
     id: "dashscope:default",
     name: "DashScope Compatible",

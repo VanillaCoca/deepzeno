@@ -51,6 +51,19 @@ const deepseekProvider = process.env.DEEPSEEK_API_KEY
     })
   : null;
 
+// OpenRouter (OpenAI-compatible) — temporary stand-in for the Bedrock flagships
+// (Opus 4.8, GPT-5.5) while AWS model access is pending. Gated only on
+// OPENROUTER_API_KEY: remove that key to drop these from the active set once
+// Bedrock is enabled. No code change needed to switch back.
+const openrouterProvider = process.env.OPENROUTER_API_KEY
+  ? createOpenAICompatible({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL:
+        process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+      name: "openrouter",
+    })
+  : null;
+
 export const myProvider = isTestEnvironment
   ? (() => {
       const { chatModel, titleModel } = require("./models.mock");
@@ -110,6 +123,14 @@ export function getLanguageModel(modelId: string) {
         }
 
         return bedrockMantleProvider.chatModel(model.providerModelId);
+      }
+
+      if (model.id.startsWith("openrouter:")) {
+        if (!openrouterProvider) {
+          throw new Error("OpenRouter is not configured.");
+        }
+
+        return openrouterProvider.chatModel(model.providerModelId);
       }
 
       throw new Error("Unsupported OpenAI-compatible provider.");

@@ -357,6 +357,7 @@ export async function POST(request: Request) {
       systemPrompt({
         requestHints,
         languageName: locale ? localePromptName[locale] : undefined,
+        modelName: resolvedModel.name,
       }),
       shouldInjectWorkspaceContext
         ? buildDecisionContextBlock(decisionContext)

@@ -757,7 +757,7 @@ function ComposerPlusMenu({
 
   const { data: modelsResponse } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
-    (url: string) => fetch(url).then((r) => r.json()),
+    (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json()),
     { revalidateOnFocus: false, dedupingInterval: 3_600_000 }
   );
 
@@ -821,7 +821,7 @@ function PureModelSelectorCompact({
   const selectingModelRef = useRef<string | null>(null);
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
-    (url: string) => fetch(url).then((r) => r.json()),
+    (url: string) => fetch(url, { cache: "no-store" }).then((r) => r.json()),
     { revalidateOnFocus: false, dedupingInterval: 3_600_000 }
   );
 
