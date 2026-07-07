@@ -1,6 +1,7 @@
 import { PlusIcon } from "lucide-react";
 import { Suspense } from "react";
-import { requireAuth } from "@/app/(auth)/auth";
+import { auth, requireAuth } from "@/app/(auth)/auth";
+import { AccountMenu } from "@/components/account-menu";
 import { DeferredCreateProject } from "@/components/home/deferred-create-project";
 import { HomeGreeting } from "@/components/home/home-greeting";
 import { LocaleSwitcher } from "@/components/i18n/locale-switcher";
@@ -58,7 +59,7 @@ function nameFromEmail(email: string | null | undefined) {
 }
 
 async function HomepageShell({ children }: { children: React.ReactNode }) {
-  const t = await getHomeTranslator();
+  const [t, session] = await Promise.all([getHomeTranslator(), auth()]);
 
   return (
     <main className="min-h-dvh bg-background">
@@ -73,6 +74,7 @@ async function HomepageShell({ children }: { children: React.ReactNode }) {
                 {t("home.newProject")}
               </Button>
             </DeferredCreateProject>
+            <AccountMenu userEmail={session?.user.email ?? null} />
           </div>
         </header>
 
