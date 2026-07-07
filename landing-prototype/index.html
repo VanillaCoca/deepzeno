@@ -320,7 +320,7 @@
         <svg class="ic-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.6v2.3M12 19.1v2.3M2.6 12h2.3M19.1 12h2.3M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>
         <svg class="ic-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.8A8.2 8.2 0 1 1 9.2 3.5a6.4 6.4 0 0 0 11.3 11.3z"/></svg>
       </button>
-      <a class="btn btn-primary" href="#waitlist">Request access</a>
+      <a class="btn btn-primary" href="https://app.deepzeno.ai">Get started</a>
     </nav>
   </div>
 </header>
@@ -334,10 +334,10 @@
       <h1 class="reveal">Make your research<br/>and planning more insightful.</h1>
       <p class="sub reveal">Other AI tools answer one question and forget it. ZENO researches your whole project, remembers every decision you confirm, and keeps the thread as your goal shifts — so your thinking builds instead of starting over.</p>
       <div class="hero-cta reveal">
-        <a class="btn btn-primary" href="#waitlist">Request early access <span class="arr">→</span></a>
+        <a class="btn btn-primary" href="https://app.deepzeno.ai">Start using ZENO <span class="arr">→</span></a>
         <a class="btn btn-ghost" href="#how">See how it works</a>
       </div>
-      <div class="micro reveal">V1 in development · invite-only</div>
+      <div class="micro reveal">Now live · start in seconds</div>
 
       <div class="window reveal">
         <div class="win-bar">
@@ -614,7 +614,7 @@
         <details><summary>Does it decide things for me? <span class="plus"></span></summary><div class="faq-a">No. ZENO researches, structures, and surfaces the assumptions worth a second look — you decide what's true. Nothing becomes project truth without your explicit confirmation. Its autonomy is read-only.</div></details>
         <details><summary>What happens when my goal changes? <span class="plus"></span></summary><div class="faq-a">That's the point. The project catches a vague idea and follows it wherever it turns. Earlier branches stay connected, and what you've confirmed keeps accumulating — so you never re-derive it and the thread never breaks.</div></details>
         <details><summary>I'm a developer — can it feed my coding agents? <span class="plus"></span></summary><div class="faq-a">Yes. The same confirmed project truth is exposed to Claude Code, Cursor, or Codex via MCP, candidate-first: agents propose, you confirm. But that's a secondary, downstream path — ZENO is a research workspace first.</div></details>
-        <details><summary>Is it available now? <span class="plus"></span></summary><div class="faq-a">V1 is in active development and invite-only. Request early access below and we'll reach out as invites open.</div></details>
+        <details><summary>Is it available now? <span class="plus"></span></summary><div class="faq-a">Yes — ZENO is live. Create a project and start in a few seconds; it's free to try.</div></details>
       </div>
     </div>
   </section>
@@ -625,14 +625,13 @@
       <div class="final-card reveal">
         <canvas id="cnet2"></canvas>
         <div class="inner">
-          <span class="eyebrow" style="justify-content:center">Early access</span>
+          <span class="eyebrow" style="justify-content:center">Get started</span>
           <h2 style="margin-top:18px">Make your next big decision<br/>an insightful one.</h2>
-          <p>Join the waitlist. Invites open as V1 stabilizes.</p>
-          <form class="wl" id="wl">
-            <input type="email" name="email" placeholder="you@email.com" aria-label="Email" required />
-            <button class="btn btn-primary" type="submit">Request early access</button>
-          </form>
-          <div class="wl-ok" id="wl-ok">✓ You're on the list. We'll reach out as invites open.</div>
+          <p>Start your first project in seconds. It's free to try.</p>
+          <div class="hero-cta" style="justify-content:center;margin-top:32px">
+            <a class="btn btn-primary" href="https://app.deepzeno.ai">Start using ZENO <span class="arr">→</span></a>
+            <a class="btn btn-ghost" href="#how">See how it works</a>
+          </div>
         </div>
       </div>
     </div>
@@ -736,8 +735,8 @@
   // (create a free form at https://formspree.io → it gives you https://formspree.io/f/abcdwxyz).
   const FORMSPREE_ENDPOINT = "https://formspree.io/f/xykqwqvk";
   const f=document.getElementById('wl'), ok=document.getElementById('wl-ok');
-  const btn=f.querySelector('button');
-  f.addEventListener('submit', async (ev)=>{
+  const btn=f&&f.querySelector('button');
+  if(f) f.addEventListener('submit', async (ev)=>{
     ev.preventDefault();
     const email=f.querySelector('input[type=email]').value.trim();
     if(!email) return;
