@@ -42,9 +42,9 @@ const en: Dictionary = {
   "truth.emptyBody":
     "Decisions and facts you confirm in the conversation appear here, connected as a map.",
   "truth.emptyCta": "Start a conversation",
-  "greeting.title": "What can I help with?",
+  "greeting.title": "What are you thinking through?",
   "greeting.body":
-    "Talk it through — ZENO turns your conversation into the decisions and facts in your truth graph.",
+    "Think out loud. What you settle, ZENO distills into truths — what stays open, it keeps waiting on you.",
 };
 
 const zh: Dictionary = {
@@ -64,8 +64,9 @@ const zh: Dictionary = {
   "truth.emptyBody":
     "你在对话中确认的决策与事实会出现在这里，并按彼此的关系连成一张图。",
   "truth.emptyCta": "开始对话",
-  "greeting.title": "有什么可以帮你？",
-  "greeting.body": "尽管说 —— ZENO 会把你的对话整理成真相图谱里的决策与事实。",
+  "greeting.title": "在想什么？",
+  "greeting.body":
+    "想到什么说什么。聊定的，ZENO 沉淀成真相；没聊定的，替你记着、等你回来。",
 };
 
 const fr: Dictionary = {
@@ -85,9 +86,9 @@ const fr: Dictionary = {
   "truth.emptyBody":
     "Les décisions et faits que vous confirmez dans la conversation apparaissent ici, reliés sous forme de carte.",
   "truth.emptyCta": "Démarrer une conversation",
-  "greeting.title": "Comment puis-je vous aider ?",
+  "greeting.title": "Que cherchez-vous à démêler ?",
   "greeting.body":
-    "Expliquez librement — ZENO transforme votre conversation en décisions et faits dans votre graphe de vérité.",
+    "Pensez à voix haute. Ce qui est tranché devient vérité ; ce qui reste ouvert vous attend.",
 };
 
 export const dictionaries: Record<Locale, Dictionary> = { en, zh, fr };

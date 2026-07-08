@@ -17,16 +17,16 @@ export function Preview() {
         <div className="flex size-5 items-center justify-center rounded bg-muted/60 ring-1 ring-border/50">
           <SparklesIcon size={10} />
         </div>
-        <span className="text-[13px] text-muted-foreground">Chatbot</span>
+        <span className="text-[13px] text-muted-foreground">ZENO</span>
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-8">
         <div className="text-center">
           <h2 className="text-xl font-semibold tracking-tight">
-            What can I help with?
+            What are you thinking through?
           </h2>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Ask a question, clarify choices, or explore ideas.
+            Think out loud — what you settle becomes truth.
           </p>
         </div>
       </div>

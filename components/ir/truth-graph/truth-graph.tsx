@@ -6,8 +6,6 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -28,6 +26,7 @@ import {
   type TruthGraphModel,
   type TruthGraphTopic,
 } from "./data";
+import { SemanticLanes } from "./semantic-lanes";
 
 type ElkChild = {
   id: string;
@@ -67,11 +66,6 @@ type NodeBox = {
   y: number;
   width: number;
   height: number;
-};
-
-type LayoutState = {
-  overview: ElkGraph | null;
-  chain: ElkGraph | null;
 };
 
 export type TruthGraphMode = "truth" | "all";
@@ -125,29 +119,6 @@ function measureNode(
 const GRAPH_MIN_NODE_COUNT = 3;
 const CHAIN_EDGE_LABEL = "needs";
 
-// Overview groups nodes by Topic and draws no dependency lines by default
-// (rules §1.1). With no edges, a `layered` root would drop every topic into a
-// single layer and spread them along one horizontal row — an unreadable wide
-// strip. `rectpacking` instead packs the topic containers into a stable grid.
-const OVERVIEW_OPTIONS = {
-  "elk.algorithm": "rectpacking",
-  "elk.aspectRatio": "1.5",
-  "elk.spacing.nodeNode": "18",
-  "elk.padding": "[top=8,left=8,bottom=8,right=8]",
-};
-
-// Inside a topic there are no edges either, so `RIGHT` keeps every node in one
-// layer stacked vertically (a tidy single column) rather than a horizontal row.
-// considerModelOrder preserves the deterministic creation order from data.ts.
-const TOPIC_OPTIONS = {
-  "elk.algorithm": "layered",
-  "elk.direction": "RIGHT",
-  "elk.spacing.nodeNode": "10",
-  "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-  // No topic label is drawn anymore, so no extra top padding is needed.
-  "elk.padding": "[top=8,left=8,bottom=8,right=8]",
-};
-
 // The Chain now lives in the wide, short bottom card, so it flows left → right
 // (foundational premises marked ▷ on the left, the selected node on the right).
 // A horizontal layout fits a landscape card far better than a vertical one.
@@ -159,27 +130,6 @@ const CHAIN_OPTIONS = {
   "elk.layered.spacing.nodeNodeBetweenLayers": "54",
   "elk.padding": "[top=20,left=20,bottom=20,right=20]",
 };
-
-function createOverviewGraph(model: TruthGraphModel): ElkGraph {
-  return {
-    id: "truth-graph-overview-root",
-    layoutOptions: OVERVIEW_OPTIONS,
-    children: model.topicGroups.map((group) => ({
-      id: topicLayoutId(group.topic.id),
-      layoutOptions: TOPIC_OPTIONS,
-      // Sub-nodes are not shown in the overview (they live in the detail panel
-      // + chain), so we lay out roots only.
-      children: group.nodes
-        .filter((node) => !node.parentId)
-        .map((node) => ({
-          id: node.id,
-          width: OVERVIEW_DIMS.width,
-          height: measureNode(node, OVERVIEW_DIMS).height,
-        })),
-    })),
-    edges: [],
-  };
-}
 
 function createChainGraph(
   model: TruthGraphModel,
@@ -207,10 +157,6 @@ function createChainGraph(
       targets: [edge.childId],
     })),
   };
-}
-
-function topicLayoutId(topicId: string | null) {
-  return `topic:${topicId ?? "unassigned"}`;
 }
 
 function absoluteBoxes(root: ElkChild) {
@@ -269,274 +215,10 @@ function useFitScale(contentWidth: number, contentHeight: number) {
   return { ref, scale };
 }
 
-// Pan + zoom for the overview canvas: drag empty space to pan, wheel / ⌘-wheel
-// (or the on-screen controls) to zoom toward the cursor, with a Fit control.
-const OVERVIEW_ZOOM = { min: 0.25, max: 2.5, step: 1.18 };
-
-type ViewTransform = { x: number; y: number; scale: number };
-
-function clampScale(value: number) {
-  return Math.min(OVERVIEW_ZOOM.max, Math.max(OVERVIEW_ZOOM.min, value));
-}
-
-function useOverviewPanZoom(
-  contentWidth: number,
-  contentHeight: number,
-  onBackgroundClick: () => void
-) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [transform, setTransform] = useState<ViewTransform>({
-    x: 0,
-    y: 0,
-    scale: 1,
-  });
-  const drag = useRef<{
-    ox: number;
-    oy: number;
-    px: number;
-    py: number;
-    moved: boolean;
-  } | null>(null);
-
-  // Mirror the live transform into a ref so an eased animation can read the
-  // current value at start time and hand off smoothly from wherever it is.
-  const transformRef = useRef(transform);
-  useEffect(() => {
-    transformRef.current = transform;
-  }, [transform]);
-
-  const animRef = useRef<number | null>(null);
-  const cancelAnim = useCallback(() => {
-    if (animRef.current !== null) {
-      cancelAnimationFrame(animRef.current);
-      animRef.current = null;
-    }
-  }, []);
-
-  // Tween the viewport to a target transform (used by fit + the zoom buttons),
-  // so the canvas glides instead of snapping. Drag-pan and wheel-zoom stay
-  // instant — they should track the input 1:1.
-  const animateTo = useCallback(
-    (target: ViewTransform) => {
-      cancelAnim();
-      const start = transformRef.current;
-      const duration = 260;
-      const ease = (t: number) => 1 - (1 - t) ** 3;
-      let startTime: number | null = null;
-      const step = (now: number) => {
-        if (startTime === null) {
-          startTime = now;
-        }
-        const p = Math.min(1, (now - startTime) / duration);
-        const e = ease(p);
-        setTransform({
-          scale: start.scale + (target.scale - start.scale) * e,
-          x: start.x + (target.x - start.x) * e,
-          y: start.y + (target.y - start.y) * e,
-        });
-        animRef.current = p < 1 ? requestAnimationFrame(step) : null;
-      };
-      animRef.current = requestAnimationFrame(step);
-    },
-    [cancelAnim]
-  );
-
-  useEffect(() => cancelAnim, [cancelAnim]);
-
-  // Scale + center the whole graph so it fits the viewport (capped at 1x).
-  const fitToView = useCallback(() => {
-    const element = containerRef.current;
-    if (!(element && contentWidth && contentHeight)) {
-      return;
-    }
-    const pad = 28;
-    const scale = clampScale(
-      Math.min(
-        1,
-        (element.clientWidth - pad * 2) / contentWidth,
-        (element.clientHeight - pad * 2) / contentHeight
-      )
-    );
-    animateTo({
-      scale,
-      x: (element.clientWidth - contentWidth * scale) / 2,
-      y: (element.clientHeight - contentHeight * scale) / 2,
-    });
-  }, [contentWidth, contentHeight, animateTo]);
-
-  // Re-fit whenever the content size changes (first layout, Truth/All toggle).
-  useEffect(() => {
-    fitToView();
-  }, [fitToView]);
-
-  const zoomAt = useCallback(
-    (factor: number, px: number, py: number) => {
-      cancelAnim();
-      setTransform((current) => {
-        const scale = clampScale(current.scale * factor);
-        const ratio = scale / current.scale;
-        return {
-          scale,
-          x: px - (px - current.x) * ratio,
-          y: py - (py - current.y) * ratio,
-        };
-      });
-    },
-    [cancelAnim]
-  );
-
-  // Native non-passive wheel listener so we can preventDefault the page scroll.
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const rect = element.getBoundingClientRect();
-      zoomAt(
-        event.deltaY < 0 ? OVERVIEW_ZOOM.step : 1 / OVERVIEW_ZOOM.step,
-        event.clientX - rect.left,
-        event.clientY - rect.top
-      );
-    };
-    element.addEventListener("wheel", handleWheel, { passive: false });
-    return () => element.removeEventListener("wheel", handleWheel);
-  }, [zoomAt]);
-
-  const onPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
-    if (event.button !== 0) {
-      return;
-    }
-    // A fresh drag overrides any in-flight fit/zoom animation.
-    cancelAnim();
-    drag.current = {
-      ox: transform.x,
-      oy: transform.y,
-      px: event.clientX,
-      py: event.clientY,
-      moved: false,
-    };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const onPointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
-    const state = drag.current;
-    if (!state) {
-      return;
-    }
-    const dx = event.clientX - state.px;
-    const dy = event.clientY - state.py;
-    if (!state.moved && Math.hypot(dx, dy) > 3) {
-      state.moved = true;
-    }
-    if (state.moved) {
-      setTransform((current) => ({
-        ...current,
-        x: state.ox + dx,
-        y: state.oy + dy,
-      }));
-    }
-  };
-
-  const onPointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
-    const state = drag.current;
-    drag.current = null;
-    // A press with no drag is a plain click on empty canvas → deselect.
-    if (state && !state.moved) {
-      onBackgroundClick();
-    }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const zoomByButton = useCallback(
-    (factor: number) => {
-      const element = containerRef.current;
-      if (!element) {
-        return;
-      }
-      const px = element.clientWidth / 2;
-      const py = element.clientHeight / 2;
-      const current = transformRef.current;
-      const scale = clampScale(current.scale * factor);
-      const ratio = scale / current.scale;
-      animateTo({
-        scale,
-        x: px - (px - current.x) * ratio,
-        y: py - (py - current.y) * ratio,
-      });
-    },
-    [animateTo]
-  );
-
-  // Click-to-focus: glide a node's box to the viewport center. Only zooms in
-  // when we're far out (scale < 0.6), so it never yanks the zoom around.
-  const focusBox = useCallback(
-    (box: { x: number; y: number; width: number; height: number }) => {
-      const element = containerRef.current;
-      if (!element) {
-        return;
-      }
-      const current = transformRef.current;
-      const scale = clampScale(current.scale < 0.6 ? 0.9 : current.scale);
-      const cx = box.x + box.width / 2;
-      const cy = box.y + box.height / 2;
-      animateTo({
-        scale,
-        x: element.clientWidth / 2 - cx * scale,
-        y: element.clientHeight / 2 - cy * scale,
-      });
-    },
-    [animateTo]
-  );
-
-  return {
-    containerRef,
-    transform,
-    panHandlers: { onPointerDown, onPointerMove, onPointerUp },
-    fit: fitToView,
-    focusBox,
-    zoomIn: () => zoomByButton(OVERVIEW_ZOOM.step),
-    zoomOut: () => zoomByButton(1 / OVERVIEW_ZOOM.step),
-  };
-}
-
 // Orthogonal connector that always stops a gap OUTSIDE the target node and
 // enters from whichever side faces the source, so the line never crosses the
 // node body / text (overview nodes can sit in any relative position).
 const EDGE_GAP = 7;
-
-function elbowPath(from: NodeBox, to: NodeBox) {
-  const fromCx = from.x + from.width / 2;
-  const fromCy = from.y + from.height / 2;
-  const toCx = to.x + to.width / 2;
-  const toCy = to.y + to.height / 2;
-
-  // Target clearly below the source → connect bottom → top.
-  if (to.y >= from.y + from.height) {
-    const y1 = from.y + from.height;
-    const y2 = to.y - EDGE_GAP;
-    const midY = y1 + Math.max(14, (y2 - y1) / 2);
-    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
-  }
-
-  // Target clearly above the source → connect top → bottom.
-  if (to.y + to.height <= from.y) {
-    const y1 = from.y;
-    const y2 = to.y + to.height + EDGE_GAP;
-    const midY = y1 + Math.min(-14, (y2 - y1) / 2);
-    return `M${fromCx} ${y1} L${fromCx} ${midY} L${toCx} ${midY} L${toCx} ${y2}`;
-  }
-
-  // Otherwise they overlap vertically (side by side) → connect side → side.
-  const goRight = toCx >= fromCx;
-  const x1 = goRight ? from.x + from.width : from.x;
-  const x2 = goRight ? to.x - EDGE_GAP : to.x + to.width + EDGE_GAP;
-  const midX = (x1 + x2) / 2;
-  return `M${x1} ${fromCy} L${midX} ${fromCy} L${midX} ${toCy} L${x2} ${toCy}`;
-}
 
 function chainEdgePath(edge: ElkEdge) {
   const section = edge.sections?.[0];
@@ -882,26 +564,6 @@ export function TruthGraph({
       ? selectedNodeId
       : null;
 
-  // Hovering a node (only when nothing is selected) previews its connections:
-  // the node + its direct neighbors stay bright, the rest fade. Reuses the same
-  // opacity-dimming as selection focus, so it costs almost nothing.
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const hoverActive = Boolean(hoveredId) && !activeSelectedNodeId;
-  const hoverNeighborIds = useMemo(() => {
-    const set = new Set<string>();
-    if (!hoveredId) {
-      return set;
-    }
-    for (const edge of edges) {
-      if (edge.fromNode === hoveredId) {
-        set.add(edge.toNode);
-      }
-      if (edge.toNode === hoveredId) {
-        set.add(edge.fromNode);
-      }
-    }
-    return set;
-  }, [hoveredId, edges]);
   const chainNodeIds = useMemo(() => {
     const upstream = getUpstreamNodeIds(model, activeSelectedNodeId);
     if (!activeSelectedNodeId) {
@@ -932,17 +594,18 @@ export function TruthGraph({
     () => new Set(getChainRootIds(model, chainNodeIds)),
     [chainNodeIds, model]
   );
-  const [layout, setLayout] = useState<LayoutState>({
-    overview: null,
-    chain: null,
-  });
+  // Only the Chain still needs ELK: the overview is now the DOM-based semantic
+  // lanes (amendment №1 §2), where position is computed by document flow, not
+  // by a layout engine.
+  const [chainLayout, setChainLayout] = useState<ElkGraph | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function runLayout() {
-      if (nodes.length === 0) {
-        setLayout({ overview: null, chain: null });
+      const chainGraph = createChainGraph(model, chainNodeIds);
+      if (!chainGraph) {
+        setChainLayout(null);
         return;
       }
 
@@ -950,60 +613,30 @@ export function TruthGraph({
         import("elkjs/lib/elk.bundled.js"),
       ]);
       const elk = new ELK();
-      const overviewGraph = createOverviewGraph(model);
-      const chainGraph = createChainGraph(model, chainNodeIds);
-      const [overview, chain] = await Promise.all([
-        elk.layout(overviewGraph),
-        chainGraph ? elk.layout(chainGraph) : Promise.resolve(null),
-      ]);
+      const chain = await elk.layout(chainGraph);
 
       if (!cancelled) {
-        setLayout({
-          overview: overview as ElkGraph,
-          chain: chain as ElkGraph | null,
-        });
+        setChainLayout(chain as ElkGraph);
       }
     }
 
     runLayout().catch((error) => {
-      console.error("Failed to layout truth graph", error);
+      console.error("Failed to layout truth graph chain", error);
       if (!cancelled) {
-        setLayout({ overview: null, chain: null });
+        setChainLayout(null);
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [chainNodeIds, model, nodes.length]);
+  }, [chainNodeIds, model]);
 
-  // Content sizes feed the SVG viewBoxes, the chain fit-scale, and the overview
-  // pan/zoom. These hooks run unconditionally (Rules of Hooks) — before the
-  // early returns below.
-  const chainWidth = Math.max(1, layout.chain?.width ?? 300);
-  const chainHeight = Math.max(1, layout.chain?.height ?? 260);
+  // Chain sizes feed the SVG viewBox + fit-scale. Hooks run unconditionally
+  // (Rules of Hooks) — before the early returns below.
+  const chainWidth = Math.max(1, chainLayout?.width ?? 300);
+  const chainHeight = Math.max(1, chainLayout?.height ?? 260);
   const chainFit = useFitScale(chainWidth, chainHeight);
-  const overviewWidth = Math.max(1, layout.overview?.width ?? 420);
-  const overviewHeight = Math.max(1, layout.overview?.height ?? 320);
-  const overviewPanZoom = useOverviewPanZoom(
-    overviewWidth,
-    overviewHeight,
-    useCallback(() => onSelect(null), [onSelect])
-  );
-
-  // Click-to-focus: when a node becomes selected, glide the canvas so it sits
-  // centered (the eased tween lives in the pan/zoom hook). Deselecting leaves
-  // the view where it is.
-  const { focusBox } = overviewPanZoom;
-  useEffect(() => {
-    if (!(activeSelectedNodeId && layout.overview)) {
-      return;
-    }
-    const box = absoluteBoxes(layout.overview).get(activeSelectedNodeId);
-    if (box) {
-      focusBox(box);
-    }
-  }, [activeSelectedNodeId, layout.overview, focusBox]);
 
   if (nodes.length === 0) {
     // Empty state — new users land here first, so explain what this canvas is
@@ -1045,13 +678,9 @@ export function TruthGraph({
     );
   }
 
-  const overviewBoxes = layout.overview
-    ? absoluteBoxes(layout.overview)
+  const chainBoxes = chainLayout
+    ? absoluteBoxes(chainLayout)
     : new Map<string, NodeBox>();
-  const chainBoxes = layout.chain
-    ? absoluteBoxes(layout.chain)
-    : new Map<string, NodeBox>();
-  const selectedChainEdges = getEdgesWithinNodeSet(model, chainNodeIds);
 
   return (
     // The overview is the base canvas. The Chain and Detail panels float ABOVE
@@ -1114,166 +743,34 @@ export function TruthGraph({
             {mode === "all" ? t("graph.nodes") : t("graph.truths")}
           </span>
         </div>
-        {mode === "all" ? (
-          <div className="flex items-center gap-3 px-3 pb-1.5 text-[10px] text-[var(--z-text-3)]">
-            {[
-              {
-                color: "var(--z-confirmed)",
-                key: "truth",
-                label: t("graph.truth"),
-              },
-              {
-                color: "var(--z-candidate)",
-                key: "candidate",
-                label: t("graph.candidate"),
-              },
-              { color: "var(--z-text-3)", key: "idea", label: t("graph.idea") },
-            ].map((item) => (
-              <span className="flex items-center gap-1" key={item.key}>
-                <span
-                  className="size-2 rounded-[2px]"
-                  style={{ backgroundColor: item.color }}
-                />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {/* Pan + zoom canvas: the SVG fills the box; a transparent surface rect
-            captures drag-to-pan and click-to-deselect; the content lives inside a
-            transformed <g>. Node <g>s sit above the surface, so node clicks select
-            and never start a pan. */}
+        {/* Semantic-lanes overview (amendment №1): position carries structure,
+            density follows lifecycle, and cards self-label — so the legend and
+            the pan/zoom chrome are gone. When a node is selected the floating
+            Chain/Detail cards overlay bottom/right; padding keeps lanes
+            reachable underneath. */}
         <div
-          className="relative min-h-0 flex-1 overflow-hidden"
-          ref={overviewPanZoom.containerRef}
-          style={{ touchAction: "none" }}
+          className="relative min-h-0 flex-1 overflow-y-auto"
+          style={{
+            paddingBottom: activeSelectedNodeId
+              ? "calc(var(--z-chain-h) + var(--z-card-inset) * 2)"
+              : undefined,
+            paddingRight: activeSelectedNodeId
+              ? "calc(var(--z-detail-w) + var(--z-card-inset) * 2)"
+              : undefined,
+          }}
         >
-          <svg
-            aria-label={t("graph.overviewAria")}
-            className="h-full w-full select-none"
-            role="img"
-          >
-            <defs>
-              <marker
-                id="z-truth-overview-arrow"
-                markerHeight="7"
-                markerWidth="7"
-                orient="auto-start-reverse"
-                refX="8"
-                refY="5"
-                viewBox="0 0 10 10"
-              >
-                <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
-              </marker>
-            </defs>
-            {/* drag-to-pan / click-to-deselect surface */}
-            <rect
-              className="cursor-grab active:cursor-grabbing"
-              fill="transparent"
-              height="100%"
-              onPointerDown={overviewPanZoom.panHandlers.onPointerDown}
-              onPointerMove={overviewPanZoom.panHandlers.onPointerMove}
-              onPointerUp={overviewPanZoom.panHandlers.onPointerUp}
-              width="100%"
-              x={0}
-              y={0}
-            />
-            <g
-              transform={`translate(${overviewPanZoom.transform.x} ${overviewPanZoom.transform.y}) scale(${overviewPanZoom.transform.scale})`}
-            >
-              {/* Topic container boxes intentionally NOT drawn: the overview
-                  always shows a single topic at a time (the one selected in the
-                  sidebar), so a labeled box around every node only repeated the
-                  sidebar selection and added a redundant second background. The
-                  IR chips sit directly on the canvas; relationships are shown by
-                  the chain + overview edges when a node is selected. */}
-              {activeSelectedNodeId
-                ? selectedChainEdges.map((edge) => {
-                    const parentBox = overviewBoxes.get(edge.parentId);
-                    const childBox = overviewBoxes.get(edge.childId);
-
-                    if (!(parentBox && childBox)) {
-                      return null;
-                    }
-
-                    return (
-                      <path
-                        d={elbowPath(parentBox, childBox)}
-                        fill="none"
-                        key={edge.id}
-                        markerEnd="url(#z-truth-overview-arrow)"
-                        opacity="var(--z-focus-related)"
-                        stroke="var(--z-confirmed)"
-                        strokeLinejoin="round"
-                        strokeWidth="var(--z-line-w-strong)"
-                      />
-                    );
-                  })
-                : null}
-              {nodes.map((node) => {
-                const box = overviewBoxes.get(node.id);
-
-                if (!box) {
-                  return null;
-                }
-
-                const isSelected = activeSelectedNodeId === node.id;
-                const isOnChain = chainNodeIds.has(node.id);
-                const dimmed = activeSelectedNodeId
-                  ? !(isOnChain || isSelected)
-                  : hoverActive
-                    ? !(node.id === hoveredId || hoverNeighborIds.has(node.id))
-                    : false;
-
-                return (
-                  <GraphNode
-                    box={box}
-                    dimmed={dimmed}
-                    isOnChain={isOnChain}
-                    isRoot={false}
-                    isSelected={isSelected}
-                    key={node.id}
-                    node={node}
-                    onHover={setHoveredId}
-                    onSelect={onSelect}
-                    subNodeCount={childrenByParent.get(node.id)?.length ?? 0}
-                  />
-                );
-              })}
-            </g>
-          </svg>
-          {/* Zoom controls — top-left stays clear of the Detail (right) and
-              Chain (bottom) cards. */}
-          <div className="absolute top-2 left-2 z-20 flex items-center gap-0.5 rounded-lg border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] p-0.5">
-            <button
-              aria-label={t("graph.zoomOut")}
-              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
-              onClick={overviewPanZoom.zoomOut}
-              type="button"
-            >
-              −
-            </button>
-            <button
-              aria-label={t("graph.fit")}
-              className="flex size-6 items-center justify-center rounded text-[13px] leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
-              onClick={overviewPanZoom.fit}
-              type="button"
-            >
-              ⤢
-            </button>
-            <button
-              aria-label={t("graph.zoomIn")}
-              className="flex size-6 items-center justify-center rounded text-sm leading-none text-[var(--z-text-2)] hover:bg-[var(--z-node-fill)]"
-              onClick={overviewPanZoom.zoomIn}
-              type="button"
-            >
-              +
-            </button>
-          </div>
+          <SemanticLanes
+            chainNodeIds={chainNodeIds}
+            childrenByParent={childrenByParent}
+            model={model}
+            onBackgroundClick={() => onSelect(null)}
+            onSelect={onSelect}
+            selectedNodeId={activeSelectedNodeId}
+          />
         </div>
       </section>
 
-      {activeSelectedNodeId && layout.chain ? (
+      {activeSelectedNodeId && chainLayout ? (
         // Chain = the wide bottom card. Stretches from the left inset to just
         // before the Detail card on the right.
         <aside
@@ -1324,7 +821,7 @@ export function TruthGraph({
                     <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
                   </marker>
                 </defs>
-                {layout.chain.edges?.map((edge) => {
+                {chainLayout.edges?.map((edge) => {
                   const path = chainEdgePath(edge);
                   const labelPoint = chainEdgeLabelPoint(edge);
 

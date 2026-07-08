@@ -144,6 +144,7 @@ export function WorkspaceHeader({
           </Button>
           <Button
             aria-label={t("header.exploreNewIdea")}
+            className="h-8"
             disabled={
               isExploring ||
               !activeProjectId ||
@@ -153,15 +154,16 @@ export function WorkspaceHeader({
               Boolean(activeTopic?.archivedAt)
             }
             onClick={() => setExploreOpen(true)}
-            size="icon-sm"
+            size="xs"
             title={
               isActiveConversationEmpty
                 ? t("header.exploreDisabledEmpty")
-                : t("header.exploreNewIdea")
+                : t("header.exploreHint")
             }
             variant="ghost"
           >
             <SparklesIcon className="size-4" />
+            {t("header.newIdea")}
           </Button>
         </span>
       </div>
