@@ -10,8 +10,8 @@ import { kindPresentation } from "@/components/ir/kind-presentation";
 import { postJSON, useIRActions } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
-import { getIRKindKey } from "@/lib/ir/types";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
+import { getIRKindKey } from "@/lib/ir/types";
 import { cn, fetcher } from "@/lib/utils";
 
 const LOCALE_TAG: Record<string, string> = {

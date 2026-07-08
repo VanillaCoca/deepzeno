@@ -64,9 +64,9 @@ export function isValidCode(rawCode: string): boolean {
 // The opaque, unforgeable value we store in the invite cookie once a valid code
 // has been presented. Constant per deployment; httpOnly keeps it out of JS.
 export function inviteCookieValue(): string {
-  return createHmac("sha256", getSecret()).update(COOKIE_MESSAGE).digest(
-    "base64url"
-  );
+  return createHmac("sha256", getSecret())
+    .update(COOKIE_MESSAGE)
+    .digest("base64url");
 }
 
 // True when the gate is disabled, or when the cookie carries the expected HMAC.

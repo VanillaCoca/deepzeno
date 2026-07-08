@@ -1,7 +1,8 @@
 {
-  "name": "chatbot",
+  "name": "deepzeno",
   "version": "3.1.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "next dev --turbo",
     "build": "tsx lib/db/migrate && next build",

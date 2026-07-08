@@ -267,7 +267,10 @@ async function seedOneExampleProject({
 
 // Seeds both example projects. Callers should prefer ensureExampleProjectsSeeded,
 // which guards on emptiness and never throws.
-export async function seedExampleProjectsForUser({ userId, userEmail }: SeedArgs) {
+export async function seedExampleProjectsForUser({
+  userId,
+  userEmail,
+}: SeedArgs) {
   const nextId = createIdAllocator();
   const nowDate = new Date();
   const nowIso = nowDate.toISOString();
@@ -292,7 +295,10 @@ export async function seedExampleProjectsForUser({ userId, userEmail }: SeedArgs
 // Idempotent, non-throwing entry point. Seeds the examples only when the user
 // has zero projects, and swallows any failure so a seed error can never block
 // login or the Library from rendering.
-export async function ensureExampleProjectsSeeded({ userId, userEmail }: SeedArgs) {
+export async function ensureExampleProjectsSeeded({
+  userId,
+  userEmail,
+}: SeedArgs) {
   try {
     const existing = await listProjectsByUserId(userId);
     if (existing.length > 0) {

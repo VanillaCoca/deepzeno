@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/AI%20SDK-6-black" alt="AI SDK 6" />
   <img src="https://img.shields.io/badge/db-Drizzle%20%2B%20Postgres-blue" alt="Drizzle + Postgres" />
-  <img src="https://img.shields.io/badge/license-Private-lightgrey" alt="License" />
+  <img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL-3.0" />
 </p>
 
 > **Status note.** This README describes what ZENO does **today**. Features that are
@@ -252,3 +252,25 @@ These are designed but **not implemented yet** — listed for context, not commi
 | Target deployment | Vercel |
 
 ---
+
+## License
+
+**deepzeno** is licensed under the **GNU Affero General Public License v3.0 or
+later** (AGPL-3.0-or-later) — see [`LICENSE`](./LICENSE).
+
+Under the AGPL, if you run a modified version of deepzeno as a network service,
+you must make your modified source available to that service's users. This keeps
+the project open while leaving room for a commercially operated hosted version.
+
+Portions of the code derive from the [Vercel AI Chatbot](https://github.com/vercel/ai-chatbot)
+template (© Vercel, Inc., Apache-2.0); that license is preserved in
+[`LICENSE-APACHE-2.0`](./LICENSE-APACHE-2.0) and summarized in [`NOTICE`](./NOTICE).
+
+The AGPL applies to the source code in this repository. Any hosted subscription
+version is operated separately under its own commercial terms.
+
+## Contributing
+
+Contributions are welcome. By submitting a pull request you agree to the
+[Contributor License Agreement](./CLA.md), which allows the maintainer to offer
+the project under both the AGPL and separate commercial licenses.

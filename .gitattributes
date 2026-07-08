@@ -1,0 +1,15 @@
+# Normalize line endings: store LF in the repo and check out LF everywhere,
+# so formatters (Biome) don't churn the whole tree on Windows checkouts.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png   -text
+*.jpg   -text
+*.jpeg  -text
+*.gif   -text
+*.ico   -text
+*.webp  -text
+*.woff  -text
+*.woff2 -text
+*.ttf   -text
+*.otf   -text

@@ -22,9 +22,9 @@ function mulberry32(seed: number) {
   let a = seed;
   return () => {
     a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
+    a = (a + 0x6d_2b_79_f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
     return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
@@ -165,7 +165,7 @@ export function AuthAside() {
             {constellation.edges.map((edge, index) => (
               <line
                 className="za-edge"
-                key={`${active}-e-${index}`}
+                key={`${active}-e-${edge.x1}-${edge.y1}-${edge.x2}-${edge.y2}`}
                 pathLength={1}
                 stroke="currentColor"
                 strokeOpacity={0.13}
@@ -184,7 +184,7 @@ export function AuthAside() {
               const delay = `${0.35 + index * 0.03}s`;
               if (node.kind === "apex") {
                 return (
-                  <g key={`${active}-n-${index}`}>
+                  <g key={`${active}-n-${node.x}-${node.y}`}>
                     <circle
                       className="za-halo"
                       cx={node.x}
@@ -215,7 +215,7 @@ export function AuthAside() {
                     cy={node.y}
                     fill="currentColor"
                     fillOpacity={0.9}
-                    key={`${active}-n-${index}`}
+                    key={`${active}-n-${node.x}-${node.y}`}
                     r={4.4}
                     style={{ animationDelay: delay }}
                   />
@@ -227,7 +227,7 @@ export function AuthAside() {
                   cx={node.x}
                   cy={node.y}
                   fill="var(--sidebar)"
-                  key={`${active}-n-${index}`}
+                  key={`${active}-n-${node.x}-${node.y}`}
                   r={3.6}
                   stroke="currentColor"
                   strokeOpacity={0.5}

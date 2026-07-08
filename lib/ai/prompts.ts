@@ -96,7 +96,7 @@ export const systemPrompt = ({
   // trailing provider suffix (e.g. "(OpenRouter)") so the disclosed name is just
   // the model — "Claude Opus 4.8", not "Claude Opus 4.8 (OpenRouter)".
   const cleanModelName = modelName
-    ? (modelName.replace(/\s*\([^)]*\)\s*$/, "").trim() || modelName)
+    ? modelName.replace(/\s*\([^)]*\)\s*$/, "").trim() || modelName
     : undefined;
   const modelIdentityPrompt = cleanModelName
     ? `\n\nUnderlying model: you are currently running on "${cleanModelName}". If the user asks which model or engine powers you, answer plainly — you are ZENO, currently running on ${cleanModelName}. Do not deny or dodge the question, and do not volunteer this unprompted.`

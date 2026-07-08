@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ChatbotError } from "@/lib/errors";
+import { ensureExampleProjectsSeeded } from "./example-projects";
 import {
   archiveTopicById,
   createConversation,
@@ -26,7 +27,6 @@ import {
   updateDecisionStatus,
   updateTopicStatusById,
 } from "./queries";
-import { ensureExampleProjectsSeeded } from "./example-projects";
 import type {
   TopicRelationType,
   TopicStatus,

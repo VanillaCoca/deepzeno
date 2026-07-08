@@ -296,46 +296,46 @@ export function LoginForm({
           <p className="-mt-2 text-[13px] text-muted-foreground leading-relaxed">
             {t("dialog.login.inviteSubtitle")}
           </p>
-        <form className="flex flex-col gap-2" onSubmit={handleVerifyInvite}>
-          <Label
-            className="flex items-center gap-1.5 font-normal text-muted-foreground"
-            htmlFor="invite"
-          >
-            <LockIcon className="size-3.5" />
-            {t("dialog.login.inviteLabel")}
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              autoComplete="off"
-              autoFocus
-              className="h-10 flex-1 rounded-lg border-border/50 bg-muted/50 text-sm tracking-wider transition-colors focus:border-foreground/20 focus:bg-muted"
-              id="invite"
-              onChange={(event) => {
-                setInviteCode(event.target.value);
-                if (inviteError) {
-                  setInviteError(false);
-                }
-              }}
-              placeholder={t("dialog.login.invitePlaceholder")}
-              value={inviteCode}
-            />
-            <Button
-              className="relative shrink-0"
-              disabled={isVerifying || !inviteCode.trim()}
-              type="submit"
+          <form className="flex flex-col gap-2" onSubmit={handleVerifyInvite}>
+            <Label
+              className="flex items-center gap-1.5 font-normal text-muted-foreground"
+              htmlFor="invite"
             >
-              {t("dialog.login.inviteUnlock")}
-              {isVerifying && (
-                <Loader2Icon className="ml-1.5 size-4 animate-spin" />
-              )}
-            </Button>
-          </div>
-          {inviteError && (
-            <p className="text-[13px] text-destructive">
-              {t("dialog.login.inviteInvalid")}
-            </p>
-          )}
-        </form>
+              <LockIcon className="size-3.5" />
+              {t("dialog.login.inviteLabel")}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                autoComplete="off"
+                autoFocus
+                className="h-10 flex-1 rounded-lg border-border/50 bg-muted/50 text-sm tracking-wider transition-colors focus:border-foreground/20 focus:bg-muted"
+                id="invite"
+                onChange={(event) => {
+                  setInviteCode(event.target.value);
+                  if (inviteError) {
+                    setInviteError(false);
+                  }
+                }}
+                placeholder={t("dialog.login.invitePlaceholder")}
+                value={inviteCode}
+              />
+              <Button
+                className="relative shrink-0"
+                disabled={isVerifying || !inviteCode.trim()}
+                type="submit"
+              >
+                {t("dialog.login.inviteUnlock")}
+                {isVerifying && (
+                  <Loader2Icon className="ml-1.5 size-4 animate-spin" />
+                )}
+              </Button>
+            </div>
+            {inviteError && (
+              <p className="text-[13px] text-destructive">
+                {t("dialog.login.inviteInvalid")}
+              </p>
+            )}
+          </form>
         </>
       )}
 

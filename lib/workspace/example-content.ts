@@ -48,7 +48,7 @@ export type ExampleProject = {
 };
 
 const EN_WELCOME = [
-  "👋 This is an official **Deepzeno example** — you're looking at how a two-person founding team reasoned through taking a B2B analytics product (\"Beacon\") to market.",
+  '👋 This is an official **Deepzeno example** — you\'re looking at how a two-person founding team reasoned through taking a B2B analytics product ("Beacon") to market.',
   "",
   "Deepzeno turns messy thinking into a **truth graph**: goals, constraints, hypotheses, the decisions you've locked in, and the options you deliberately rejected — each with its reasoning, and wired to what it depends on.",
   "",
@@ -83,7 +83,13 @@ const ENGLISH_EXAMPLE: ExampleProject = {
   welcomeTopicKey: "start",
   welcome: EN_WELCOME,
   topics: [
-    { key: "start", label: "Start here", isGeneral: true, nodes: [], edges: [] },
+    {
+      key: "start",
+      label: "Start here",
+      isGeneral: true,
+      nodes: [],
+      edges: [],
+    },
     {
       key: "motion",
       label: "Positioning & Motion",
@@ -150,7 +156,8 @@ const ENGLISH_EXAMPLE: ExampleProject = {
           key: "icp-q",
           kind: "open_question",
           status: "active",
-          title: "Who is the beachhead ICP — ops leaders or engineering managers?",
+          title:
+            "Who is the beachhead ICP — ops leaders or engineering managers?",
           rationale:
             "The two audiences want different onboarding, pricing, and messaging; picking one concentrates the launch.",
         },
@@ -159,7 +166,8 @@ const ENGLISH_EXAMPLE: ExampleProject = {
           kind: "plan",
           subtype: "decision",
           status: "pending",
-          title: "Target ops leaders at 20–200 person companies as the beachhead",
+          title:
+            "Target ops leaders at 20–200 person companies as the beachhead",
           rationale:
             "Ops leaders feel the analytics pain first and refer laterally — a candidate to confirm once we've validated the motion.",
         },
@@ -284,7 +292,8 @@ const ENGLISH_EXAMPLE: ExampleProject = {
           key: "gate-q",
           kind: "open_question",
           status: "active",
-          title: "Gate the public launch on hitting a beta activation-rate bar?",
+          title:
+            "Gate the public launch on hitting a beta activation-rate bar?",
           rationale:
             "Launching before activation works risks burning the one launch moment on a product that doesn't retain.",
         },
@@ -305,7 +314,13 @@ const CHINESE_EXAMPLE: ExampleProject = {
   welcomeTopicKey: "start",
   welcome: ZH_WELCOME,
   topics: [
-    { key: "start", label: "从这里开始", isGeneral: true, nodes: [], edges: [] },
+    {
+      key: "start",
+      label: "从这里开始",
+      isGeneral: true,
+      nodes: [],
+      edges: [],
+    },
     {
       key: "main",
       label: "决策主线",
@@ -392,8 +407,16 @@ const CHINESE_EXAMPLE: ExampleProject = {
         { from: "city-decision", relation: "depends_on", to: "spouse-loc" },
         { from: "reject-stay", relation: "depends_on", to: "savings" },
         { from: "cashflow-principle", relation: "depends_on", to: "goal" },
-        { from: "transition-candidate", relation: "resolves", to: "transition-q" },
-        { from: "transition-candidate", relation: "depends_on", to: "city-decision" },
+        {
+          from: "transition-candidate",
+          relation: "resolves",
+          to: "transition-q",
+        },
+        {
+          from: "transition-candidate",
+          relation: "depends_on",
+          to: "city-decision",
+        },
       ],
     },
     {
@@ -413,8 +436,7 @@ const CHINESE_EXAMPLE: ExampleProject = {
           kind: "open_question",
           status: "active",
           title: "我方现岗位能否转远程或杭州分部？",
-          rationale:
-            "若能保住一线级别薪资，整套决策的收入风险将大幅下降。",
+          rationale: "若能保住一线级别薪资，整套决策的收入风险将大幅下降。",
         },
         {
           key: "transfer-candidate",
@@ -438,8 +460,7 @@ const CHINESE_EXAMPLE: ExampleProject = {
           kind: "rejection",
           status: "active",
           title: "排除：裸辞后再到杭州找工作",
-          rationale:
-            "无收入空窗期叠加房贷首付支出，风险过高 —— 放弃裸辞。",
+          rationale: "无收入空窗期叠加房贷首付支出，风险过高 —— 放弃裸辞。",
         },
         {
           key: "interviews",
@@ -447,14 +468,21 @@ const CHINESE_EXAMPLE: ExampleProject = {
           subtype: "task",
           status: "active",
           title: "3 个月内在杭州目标公司做 5 场信息面试",
-          rationale:
-            "用信息面试低成本验证岗位供给假设，再决定是否真的搬。",
+          rationale: "用信息面试低成本验证岗位供给假设，再决定是否真的搬。",
         },
       ],
       edges: [
         { from: "transfer-candidate", relation: "resolves", to: "remote-q" },
-        { from: "transfer-candidate", relation: "depends_on", to: "spouse-job" },
-        { from: "transfer-candidate", relation: "depends_on", to: "industry-hyp" },
+        {
+          from: "transfer-candidate",
+          relation: "depends_on",
+          to: "spouse-job",
+        },
+        {
+          from: "transfer-candidate",
+          relation: "depends_on",
+          to: "industry-hyp",
+        },
         { from: "reject-quit", relation: "depends_on", to: "spouse-job" },
         { from: "interviews", relation: "depends_on", to: "industry-hyp" },
       ],
@@ -493,8 +521,7 @@ const CHINESE_EXAMPLE: ExampleProject = {
           kind: "open_question",
           status: "active",
           title: "双方父母是否随迁、是否需要三居？",
-          rationale:
-            "是否随迁直接决定户型与预算，牵动首付与月供测算。",
+          rationale: "是否随迁直接决定户型与预算，牵动首付与月供测算。",
         },
         {
           key: "compare-task",
@@ -502,14 +529,21 @@ const CHINESE_EXAMPLE: ExampleProject = {
           subtype: "task",
           status: "active",
           title: "做杭州 3 个候选片区的「学区 + 房价 + 通勤」对照表",
-          rationale:
-            "把片区决策落到可比的数字上，避免凭感觉选。",
+          rationale: "把片区决策落到可比的数字上，避免凭感觉选。",
         },
       ],
       edges: [
         { from: "district-decision", relation: "depends_on", to: "school" },
-        { from: "district-decision", relation: "depends_on", to: "commute-hyp" },
-        { from: "compare-task", relation: "depends_on", to: "district-decision" },
+        {
+          from: "district-decision",
+          relation: "depends_on",
+          to: "commute-hyp",
+        },
+        {
+          from: "compare-task",
+          relation: "depends_on",
+          to: "district-decision",
+        },
         { from: "elders-q", relation: "depends_on", to: "school" },
       ],
     },

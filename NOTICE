@@ -1,0 +1,22 @@
+deepzeno (ZENO)
+Copyright (C) 2026 VanillaCoca
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See the LICENSE file for the full text.
+
+-------------------------------------------------------------------------------
+Third-party / upstream attribution
+-------------------------------------------------------------------------------
+
+Portions of this project are derived from the Vercel AI Chatbot template
+(https://github.com/vercel/ai-chatbot), Copyright (c) 2024 Vercel, Inc.,
+originally licensed under the Apache License, Version 2.0. A copy of that
+license is retained in LICENSE-APACHE-2.0. Those portions continue to carry
+their original Apache-2.0 notices; the project as a whole is distributed under
+the AGPL-3.0-or-later terms in LICENSE.
+
+The Apache License 2.0 permits this relicensing of the combined work under
+AGPL-3.0; the upstream copyright and license notice above are preserved as
+required by Section 4 of the Apache License.

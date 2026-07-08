@@ -22,7 +22,11 @@ export function AuthThemeToggle() {
       onClick={() => setTheme(isDark ? "light" : "dark")}
       type="button"
     >
-      {isDark ? <SunIcon className="size-4" /> : <MoonIcon className="size-4" />}
+      {isDark ? (
+        <SunIcon className="size-4" />
+      ) : (
+        <MoonIcon className="size-4" />
+      )}
     </button>
   );
 }
