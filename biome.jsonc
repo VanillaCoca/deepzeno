@@ -12,7 +12,9 @@
   "files": {
     "includes": [
       "**/*",
+      "!**/*.svg",
       "!.vs",
+      "!landing-prototype",
       "!components/ai-elements",
       "!components/elements",
       "!components/ui",
@@ -35,7 +37,6 @@
         "useConsistentTypeDefinitions": "off"
       },
       "nursery": {
-        "noUnnecessaryConditions": "off",
         "useSortedClasses": "off"
       },
       "complexity": {
