@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   classifyTier,
+  pickModel,
   pickModelByTier,
   routeAutoModel,
   selectModelForTask,
 } from "../../lib/ai/model-policy.ts";
 import { getDefaultModelId } from "../../lib/ai/models.ts";
+import { ProviderCircuitBreaker } from "../../lib/ai/resilience.ts";
 
 // Active models depend on which env keys are present.
 const sonnetAndDeepseek = {
@@ -43,6 +45,27 @@ describe("pickModelByTier", () => {
 
   it("falls back to the only configured model regardless of tier", () => {
     assert.equal(pickModelByTier("frontier", deepseekOnly), "deepseek:default");
+  });
+
+  it("skips models whose provider breaker is open", () => {
+    const breaker = new ProviderCircuitBreaker({ failureThreshold: 1 });
+    breaker.recordFailure("deepseek");
+
+    assert.equal(
+      pickModel({ tier: "economy", breaker }, sonnetAndDeepseek),
+      "anthropic:claude-sonnet-4-6"
+    );
+  });
+
+  it("uses the full pool when every provider breaker is open", () => {
+    const breaker = new ProviderCircuitBreaker({ failureThreshold: 1 });
+    breaker.recordFailure("deepseek");
+
+    // A tripped breaker must never leave routing with zero models.
+    assert.equal(
+      pickModel({ tier: "economy", breaker }, deepseekOnly),
+      "deepseek:default"
+    );
   });
 });
 

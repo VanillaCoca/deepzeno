@@ -15,6 +15,11 @@ import {
   getTitleModelId,
   type ModelTier,
 } from "@/lib/ai/models";
+import {
+  type ProviderCircuitBreaker,
+  providerBreaker,
+  providerKeyForModel,
+} from "@/lib/ai/resilience";
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -50,9 +55,19 @@ function tierDistance(modelTier: ModelTier, target: number): number {
 
 // Pick the active model closest to the desired tier (preferring cheaper on a
 // tie), falling back to the default model when nothing is configured.
-// Optionally restrict to vision-capable models.
+// Optionally restrict to vision-capable models. Models whose serving endpoint
+// is circuit-broken (resilience.ts) are skipped while healthy alternatives
+// exist — an open breaker must never leave routing with zero models.
 export function pickModel(
-  { tier, requireVision = false }: { tier: ModelTier; requireVision?: boolean },
+  {
+    tier,
+    requireVision = false,
+    breaker = providerBreaker,
+  }: {
+    tier: ModelTier;
+    requireVision?: boolean;
+    breaker?: Pick<ProviderCircuitBreaker, "isOpen">;
+  },
   env: EnvLike = process.env
 ): string {
   const active = getActiveModels(env);
@@ -62,7 +77,13 @@ export function pickModel(
   const eligible = requireVision
     ? active.filter((model) => model.capabilities.vision)
     : active;
-  const pool = eligible.length > 0 ? eligible : active;
+  let pool = eligible.length > 0 ? eligible : active;
+  const healthy = pool.filter(
+    (model) => !breaker.isOpen(providerKeyForModel(model.id))
+  );
+  if (healthy.length > 0) {
+    pool = healthy;
+  }
   const target = TIER_RANK[tier];
   const [best] = [...pool].sort(
     (a, b) => tierDistance(a.tier, target) - tierDistance(b.tier, target)
@@ -160,14 +181,24 @@ export function selectModelForTask(
     // are wired; semantic_search is still groundwork (P3).
     case "kickoff_synthesis":
     case "research_synthesis":
-      return pickModelByTier("frontier", env);
     case "semantic_search":
     case "research_worker":
-      return pickModelByTier("economy", env);
-    case "research_plan":
-      return pickModelByTier("standard", env);
+    case "research_plan": {
+      const tier = TASK_TIER[task];
+      return tier ? pickModelByTier(tier, env) : getDefaultModelId(env);
+    }
 
     default:
       return getDefaultModelId(env);
   }
 }
+
+// Tier targets for the tier-routed tasks. Exported so the degrade-retry path
+// (resilient-generate.ts) can pick a same-tier alternative after a failure.
+export const TASK_TIER: Partial<Record<ModelTask, ModelTier>> = {
+  kickoff_synthesis: "frontier",
+  research_synthesis: "frontier",
+  research_plan: "standard",
+  research_worker: "economy",
+  semantic_search: "economy",
+};
