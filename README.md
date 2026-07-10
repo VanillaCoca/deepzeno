@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-V1%20In%20Development-yellow" alt="Status" />
+  <img src="https://img.shields.io/badge/status-Private%20Beta-green" alt="Status" />
   <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/AI%20SDK-6-black" alt="AI SDK 6" />
   <img src="https://img.shields.io/badge/db-Drizzle%20%2B%20Postgres-blue" alt="Drizzle + Postgres" />
@@ -219,7 +219,7 @@ These are designed but **not implemented yet** — listed for context, not commi
 
 ## Status
 
-🟡 **V1 — In active development.** ZENO V1 has not launched yet. The current focus is the core judgment-continuity loop: Sandbox conversation → extraction → 3-stage funnel → user confirmation → truth → inherited by future sessions and coding agents.
+🟢 **V1 — Private Beta (invite-only).** The core judgment-continuity loop is live behind invite codes: Sandbox conversation → extraction → 3-stage funnel → user confirmation → truth → inherited by future sessions and coding agents. Current focus is hardening the research pipeline (source scoring, quote verification, provider resilience) based on beta usage.
 
 ---
 

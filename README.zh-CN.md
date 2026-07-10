@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-V1%20In%20Development-yellow" alt="Status" />
+  <img src="https://img.shields.io/badge/status-Private%20Beta-green" alt="Status" />
   <img src="https://img.shields.io/badge/Next.js-16-black" alt="Next.js 16" />
   <img src="https://img.shields.io/badge/AI%20SDK-6-black" alt="AI SDK 6" />
   <img src="https://img.shields.io/badge/db-Drizzle%20%2B%20Postgres-blue" alt="Drizzle + Postgres" />
@@ -218,7 +218,7 @@ ZENO 遵循一条义务和四条铁律，指导每一个设计决策：
 
 ## 项目状态
 
-🟡 **V1 — 开发中。** ZENO V1 尚未发布。当前重点是构建核心的判断连续性循环：Sandbox 对话 → 提取 → 3 段漏斗 → 用户确认 → 真相 → 被未来的 session 和编程 agent 继承。
+🟢 **V1 — 邀请制内测（Private Beta）。** 核心判断连续性闭环已上线，凭邀请码开放体验：Sandbox 对话 → 提取 → 3 段漏斗 → 用户确认 → 真相 → 被未来的 session 和编程 agent 继承。当前重点是基于内测使用情况加固研究管线（来源评分、引文校验、模型服务容错）。
 
 ---
 
