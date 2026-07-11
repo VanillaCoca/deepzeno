@@ -3,70 +3,25 @@
 import { MessageSquarePlusIcon, Share2Icon } from "lucide-react";
 import {
   type CSSProperties,
-  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
 } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
-import { fitNodeTitle } from "@/lib/ir/fit-title";
 import type { IRNode } from "@/lib/ir/types";
 import { getIRTypeLabel, truncateIRTitle } from "@/lib/ir/types";
 import { cn } from "@/lib/utils";
 import {
   buildTruthGraphModel,
+  getChainOrder,
   getChainRootIds,
   getEdgesWithinNodeSet,
   getUpstreamNodeIds,
   type TruthGraphFlowEdge,
-  type TruthGraphModel,
   type TruthGraphTopic,
 } from "./data";
 import { SemanticLanes } from "./semantic-lanes";
-
-type ElkChild = {
-  id: string;
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  children?: ElkChild[];
-  edges?: ElkEdge[];
-  layoutOptions?: Record<string, string>;
-};
-
-type ElkEdge = {
-  id: string;
-  sources: string[];
-  targets: string[];
-  sections?: Array<{
-    startPoint: ElkPoint;
-    endPoint: ElkPoint;
-    bendPoints?: ElkPoint[];
-  }>;
-};
-
-type ElkPoint = {
-  x: number;
-  y: number;
-};
-
-type ElkGraph = ElkChild & {
-  children: ElkChild[];
-  edges?: ElkEdge[];
-};
-
-type NodeBox = {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
 
 export type TruthGraphMode = "truth" | "all";
 
@@ -88,407 +43,105 @@ export type TruthGraphProps = {
   topics: TruthGraphTopic[];
 };
 
-const OVERVIEW_DIMS = { width: 236, baseFont: 13, padY: 10, padX: 14 };
-const CHAIN_DIMS = { width: 276, baseFont: 13, padY: 12, padX: 16 };
-const NODE_MAX_LINES = 4;
-const NODE_SHRINK_FONT = 11.5;
-
-// Reserve text is stable per node (worst-case indicator width) so a node's
-// height never changes when it becomes selected/root — avoids relayout jitter.
-function nodeReserveText(node: IRNode) {
-  return `✓ ${node.kind === "open_question" ? " ?" : ""}`;
-}
-
-function measureNode(
-  node: IRNode,
-  dims: { width: number; baseFont: number; padY: number; padX: number }
-) {
-  return fitNodeTitle({
-    title: node.title,
-    // Reserve horizontal padding on both sides so left-aligned text never
-    // touches the node edges.
-    width: dims.width - dims.padX * 2,
-    baseFont: dims.baseFont,
-    reserveText: nodeReserveText(node),
-    padY: dims.padY,
-    maxLines: NODE_MAX_LINES,
-    shrinkFont: NODE_SHRINK_FONT,
-  });
-}
-
 const GRAPH_MIN_NODE_COUNT = 3;
-const CHAIN_EDGE_LABEL = "needs";
 
-// The Chain now lives in the wide, short bottom card, so it flows left → right
-// (foundational premises marked ▷ on the left, the selected node on the right).
-// A horizontal layout fits a landscape card far better than a vertical one.
-const CHAIN_OPTIONS = {
-  "elk.algorithm": "layered",
-  "elk.direction": "RIGHT",
-  "elk.edgeRouting": "ORTHOGONAL",
-  "elk.spacing.nodeNode": "26",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "54",
-  "elk.padding": "[top=20,left=20,bottom=20,right=20]",
-};
-
-function createChainGraph(
-  model: TruthGraphModel,
-  chainNodeIds: Set<string>
-): ElkGraph | null {
-  if (chainNodeIds.size === 0) {
-    return null;
-  }
-
-  const chainEdges = getEdgesWithinNodeSet(model, chainNodeIds);
-
-  return {
-    id: "truth-graph-chain-root",
-    layoutOptions: CHAIN_OPTIONS,
-    children: [...chainNodeIds].map((nodeId) => {
-      const node = model.nodeById.get(nodeId);
-      const height = node
-        ? measureNode(node, CHAIN_DIMS).height
-        : CHAIN_DIMS.padY * 2 + Math.round(CHAIN_DIMS.baseFont * 1.3);
-      return { id: nodeId, width: CHAIN_DIMS.width, height };
-    }),
-    edges: chainEdges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.parentId],
-      targets: [edge.childId],
-    })),
-  };
-}
-
-function absoluteBoxes(root: ElkChild) {
-  const boxes = new Map<string, NodeBox>();
-
-  function visit(node: ElkChild, offsetX: number, offsetY: number) {
-    const x = offsetX + (node.x ?? 0);
-    const y = offsetY + (node.y ?? 0);
-    const width = node.width ?? 0;
-    const height = node.height ?? 0;
-
-    boxes.set(node.id, { id: node.id, x, y, width, height });
-
-    for (const child of node.children ?? []) {
-      visit(child, x, y);
-    }
-  }
-
-  visit(root, 0, 0);
-  return boxes;
-}
-
-// Fit-to-container: measure the available box and return the scale that makes
-// the content fit ENTIRELY without scrolling, capped at 1 so we never blow a
-// small graph up. This is what guarantees the Chain is always fully visible
-// (no pan/zoom needed) however many nodes it has.
-function useFitScale(contentWidth: number, contentHeight: number) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) {
-      return;
-    }
-
-    const update = () => {
-      const { clientWidth, clientHeight } = element;
-      if (!(clientWidth && clientHeight && contentWidth && contentHeight)) {
-        return;
-      }
-      const next = Math.min(
-        1,
-        clientWidth / contentWidth,
-        clientHeight / contentHeight
-      );
-      setScale(next > 0 ? next : 1);
-    };
-
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [contentWidth, contentHeight]);
-
-  return { ref, scale };
-}
-
-// Orthogonal connector that always stops a gap OUTSIDE the target node and
-// enters from whichever side faces the source, so the line never crosses the
-// node body / text (overview nodes can sit in any relative position).
-const EDGE_GAP = 7;
-
-function chainEdgePath(edge: ElkEdge) {
-  const section = edge.sections?.[0];
-
-  if (!section) {
-    return null;
-  }
-
-  const points = [
-    section.startPoint,
-    ...(section.bendPoints ?? []),
-    section.endPoint,
-  ];
-
-  // Pull the final point back by EDGE_GAP so the solid arrowhead sits in the
-  // gap just below the source / above the target, never overshooting into it.
-  const last = points.at(-1);
-  const prev = points.at(-2);
-  if (last && prev) {
-    const dx = last.x - prev.x;
-    const dy = last.y - prev.y;
-    const len = Math.hypot(dx, dy) || 1;
-    points[points.length - 1] = {
-      x: last.x - (dx / len) * EDGE_GAP,
-      y: last.y - (dy / len) * EDGE_GAP,
-    };
-  }
-
-  return points
-    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`)
-    .join(" ");
-}
-
-// Label sits at the true geometric midpoint between the two node anchors — i.e.
-// centered in the gap between nodes — so it reads consistently on every edge.
-function chainEdgeLabelPoint(edge: ElkEdge) {
-  const section = edge.sections?.[0];
-
-  if (!section) {
-    return null;
-  }
-
-  return {
-    x: (section.startPoint.x + section.endPoint.x) / 2,
-    y: (section.startPoint.y + section.endPoint.y) / 2,
-  };
-}
-
-function nodeTone({
-  isOnChain,
-  isSelected,
-  node,
-}: {
-  isOnChain: boolean;
-  isSelected: boolean;
-  node: IRNode;
-}) {
-  // Borderless filled "chips" (Claude-style): identity comes from a soft
-  // background fill + text color, not a colored border. `stroke` is only used
-  // for the selected ring + focus outline. Color-blind redundancy (rules §4.7)
-  // is carried by non-color cues: strike-through (rejection), the "?" suffix
-  // (open question), and the ◇/○ stage glyphs (candidate/idea) added in GraphNode.
+// Text color + decoration for a node, reused across the chain rows so a node
+// reads the same whether it's a settled truth (green), an open question
+// (amber), a candidate (purple), or a rejected/superseded node (red, struck
+// through). Color-blind redundancy is carried by the row prefix glyph and the
+// strike-through, never by color alone (rules §4.7).
+function nodeTextTone(node: IRNode): {
+  color: string;
+  decoration: "line-through" | "none";
+} {
   if (node.status === "superseded" || node.kind === "rejection") {
-    return {
-      fill: "var(--z-rejected-soft)",
-      fillSel: "var(--z-rejected-fill-sel)",
-      stroke: "var(--z-rejected)",
-      text: "var(--z-rejected)",
-      decoration: "line-through",
-    };
+    return { color: "var(--z-rejected)", decoration: "line-through" };
   }
-
   if (node.kind === "open_question") {
-    return {
-      fill: "var(--z-attention-soft)",
-      fillSel: "var(--z-attention-fill-sel)",
-      stroke: "var(--z-attention)",
-      text: "var(--z-attention-text)",
-      decoration: "none",
-    };
+    return { color: "var(--z-attention-text)", decoration: "none" };
   }
-
   if (node.status === "idea") {
-    return {
-      fill: "var(--z-node-fill)",
-      fillSel: "var(--z-node-fill-sel)",
-      stroke: "var(--z-text-3)",
-      text: "var(--z-text-3)",
-      decoration: "none",
-    };
+    return { color: "var(--z-text-3)", decoration: "none" };
   }
-
   if (node.status === "pending") {
-    return {
-      fill: "var(--z-candidate-soft)",
-      fillSel: "var(--z-candidate-fill-sel)",
-      stroke: "var(--z-candidate)",
-      text: "var(--z-candidate-text)",
-      decoration: "none",
-    };
+    return { color: "var(--z-candidate-text)", decoration: "none" };
   }
-
-  if (isOnChain || isSelected) {
-    return {
-      fill: "var(--z-confirmed-soft)",
-      fillSel: "var(--z-confirmed-fill-sel)",
-      stroke: "var(--z-confirmed)",
-      text: "var(--z-confirmed)",
-      decoration: "none",
-    };
-  }
-
-  if (node.kind === "constraint" || node.kind === "hypothesis") {
-    return {
-      fill: "var(--z-node-fill)",
-      fillSel: "var(--z-node-fill-sel)",
-      stroke: "var(--z-fact-stroke)",
-      text: "var(--z-text-2)",
-      decoration: "none",
-    };
-  }
-
-  return {
-    fill: "var(--z-node-fill)",
-    stroke: "var(--z-node-stroke)",
-    text: "var(--z-text)",
-    decoration: "none",
-  };
+  return { color: "var(--z-confirmed)", decoration: "none" };
 }
 
-function GraphNode({
-  box,
-  subNodeCount = 0,
-  dimmed,
-  isOnChain,
+// Leading glyph mirrors the overview cues: ▷ foundational premise (chain root),
+// ✓ the selected node, ◇/○ candidate/idea, • an intermediate step.
+function chainPrefix(node: IRNode, isRoot: boolean, isSelected: boolean) {
+  if (isSelected) {
+    return "✓";
+  }
+  if (isRoot) {
+    return "▷";
+  }
+  if (node.status === "pending") {
+    return "◇";
+  }
+  if (node.status === "idea") {
+    return "○";
+  }
+  return "•";
+}
+
+// One clickable line of the reasoning chain. Replaces the old SVG "tofu block":
+// a node is now a text row (still selectable → opens the detail card), so
+// several related nodes sit close together and read like a written derivation.
+function ChainRow({
   isRoot,
   isSelected,
   node,
-  onHover,
   onSelect,
 }: {
-  box: NodeBox;
-  subNodeCount?: number;
-  // Whether this node is faded because the focus is elsewhere (a selection's
-  // chain, or a hovered node's neighborhood). Computed by the caller.
-  dimmed: boolean;
-  isOnChain: boolean;
   isRoot: boolean;
   isSelected: boolean;
   node: IRNode;
-  onHover?: (nodeId: string | null) => void;
   onSelect: (nodeId: string) => void;
 }) {
-  const tone = nodeTone({ isOnChain, isSelected, node });
-  const strokeWidth = isSelected
-    ? "var(--z-stroke-w-target)"
-    : "var(--z-stroke-w)";
-  const dims = box.width >= CHAIN_DIMS.width ? CHAIN_DIMS : OVERVIEW_DIMS;
-  const measured = measureNode(node, dims);
-  const { lines, fontPx, lineHeight } = measured;
-  // Title keeps its original measured height; an expanded box is taller and the
-  // children render in the reserved space below the title.
-  const titleHeight = measured.height;
-  // Stage glyph gives candidates/ideas a non-color cue (color-blind safety).
-  const stageGlyph =
-    node.status === "pending" ? "◇ " : node.status === "idea" ? "○ " : "";
-  const displayPrefix = isRoot ? "▷ " : isSelected ? "✓ " : stageGlyph;
-  const displaySuffix = node.kind === "open_question" ? " ?" : "";
-  const renderLines = lines.map(
-    (line, index) =>
-      `${index === 0 ? displayPrefix : ""}${line}${index === lines.length - 1 ? displaySuffix : ""}`
-  );
-  const leftX = box.x + dims.padX;
-  const blockTop = box.y + (titleHeight - lines.length * lineHeight) / 2;
-  // Stop propagation so selecting a node never bubbles to the canvas-wide
-  // deselect handler on the scroll container.
-  function handleClick(event: MouseEvent<SVGGElement>) {
-    event.stopPropagation();
-    onSelect(node.id);
-  }
+  const tone = nodeTextTone(node);
+  const prefix = chainPrefix(node, isRoot, isSelected);
+  const suffix = node.kind === "open_question" ? " ?" : "";
 
-  function handleKeyDown(event: KeyboardEvent<SVGGElement>) {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-
-    event.preventDefault();
+  // Stop propagation so selecting a chain row never bubbles to the canvas-wide
+  // deselect handler.
+  function handleClick(event: MouseEvent<HTMLButtonElement>) {
     event.stopPropagation();
     onSelect(node.id);
   }
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: SVG graph nodes must remain in SVG coordinate space.
-    <g
-      aria-label={node.title}
-      className="cursor-pointer outline-none [&:focus-visible>:first-child]:[stroke:var(--z-confirmed)] focus-visible:[outline:none]"
-      data-testid={`truth-graph-node-${node.id}`}
+    <button
+      className={cn(
+        "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--z-node-fill)]",
+        isSelected && "bg-[var(--z-node-fill)]"
+      )}
+      data-testid={`truth-graph-chain-node-${node.id}`}
       onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onPointerEnter={onHover ? () => onHover(node.id) : undefined}
-      onPointerLeave={onHover ? () => onHover(null) : undefined}
-      opacity={dimmed ? "var(--z-focus-faint)" : "var(--z-focus-full)"}
-      role="button"
-      style={{ transition: "opacity var(--z-transition)" }}
-      tabIndex={0}
+      title={node.title}
+      type="button"
     >
-      <rect
-        // Selection is shown by a stronger fill (no border); `stroke` stays
-        // "none" except for the keyboard focus ring (via focus-visible CSS).
-        fill={isSelected ? tone.fillSel : tone.fill}
-        height={titleHeight}
-        rx={
-          isRoot
-            ? "var(--z-start-radius)"
-            : isSelected
-              ? "var(--z-node-radius-target)"
-              : "var(--z-node-radius)"
-        }
-        stroke="none"
-        strokeWidth={strokeWidth}
-        width={box.width}
-        x={box.x}
-        y={box.y}
-      />
-      <text
-        dominantBaseline="central"
-        fill={tone.text}
-        fontFamily="var(--z-font-sans)"
-        fontSize={fontPx}
-        fontWeight={isSelected ? "600" : "500"}
-        textAnchor="start"
-        textDecoration={tone.decoration}
+      <span
+        aria-hidden="true"
+        className="shrink-0 select-none text-sm leading-relaxed"
+        style={{ color: tone.color }}
       >
-        {renderLines.map((line, index) => (
-          <tspan
-            // biome-ignore lint/suspicious/noArrayIndexKey: line order is stable for a given title
-            key={index}
-            x={leftX}
-            y={blockTop + lineHeight / 2 + index * lineHeight}
-          >
-            {line}
-          </tspan>
-        ))}
-      </text>
-      {subNodeCount > 0 ? (
-        // Passive badge: signals "has N sub-nodes"; the sub-nodes themselves
-        // live in the detail panel + chain when this node is selected.
-        <g>
-          <rect
-            fill="var(--z-node-fill-sel)"
-            height="16"
-            rx="8"
-            width="24"
-            x={box.x + box.width - 30}
-            y={box.y + (titleHeight - 16) / 2}
-          />
-          <text
-            dominantBaseline="central"
-            fill="var(--z-text-2)"
-            fontFamily="var(--z-font-sans)"
-            fontSize="var(--z-font-anchor)"
-            textAnchor="middle"
-            x={box.x + box.width - 18}
-            y={box.y + titleHeight / 2}
-          >
-            {subNodeCount}
-          </text>
-        </g>
-      ) : null}
-    </g>
+        {prefix}
+      </span>
+      <span
+        className="min-w-0 flex-1 text-sm leading-relaxed"
+        style={{
+          color: tone.color,
+          textDecoration: tone.decoration,
+          fontWeight: isSelected ? 600 : 500,
+        }}
+      >
+        {node.title}
+        {suffix}
+      </span>
+    </button>
   );
 }
 
@@ -590,53 +243,24 @@ export function TruthGraph({
     }
     return set;
   }, [activeSelectedNodeId, model, childrenByParent, edges]);
+
   const chainRootIds = useMemo(
     () => new Set(getChainRootIds(model, chainNodeIds)),
     [chainNodeIds, model]
   );
-  // Only the Chain still needs ELK: the overview is now the DOM-based semantic
-  // lanes (amendment №1 §2), where position is computed by document flow, not
-  // by a layout engine.
-  const [chainLayout, setChainLayout] = useState<ElkGraph | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function runLayout() {
-      const chainGraph = createChainGraph(model, chainNodeIds);
-      if (!chainGraph) {
-        setChainLayout(null);
-        return;
-      }
-
-      const [{ default: ELK }] = await Promise.all([
-        import("elkjs/lib/elk.bundled.js"),
-      ]);
-      const elk = new ELK();
-      const chain = await elk.layout(chainGraph);
-
-      if (!cancelled) {
-        setChainLayout(chain as ElkGraph);
-      }
-    }
-
-    runLayout().catch((error) => {
-      console.error("Failed to layout truth graph chain", error);
-      if (!cancelled) {
-        setChainLayout(null);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [chainNodeIds, model]);
-
-  // Chain sizes feed the SVG viewBox + fit-scale. Hooks run unconditionally
-  // (Rules of Hooks) — before the early returns below.
-  const chainWidth = Math.max(1, chainLayout?.width ?? 300);
-  const chainHeight = Math.max(1, chainLayout?.height ?? 260);
-  const chainFit = useFitScale(chainWidth, chainHeight);
+  // Relations that actually link the chain together. When there are none, the
+  // selected node stands alone — so there is no chain to show (amendment: don't
+  // render a one-line "chain" for an unconnected node).
+  const chainEdgeCount = useMemo(
+    () => getEdgesWithinNodeSet(model, chainNodeIds).length,
+    [chainNodeIds, model]
+  );
+  const chainOrder = useMemo(
+    () => (chainEdgeCount > 0 ? getChainOrder(model, chainNodeIds) : []),
+    [chainEdgeCount, chainNodeIds, model]
+  );
+  // The chain card only appears for a selected node that has upstream relations.
+  const showChain = activeSelectedNodeId !== null && chainEdgeCount > 0;
 
   if (nodes.length === 0) {
     // Empty state — new users land here first, so explain what this canvas is
@@ -677,10 +301,6 @@ export function TruthGraph({
       />
     );
   }
-
-  const chainBoxes = chainLayout
-    ? absoluteBoxes(chainLayout)
-    : new Map<string, NodeBox>();
 
   return (
     // The overview is the base canvas. The Chain and Detail panels float ABOVE
@@ -751,7 +371,7 @@ export function TruthGraph({
         <div
           className="relative min-h-0 flex-1 overflow-y-auto"
           style={{
-            paddingBottom: activeSelectedNodeId
+            paddingBottom: showChain
               ? "calc(var(--z-chain-h) + var(--z-card-inset) * 2)"
               : undefined,
             paddingRight: activeSelectedNodeId
@@ -770,11 +390,12 @@ export function TruthGraph({
         </div>
       </section>
 
-      {activeSelectedNodeId && chainLayout ? (
-        // Chain = the wide bottom card. Stretches from the left inset to just
-        // before the Detail card on the right.
+      {showChain ? (
+        // Chain = the wide bottom card. It now holds a compact text derivation
+        // (premises ▷ at the top → the selected node ✓ at the bottom), each line
+        // clickable, joined by arrow connectors — no more block-and-arrow SVG.
         <aside
-          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex h-[var(--z-chain-h)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
+          className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex max-h-[var(--z-chain-h)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
           data-testid="truth-graph-chain"
           style={{
             right:
@@ -787,95 +408,42 @@ export function TruthGraph({
               {chainNodeIds.size} {t("graph.steps")}
             </span>
           </div>
-          {/* Fit-scale wrapper: the SVG is scaled to fit this box exactly, so
-              the whole chain is always visible without panning/zooming. */}
-          <div
-            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
-            ref={chainFit.ref}
+          <ul
+            aria-label={t("graph.chainAria")}
+            className="min-h-0 flex-1 list-none overflow-y-auto px-2 pb-3"
           >
-            <div
-              style={{
-                width: chainWidth * chainFit.scale,
-                height: chainHeight * chainFit.scale,
-              }}
-            >
-              <svg
-                aria-label={t("graph.chainAria")}
-                className="select-none"
-                height={chainHeight * chainFit.scale}
-                preserveAspectRatio="xMidYMid meet"
-                role="img"
-                viewBox={`0 0 ${chainWidth} ${chainHeight}`}
-                width={chainWidth * chainFit.scale}
-              >
-                <defs>
-                  <marker
-                    id="z-truth-chain-arrow"
-                    markerHeight="7"
-                    markerWidth="7"
-                    orient="auto-start-reverse"
-                    refX="8"
-                    refY="5"
-                    viewBox="0 0 10 10"
-                  >
-                    <path d="M2 1L8 5L2 9Z" fill="var(--z-confirmed)" />
-                  </marker>
-                </defs>
-                {chainLayout.edges?.map((edge) => {
-                  const path = chainEdgePath(edge);
-                  const labelPoint = chainEdgeLabelPoint(edge);
+            {chainOrder.map((nodeId, index) => {
+              const node = model.nodeById.get(nodeId);
 
-                  return path ? (
-                    <g key={edge.id}>
-                      <path
-                        d={path}
-                        fill="none"
-                        markerEnd="url(#z-truth-chain-arrow)"
-                        stroke="var(--z-confirmed)"
-                        strokeLinejoin="round"
-                        strokeWidth="var(--z-line-w-strong)"
-                      />
-                      {labelPoint ? (
-                        <text
-                          dominantBaseline="central"
-                          fill="var(--z-edge-label)"
-                          fontFamily="var(--z-font-sans)"
-                          fontSize="var(--z-font-edge)"
-                          fontWeight="500"
-                          textAnchor="start"
-                          x={labelPoint.x + 8}
-                          y={labelPoint.y}
-                        >
-                          {CHAIN_EDGE_LABEL}
-                        </text>
-                      ) : null}
-                    </g>
-                  ) : null;
-                })}
-                {[...chainNodeIds].map((nodeId) => {
-                  const node = model.nodeById.get(nodeId);
-                  const box = chainBoxes.get(nodeId);
+              if (!node) {
+                return null;
+              }
 
-                  if (!(node && box)) {
-                    return null;
-                  }
-
-                  return (
-                    <GraphNode
-                      box={box}
-                      dimmed={false}
-                      isOnChain={true}
-                      isRoot={chainRootIds.has(nodeId)}
-                      isSelected={activeSelectedNodeId === nodeId}
-                      key={nodeId}
-                      node={node}
-                      onSelect={onSelect}
-                    />
-                  );
-                })}
-              </svg>
-            </div>
-          </div>
+              return (
+                <li key={nodeId}>
+                  {index > 0 ? (
+                    // Text connector between steps: "↓ needs" reads like a
+                    // hand-written derivation and keeps related lines tight.
+                    <div
+                      aria-hidden="true"
+                      className="flex items-center gap-1.5 py-0.5 pl-3.5 text-[var(--z-edge-label)]"
+                    >
+                      <span className="leading-none text-[var(--z-confirmed)]">
+                        ↓
+                      </span>
+                      <span className="text-[11px]">{t("graph.chainNeeds")}</span>
+                    </div>
+                  ) : null}
+                  <ChainRow
+                    isRoot={chainRootIds.has(nodeId)}
+                    isSelected={activeSelectedNodeId === nodeId}
+                    node={node}
+                    onSelect={onSelect}
+                  />
+                </li>
+              );
+            })}
+          </ul>
         </aside>
       ) : null}
 

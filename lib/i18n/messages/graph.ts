@@ -15,6 +15,7 @@ export const graphMessages: LocaleMessages = {
     "graph.showAllStages": "Show all stages",
     "graph.overviewAria": "Truth graph overview grouped by topic",
     "graph.chainAria": "Selected truth upstream chain",
+    "graph.chainNeeds": "needs",
     "graph.zoomOut": "Zoom out",
     "graph.zoomIn": "Zoom in",
     "graph.fit": "Fit to view",
@@ -48,6 +49,7 @@ export const graphMessages: LocaleMessages = {
     "graph.showAllStages": "显示所有阶段",
     "graph.overviewAria": "按主题分组的真相图谱总览",
     "graph.chainAria": "所选真相的上游推理链",
+    "graph.chainNeeds": "需要",
     "graph.zoomOut": "缩小",
     "graph.zoomIn": "放大",
     "graph.fit": "适应视图",
@@ -82,6 +84,7 @@ export const graphMessages: LocaleMessages = {
     "graph.overviewAria":
       "Vue d'ensemble du graphe de vérité, groupée par sujet",
     "graph.chainAria": "Chaîne amont de la vérité sélectionnée",
+    "graph.chainNeeds": "requiert",
     "graph.zoomOut": "Dézoomer",
     "graph.zoomIn": "Zoomer",
     "graph.fit": "Ajuster à la vue",

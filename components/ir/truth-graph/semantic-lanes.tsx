@@ -512,23 +512,37 @@ export function SemanticLanes({
                     />
                     {(lanes.candidatesByQuestion.get(question.id) ?? []).map(
                       (candidate) => (
-                        <div
-                          className="ml-5 flex items-start gap-1.5"
+                        // A candidate answer is now a compact clickable line
+                        // (arrow → text), not a second card, so several options
+                        // under one question read as a tight list and the
+                        // "answers this" relationship stays visually close.
+                        <button
+                          className={cn(
+                            "ml-5 flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-[var(--z-node-fill)]",
+                            selectedNodeId === candidate.id &&
+                              "bg-[var(--z-node-fill)]"
+                          )}
+                          data-testid={`truth-graph-node-${candidate.id}`}
                           key={candidate.id}
+                          onClick={() => onSelect(candidate.id)}
+                          style={focusStyle(isDimmed(candidate.id))}
+                          title={candidate.title}
+                          type="button"
                         >
-                          <CornerDownRightIcon className="mt-3 size-4 shrink-0 text-[var(--z-text-3)]" />
-                          <FrontierCard
-                            chipIcon={LightbulbIcon}
-                            chipLabel={t("graph.chipCandidate")}
-                            chipTone="candidate"
-                            dashed
-                            dimmed={isDimmed(candidate.id)}
-                            node={candidate}
-                            onSelect={onSelect}
-                            selected={selectedNodeId === candidate.id}
-                            subNodeCount={subCount(candidate.id)}
-                          />
-                        </div>
+                          <CornerDownRightIcon className="size-3.5 shrink-0 text-[var(--z-candidate)]" />
+                          <span
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-sm text-[var(--z-candidate-text)]",
+                              selectedNodeId === candidate.id && "font-medium"
+                            )}
+                          >
+                            {candidate.title}
+                          </span>
+                          <SubNodeBadge count={subCount(candidate.id)} />
+                          <span className="shrink-0 text-[11px] text-[var(--z-text-3)]">
+                            {t("graph.chipCandidate")}
+                          </span>
+                        </button>
                       )
                     )}
                   </div>
