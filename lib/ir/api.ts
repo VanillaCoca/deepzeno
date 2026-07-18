@@ -26,6 +26,7 @@ export const irRelationInputSchema = z.object({
   target_id: z.string().min(1).optional(),
   is_anchor_hint: z.boolean().optional(),
   isAnchorHint: z.boolean().optional(),
+  label: z.string().max(80).nullish(),
 });
 
 export function normalizeRelationInput(
@@ -35,6 +36,7 @@ export function normalizeRelationInput(
     relation: relation.relation,
     toNode: relation.toNode ?? relation.to_node ?? relation.target_id ?? "",
     isAnchorHint: relation.isAnchorHint ?? relation.is_anchor_hint ?? false,
+    label: relation.label ?? null,
   };
 }
 

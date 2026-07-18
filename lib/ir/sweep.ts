@@ -42,6 +42,9 @@ class ModelSoftTimeoutError extends Error {}
 
 const sweepRelationSchema = z.object({
   relation: z.string().min(1),
+  // Short free-form description of the relationship, shown on the reasoning
+  // chain. Nullable — the model returns null when it can't phrase it crisply.
+  label: z.string().max(80).nullish(),
   to_node: z.string().min(1).optional(),
   toNode: z.string().min(1).optional(),
   target_id: z.string().min(1).optional(),
@@ -61,6 +64,11 @@ const sweepItemSchema = z.object({
   source_text_span: z.string().max(4000).nullable().optional(),
   counterfactual: z.string().min(1).max(4000),
   confidence: z.number().min(0).max(1).nullable().optional(),
+  // Semantic-duplicate flag: when the model recognizes this item as the same
+  // judgment as an existing node (any status), it points at that node instead
+  // of re-emitting it as new. Persist layer skips and counts these.
+  duplicate_of: z.string().nullish(),
+  duplicateOf: z.string().nullish(),
   topic_route: z.string().nullable().optional(),
   topicRoute: z.string().nullable().optional(),
   suggested_topic_label: z.string().max(120).nullable().optional(),
@@ -252,6 +260,7 @@ function normalizeRelations({
         relation: normalizedRelation,
         toNode,
         isAnchorHint: relation.isAnchorHint ?? relation.is_anchor_hint ?? false,
+        label: relation.label?.trim() || null,
       };
     })
     .filter((relation): relation is NonNullable<typeof relation> =>
@@ -276,6 +285,7 @@ function normalizeRelations({
       relation: anchorRelation,
       toNode: reactivationAnchorId,
       isAnchorHint: true,
+      label: item.anchor_relation_hint?.reason?.trim().slice(0, 80) || null,
     });
   }
 
@@ -304,8 +314,14 @@ Core rules:
 - Prefer false negatives over false positives. If unsure, discard.
 - Extract semantically formed project memory, not casual brainstorming.
 - Every emitted item must trace to one source_turn_id from the provided conversation.
-- Do not duplicate existing active truth, pending candidates, or ideas.
 - For each emitted item, answer the counterfactual: if this item were missing from project IR, what future decision, re-entry, or agent handoff would become worse?
+
+Duplicate & contradiction check (run for EVERY item, against <existing_ir_context>):
+- Compare by meaning, not wording. A reworded, translated, or narrower/wider restatement of an existing node is still the same judgment.
+- If an item is semantically equivalent to an existing node (any status), set "duplicate_of" to that node's id. Do not re-emit an existing judgment as new. When in doubt between duplicate and new, prefer duplicate_of — a missed extraction is safer than a redundant candidate.
+- If an item CONFLICTS with an existing node whose status is active — the two cannot both hold — include a relation { "relation": "contradicts", "to_node": "<id>" } with a label naming the conflict. Do not silently drop conflicting items: surfacing the conflict is the point.
+- If the conversation shows the user explicitly replacing that older judgment, use "supersedes" instead of "contradicts".
+- An item is a contradiction, not a duplicate, when it addresses the same question as an existing node but lands on an incompatible answer. Never set duplicate_of in that case.
 
 Kinds:
 - goal: durable project outcome.
@@ -323,6 +339,11 @@ Confidence tiers:
 - medium_confidence: potentially important direction, concern, weak preference, or unresolved possibility without clear commitment. Route to idea.
 - discard: brainstorming, AI-only suggestions without user adoption, vague opinions, or restatements.
 
+Relation labels:
+- For each relation, also give "label": a short free-form phrase (<=12 CJK chars or <=6 words) describing HOW this item uses the target — read from this item (the conclusion) back to the target (the premise).
+- Describe the relationship itself; do not restate either title. Capture conditions, ordering, or dependency strength when it helps (e.g. "先合并 PR 才能触发", "只在阈值超标时依赖").
+- Keep the structural "relation" enum as-is; "label" is only its human-readable note. Return null when you cannot phrase it crisply.
+
 Output JSON exactly matching:
 {
   "high_confidence": [{
@@ -335,9 +356,10 @@ Output JSON exactly matching:
     "source_text_span": "exact source phrase when available",
     "counterfactual": "what would get worse if missing",
     "confidence": 0.0,
+    "duplicate_of": "existing node id when this is the same judgment, else null",
     "topic_route": "current_topic|unassigned_pool|new_topic_seed",
     "suggested_topic_label": "short judgment question if topic_route is new_topic_seed",
-    "relations": [{ "relation": "supersedes|resolves|depends_on|implies|contradicts|refines", "to_node": "D2", "is_anchor_hint": false }],
+    "relations": [{ "relation": "supersedes|resolves|depends_on|implies|contradicts|refines", "label": "short phrase describing the link, or null", "to_node": "D2", "is_anchor_hint": false }],
     "topic_relations": [{ "relation_type": "revisits|depends_on|contradicts|supersedes", "to_topic_id": "uuid", "reason": "why" }],
     "anchor_relation_hint": { "relation": "refines|contradicts|supersedes|depends_on", "reason": "why" } | null
   }],
@@ -599,6 +621,13 @@ async function persistSweepItem({
     return "skipped" as const;
   }
 
+  // Model-flagged semantic duplicate. Trusting the flag even for an unknown id
+  // follows "prefer false negatives": skipping a real judgment is safer than
+  // landing a redundant candidate in the confirm queue.
+  if ((item.duplicateOf ?? item.duplicate_of)?.trim()) {
+    return "duplicate" as const;
+  }
+
   const title = item.title.trim();
   const normalizedTitle = normalizeIRTitle(title);
   const localDuplicate = contextNodes.find(
@@ -662,6 +691,28 @@ async function persistSweepItem({
   });
 
   contextNodes.push(node);
+
+  const contradictionsFlagged = relations.filter(
+    (relation) => relation.relation === "contradicts"
+  ).length;
+
+  if (contradictionsFlagged > 0) {
+    await logIREvent({
+      projectId,
+      topicId,
+      event: "contradiction_flagged",
+      layer: "sweep",
+      metadata: {
+        nodeId: node.id,
+        targets: relations
+          .filter((relation) => relation.relation === "contradicts")
+          .map((relation) => relation.toNode),
+      },
+    }).catch(() => {
+      // Observability must never fail the sweep.
+    });
+  }
+
   return node.status === "idea" ? ("idea" as const) : ("candidate" as const);
 }
 

@@ -439,6 +439,9 @@ export const irEdge = pgTable("ir_edges", {
     .notNull()
     .references(() => irNode.id),
   relation: text("relation").notNull(),
+  // Free-form, AI-written description of the relationship (nullable). Falls
+  // back to the relation-type phrase in the UI when absent.
+  label: text("label"),
   status: text("status").notNull().default("pending"),
   isAnchorHint: boolean("is_anchor_hint").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })

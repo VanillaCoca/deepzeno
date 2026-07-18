@@ -84,6 +84,9 @@ export type IREdge = {
   fromNode: string;
   toNode: string;
   relation: IRRelation;
+  // Optional free-form, AI-written description of how the two nodes relate
+  // (e.g. "先合并 PR 才能触发"). Falls back to the relation type when absent.
+  label?: string | null;
   status: "pending" | "active" | "dismissed";
   isAnchorHint: boolean;
   createdAt: string;
@@ -100,6 +103,7 @@ export type IRRelationInput = {
   relation: IRRelation;
   toNode: string;
   isAnchorHint?: boolean;
+  label?: string | null;
 };
 
 const PREFIX_MAP: Record<string, string> = {

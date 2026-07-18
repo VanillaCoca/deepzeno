@@ -156,6 +156,7 @@ function mapIREdge(row: DatabaseRecord): IREdge {
     fromNode: String(row.from_node),
     toNode: String(row.to_node),
     relation: String(row.relation) as IRRelation,
+    label: toNullableString(row.label),
     status: String(row.status ?? "pending") as IREdge["status"],
     isAnchorHint: Boolean(row.is_anchor_hint),
     createdAt: toIsoString(row.created_at),
@@ -579,6 +580,7 @@ export async function createIRNodeForUser({
             from_node: node.id,
             to_node: relation.toNode,
             relation: relation.relation,
+            label: relation.label ?? null,
             status: "pending",
             is_anchor_hint: Boolean(relation.isAnchorHint),
           }))

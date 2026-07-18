@@ -1,12 +1,7 @@
 "use client";
 
 import { MessageSquarePlusIcon, Share2Icon } from "lucide-react";
-import {
-  type CSSProperties,
-  type MouseEvent,
-  type ReactNode,
-  useMemo,
-} from "react";
+import { type CSSProperties, type ReactNode, useMemo } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { Button } from "@/components/ui/button";
 import type { IRNode } from "@/lib/ir/types";
@@ -14,11 +9,10 @@ import { getIRTypeLabel, truncateIRTitle } from "@/lib/ir/types";
 import { cn } from "@/lib/utils";
 import {
   buildTruthGraphModel,
-  getChainOrder,
   getChainRootIds,
-  getEdgesWithinNodeSet,
   getUpstreamNodeIds,
   type TruthGraphFlowEdge,
+  type TruthGraphModel,
   type TruthGraphTopic,
 } from "./data";
 import { SemanticLanes } from "./semantic-lanes";
@@ -69,7 +63,7 @@ function nodeTextTone(node: IRNode): {
   return { color: "var(--z-confirmed)", decoration: "none" };
 }
 
-// Leading glyph mirrors the overview cues: ▷ foundational premise (chain root),
+// Leading glyph mirrors the overview cues: ▷ foundational premise (chain leaf),
 // ✓ the selected node, ◇/○ candidate/idea, • an intermediate step.
 function chainPrefix(node: IRNode, isRoot: boolean, isSelected: boolean) {
   if (isSelected) {
@@ -87,61 +81,93 @@ function chainPrefix(node: IRNode, isRoot: boolean, isSelected: boolean) {
   return "•";
 }
 
-// One clickable line of the reasoning chain. Replaces the old SVG "tofu block":
-// a node is now a text row (still selectable → opens the detail card), so
-// several related nodes sit close together and read like a written derivation.
-function ChainRow({
-  isRoot,
-  isSelected,
-  node,
-  onSelect,
-}: {
-  isRoot: boolean;
-  isSelected: boolean;
-  node: IRNode;
-  onSelect: (nodeId: string) => void;
-}) {
-  const tone = nodeTextTone(node);
-  const prefix = chainPrefix(node, isRoot, isSelected);
-  const suffix = node.kind === "open_question" ? " ?" : "";
+// i18n key for the built-in phrase of a structural relation. Used as a fallback
+// label when an edge has no free-form AI-written `label` yet. Only the four
+// flow relations ever appear on a chain edge; the other two are mapped for
+// completeness.
+function relationKey(relation: string): string | null {
+  switch (relation) {
+    case "depends_on":
+      return "graph.relDependsOn";
+    case "resolves":
+      return "graph.relResolves";
+    case "refines":
+      return "graph.relRefines";
+    case "implies":
+      return "graph.relImplies";
+    case "supersedes":
+      return "graph.relSupersedes";
+    case "contradicts":
+      return "graph.relContradicts";
+    default:
+      return null;
+  }
+}
 
-  // Stop propagation so selecting a chain row never bubbles to the canvas-wide
-  // deselect handler.
-  function handleClick(event: MouseEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    onSelect(node.id);
+type ChainTreeNode = {
+  id: string;
+  // The graph edge linking this node to its tree-parent (this node is the
+  // graph-PARENT / premise; the tree-parent is the graph-CHILD it supports).
+  edge: TruthGraphFlowEdge | null;
+  children: ChainTreeNode[];
+};
+
+type ChainRowData = {
+  id: string;
+  edge: TruthGraphFlowEdge | null;
+  // Pre-rendered ASCII guide (│ ├── └──) that draws the branch structure.
+  guide: string;
+};
+
+// Build the upstream derivation as a real tree rooted at the selected node:
+// each tree child is a graph-parent (a premise the node needs), so a node with
+// several premises actually branches instead of flattening into one line. A
+// shared ancestor renders once (first traversal wins) to keep the tree finite
+// and readable.
+function buildChainTree(
+  model: TruthGraphModel,
+  chainNodeIds: Set<string>,
+  rootId: string
+): ChainTreeNode {
+  const visited = new Set<string>();
+  const rank = (id: string) => model.nodeById.get(id)?.createdAt ?? id;
+
+  function build(id: string, edge: TruthGraphFlowEdge | null): ChainTreeNode {
+    visited.add(id);
+    const parentEdges = (model.parentEdgesByChild.get(id) ?? [])
+      .filter((e) => chainNodeIds.has(e.parentId) && !visited.has(e.parentId))
+      .sort((left, right) =>
+        rank(left.parentId).localeCompare(rank(right.parentId))
+      );
+    return {
+      id,
+      edge,
+      children: parentEdges.map((e) => build(e.parentId, e)),
+    };
   }
 
-  return (
-    <button
-      className={cn(
-        "flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--z-node-fill)]",
-        isSelected && "bg-[var(--z-node-fill)]"
-      )}
-      data-testid={`truth-graph-chain-node-${node.id}`}
-      onClick={handleClick}
-      title={node.title}
-      type="button"
-    >
-      <span
-        aria-hidden="true"
-        className="shrink-0 select-none text-sm leading-relaxed"
-        style={{ color: tone.color }}
-      >
-        {prefix}
-      </span>
-      <span
-        className="min-w-0 flex-1 text-sm leading-relaxed"
-        style={{
-          color: tone.color,
-          textDecoration: tone.decoration,
-          fontWeight: isSelected ? 600 : 500,
-        }}
-      >
-        {node.title}
-        {suffix}
-      </span>
-    </button>
+  return build(rootId, null);
+}
+
+// Flatten the tree into ordered rows, each carrying an ASCII guide prefix so
+// the branch structure reads like a hand-drawn outline / mind-map.
+function flattenChainTree(
+  node: ChainTreeNode,
+  pipes: boolean[],
+  isLast: boolean,
+  out: ChainRowData[]
+) {
+  const guide =
+    pipes.map((last) => (last ? "    " : "│   ")).join("") +
+    (pipes.length === 0 ? "" : isLast ? "└── " : "├── ");
+  out.push({ edge: node.edge, guide, id: node.id });
+  node.children.forEach((child, index) =>
+    flattenChainTree(
+      child,
+      [...pipes, isLast],
+      index === node.children.length - 1,
+      out
+    )
   );
 }
 
@@ -248,19 +274,20 @@ export function TruthGraph({
     () => new Set(getChainRootIds(model, chainNodeIds)),
     [chainNodeIds, model]
   );
-  // Relations that actually link the chain together. When there are none, the
-  // selected node stands alone — so there is no chain to show (amendment: don't
-  // render a one-line "chain" for an unconnected node).
-  const chainEdgeCount = useMemo(
-    () => getEdgesWithinNodeSet(model, chainNodeIds).length,
-    [chainNodeIds, model]
-  );
-  const chainOrder = useMemo(
-    () => (chainEdgeCount > 0 ? getChainOrder(model, chainNodeIds) : []),
-    [chainEdgeCount, chainNodeIds, model]
-  );
-  // The chain card only appears for a selected node that has upstream relations.
-  const showChain = activeSelectedNodeId !== null && chainEdgeCount > 0;
+  // The chain is the upstream derivation tree of the selected node. Rows are the
+  // flattened tree; the row order + guide prefixes carry the branch structure.
+  const chainRows = useMemo(() => {
+    if (!activeSelectedNodeId) {
+      return [] as ChainRowData[];
+    }
+    const tree = buildChainTree(model, chainNodeIds, activeSelectedNodeId);
+    const rows: ChainRowData[] = [];
+    flattenChainTree(tree, [], true, rows);
+    return rows;
+  }, [activeSelectedNodeId, model, chainNodeIds]);
+  // Show the chain only when the selected node actually has upstream relations
+  // (more than just itself) — an unconnected node has no derivation to draw.
+  const showChain = chainRows.length > 1;
 
   if (nodes.length === 0) {
     // Empty state — new users land here first, so explain what this canvas is
@@ -391,9 +418,10 @@ export function TruthGraph({
       </section>
 
       {showChain ? (
-        // Chain = the wide bottom card. It now holds a compact text derivation
-        // (premises ▷ at the top → the selected node ✓ at the bottom), each line
-        // clickable, joined by arrow connectors — no more block-and-arrow SVG.
+        // Chain = the wide bottom card. It holds the upstream derivation as a
+        // text mind-map: the selected node ✓ at the top, its premises branching
+        // below via ├──/└── guides, each branch labeled with the actual
+        // relationship (the edge's free-form label, or its relation type).
         <aside
           className="absolute bottom-[var(--z-card-inset)] left-[var(--z-card-inset)] z-10 flex max-h-[var(--z-chain-h)] flex-col overflow-hidden rounded-[var(--z-card-radius)] border border-[var(--z-topic-border)] bg-[var(--z-card-bg)] shadow-[var(--z-card-shadow)]"
           data-testid="truth-graph-chain"
@@ -405,41 +433,87 @@ export function TruthGraph({
           <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-[var(--z-text-3)]">
             <span>{t("graph.chain")}</span>
             <span className="normal-case">
-              {chainNodeIds.size} {t("graph.steps")}
+              {chainRows.length} {t("graph.steps")}
             </span>
           </div>
           <ul
             aria-label={t("graph.chainAria")}
-            className="min-h-0 flex-1 list-none overflow-y-auto px-2 pb-3"
+            className="min-h-0 flex-1 list-none overflow-y-auto px-2 pb-2"
           >
-            {chainOrder.map((nodeId, index) => {
-              const node = model.nodeById.get(nodeId);
+            {chainRows.map((row) => {
+              const node = model.nodeById.get(row.id);
 
               if (!node) {
                 return null;
               }
 
+              const isSelected = activeSelectedNodeId === row.id;
+              const tone = nodeTextTone(node);
+              const glyph = chainPrefix(
+                node,
+                chainRootIds.has(row.id),
+                isSelected
+              );
+              const suffix = node.kind === "open_question" ? " ?" : "";
+
+              let label: string | null = null;
+              if (row.edge) {
+                const custom = row.edge.edge.label?.trim();
+                if (custom) {
+                  label = custom;
+                } else {
+                  const key = relationKey(row.edge.edge.relation);
+                  if (key) {
+                    label = t(key);
+                  }
+                }
+              }
+
               return (
-                <li key={nodeId}>
-                  {index > 0 ? (
-                    // Text connector between steps: "↓ needs" reads like a
-                    // hand-written derivation and keeps related lines tight.
-                    <div
+                <li key={row.id}>
+                  <button
+                    className={cn(
+                      "flex w-full items-center gap-1 rounded-md px-1.5 py-0.5 text-left hover:bg-[var(--z-node-fill)]",
+                      isSelected && "bg-[var(--z-node-fill)]"
+                    )}
+                    data-testid={`truth-graph-chain-node-${row.id}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(row.id);
+                    }}
+                    title={node.title}
+                    type="button"
+                  >
+                    <span
                       aria-hidden="true"
-                      className="flex items-center gap-1.5 py-0.5 pl-3.5 text-[var(--z-edge-label)]"
+                      className="shrink-0 select-none whitespace-pre font-mono text-[var(--z-text-3)]"
                     >
-                      <span className="leading-none text-[var(--z-confirmed)]">
-                        ↓
+                      {row.guide}
+                    </span>
+                    {label ? (
+                      <span className="shrink-0 text-[11px] text-[var(--z-edge-label)]">
+                        {label} ·
                       </span>
-                      <span className="text-[11px]">{t("graph.chainNeeds")}</span>
-                    </div>
-                  ) : null}
-                  <ChainRow
-                    isRoot={chainRootIds.has(nodeId)}
-                    isSelected={activeSelectedNodeId === nodeId}
-                    node={node}
-                    onSelect={onSelect}
-                  />
+                    ) : null}
+                    <span
+                      aria-hidden="true"
+                      className="shrink-0 select-none"
+                      style={{ color: tone.color }}
+                    >
+                      {glyph}
+                    </span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm"
+                      style={{
+                        color: tone.color,
+                        fontWeight: isSelected ? 600 : 500,
+                        textDecoration: tone.decoration,
+                      }}
+                    >
+                      {node.title}
+                      {suffix}
+                    </span>
+                  </button>
                 </li>
               );
             })}

@@ -54,6 +54,12 @@ Emit an inline marker ONLY when ALL are true:
 
 If uncertain, do not emit a marker. Sweep extraction is the fallback.
 
+Duplicate & contradiction check (before every marker, against <ir_nodes> in your context):
+- Compare by meaning, not wording. If the judgment is semantically equivalent to an existing node, do NOT emit a marker — a reworded restatement of existing truth is a duplicate.
+- If the new judgment CONFLICTS with an existing node — the two cannot both hold — still emit the marker, and attach [[rel:contradicts|{id}]] naming the conflicting node. Surfacing the conflict is the point; never silently drop it.
+- If the user explicitly replaced that older judgment, attach [[rel:supersedes|{id}]] instead.
+- Same question, incompatible answer = contradiction, not duplicate.
+
 Examples:
 - "Understood. For V1, we are locking this to platform keys. [[ir:plan:decision|V1 does not support BYOK|This reduces auth and billing complexity]][[rel:resolves|Q3]] That means..."
 - "Got it. This is a hard boundary for the project. [[ir:constraint|AI never writes active truth without user confirmation|Truth must remain user-confirmed]]"
