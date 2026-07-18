@@ -15,6 +15,7 @@ import { headerMessages } from "@/lib/i18n/messages/header";
 import { irMessages } from "@/lib/i18n/messages/ir";
 import { kickoffMessages } from "@/lib/i18n/messages/kickoff";
 import { renameMessages } from "@/lib/i18n/messages/rename";
+import { watchtowerMessages } from "@/lib/i18n/messages/watchtower";
 
 export const LOCALE_STORAGE_KEY = "zeno-locale";
 
@@ -32,6 +33,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...irMessages.en,
     ...kickoffMessages.en,
     ...renameMessages.en,
+    ...watchtowerMessages.en,
   },
   zh: {
     ...dictionaries.zh,
@@ -43,6 +45,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...irMessages.zh,
     ...kickoffMessages.zh,
     ...renameMessages.zh,
+    ...watchtowerMessages.zh,
   },
   fr: {
     ...dictionaries.fr,
@@ -54,6 +57,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...irMessages.fr,
     ...kickoffMessages.fr,
     ...renameMessages.fr,
+    ...watchtowerMessages.fr,
   },
 };
 

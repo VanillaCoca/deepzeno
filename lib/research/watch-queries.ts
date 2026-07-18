@@ -10,28 +10,12 @@ import {
 } from "./agent-settings";
 
 // ---------------------------------------------------------------------------
-// Types
+// Types (pure module — importable from client components too)
 // ---------------------------------------------------------------------------
 
-export type WatchOrigin = "zeno_suggested" | "user_requested";
-export type WatchStatus = "active" | "paused";
+import type { IRWatch, WatchOrigin, WatchStatus } from "./watch-types";
 
-export type IRWatch = {
-  id: string;
-  projectId: string;
-  nodeId: string;
-  origin: WatchOrigin;
-  reason: string;
-  cadence: PatrolCadence;
-  status: WatchStatus;
-  modelId: string | null;
-  lastPatrolAt: string | null;
-  lastSignalAt: string | null;
-  lastAlertAt: string | null;
-  nextDueAt: string;
-  createdAt: string;
-  updatedAt: string;
-};
+export type { IRWatch, WatchOrigin, WatchStatus } from "./watch-types";
 
 // ---------------------------------------------------------------------------
 // Module-internal helpers (mirrors lib/research/queries.ts pattern)

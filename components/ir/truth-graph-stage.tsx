@@ -5,9 +5,12 @@ import useSWR from "swr";
 import { IRDetailPane } from "@/components/ir/ir-detail";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
 import { TruthGraph, type TruthGraphMode } from "@/components/ir/truth-graph";
+import { AgentSettingsPopover } from "@/components/ir/truth-graph/agent-settings-popover";
 import { useIRActions } from "@/components/ir/use-ir-actions";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IREdge, IRNode } from "@/lib/ir/types";
+import type { AgentSettings } from "@/lib/research/agent-settings";
+import type { IRWatch } from "@/lib/research/watch-types";
 import { fetcher } from "@/lib/utils";
 
 export function TruthGraphStage() {
@@ -31,6 +34,29 @@ export function TruthGraphStage() {
       ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/ir/edges?project_id=${activeProjectId}`
       : null,
     fetcher
+  );
+
+  // Watchtower state: watched nodes get radar badges; the header popover
+  // manages the research agent (patrol switch / cadence / model).
+  const { data: watchtowerData, mutate: mutateWatchtower } = useSWR<{
+    watches: IRWatch[];
+    settings: AgentSettings;
+    not_migrated?: boolean;
+  }>(
+    activeProjectId
+      ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/watchtower?project_id=${activeProjectId}`
+      : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  const watchedNodeIds = useMemo(
+    () =>
+      new Set(
+        (watchtowerData?.watches ?? [])
+          .filter((watch) => watch.status === "active")
+          .map((watch) => watch.nodeId)
+      ),
+    [watchtowerData]
   );
 
   // Full node set for the current scope, before drill filtering. "Truth" shows
@@ -104,6 +130,25 @@ export function TruthGraphStage() {
           childrenByParent={childrenByParent}
           detailSlot={detailSlot}
           edges={graphEdges}
+          headerSlot={
+            activeProjectId ? (
+              <AgentSettingsPopover
+                data={
+                  watchtowerData
+                    ? {
+                        watches: watchtowerData.watches,
+                        settings: watchtowerData.settings,
+                      }
+                    : null
+                }
+                notMigrated={watchtowerData?.not_migrated === true}
+                onChanged={() => {
+                  mutateWatchtower().catch(console.error);
+                }}
+                projectId={activeProjectId}
+              />
+            ) : null
+          }
           mode={graphMode}
           nodes={graphNodes}
           onModeChange={setGraphMode}
@@ -111,6 +156,7 @@ export function TruthGraphStage() {
           onStartConversation={() => requestView("conversation")}
           selectedNodeId={selectedNodeId}
           topics={truthGraphTopics}
+          watchedNodeIds={watchedNodeIds}
         />
       </div>
     </div>

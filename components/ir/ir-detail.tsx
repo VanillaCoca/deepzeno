@@ -12,6 +12,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { useIR } from "@/components/ir/ir-provider";
 import { kindPresentation } from "@/components/ir/kind-presentation";
 import type { useIRActions } from "@/components/ir/use-ir-actions";
+import { MonitoringSection } from "@/components/research/monitoring-section";
 import { ResearchSection } from "@/components/research/research-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -494,6 +495,15 @@ export function IRDetailPane({
             }}
           />
         )}
+
+        <MonitoringSection
+          key={`monitoring-${selectedNode.id}`}
+          node={selectedNode}
+          onChanged={() => {
+            refreshIR().catch(console.error);
+          }}
+        />
+
 
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">

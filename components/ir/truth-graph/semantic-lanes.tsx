@@ -19,6 +19,7 @@ import {
   CornerDownRightIcon,
   HelpCircleIcon,
   LightbulbIcon,
+  RadarIcon,
   ScaleIcon,
   TargetIcon,
   XIcon,
@@ -198,6 +199,19 @@ function PremiseBadge({ count }: { count: number }) {
   );
 }
 
+// Subtle radar mark on nodes under Watchtower patrol. Neutral tone — being
+// watched is not a status, so it never enters the green/red system.
+function WatchBadge({ label, watched }: { label: string; watched: boolean }) {
+  if (!watched) {
+    return null;
+  }
+  return (
+    <span title={label}>
+      <RadarIcon className="size-3 shrink-0 text-[var(--z-text-3)]" />
+    </span>
+  );
+}
+
 // Full card — the "please pay attention" form, reserved for the frontier.
 function FrontierCard({
   chipIcon,
@@ -210,6 +224,8 @@ function FrontierCard({
   premiseCount = 0,
   selected,
   subNodeCount,
+  watchLabel,
+  watched,
 }: {
   chipIcon: IconComponent;
   chipLabel: string;
@@ -221,6 +237,8 @@ function FrontierCard({
   premiseCount?: number;
   selected: boolean;
   subNodeCount: number;
+  watchLabel?: string;
+  watched?: boolean;
 }) {
   return (
     <button
@@ -240,6 +258,7 @@ function FrontierCard({
         <TypeChip icon={chipIcon} label={chipLabel} tone={chipTone} />
         <SubNodeBadge count={subNodeCount} />
         <PremiseBadge count={premiseCount} />
+        <WatchBadge label={watchLabel ?? ""} watched={watched ?? false} />
       </span>
       <span
         className={cn(
@@ -267,6 +286,8 @@ function LaneRow({
   strike,
   subNodeCount,
   trailing,
+  watchLabel,
+  watched,
 }: {
   dimmed: boolean;
   icon: IconComponent;
@@ -279,6 +300,8 @@ function LaneRow({
   strike?: boolean;
   subNodeCount: number;
   trailing?: string;
+  watchLabel?: string;
+  watched?: boolean;
 }) {
   return (
     <button
@@ -305,6 +328,7 @@ function LaneRow({
       </span>
       <SubNodeBadge count={subNodeCount} />
       <PremiseBadge count={premiseCount} />
+      <WatchBadge label={watchLabel ?? ""} watched={watched ?? false} />
       {trailing ? (
         <span className="shrink-0 text-[11px] text-[var(--z-text-3)]">
           {trailing}
@@ -341,6 +365,7 @@ function topicDomId(topicId: string | null) {
 
 function TopicSection({
   isDimmed,
+  isWatched,
   lanes,
   model,
   onLayoutChange,
@@ -351,6 +376,7 @@ function TopicSection({
   topic,
 }: {
   isDimmed: (nodeId: string) => boolean;
+  isWatched: (nodeId: string) => boolean;
   lanes: TopicLanes;
   model: TruthGraphModel;
   onLayoutChange: () => void;
@@ -361,6 +387,7 @@ function TopicSection({
   topic: { id: string | null; label: string };
 }) {
   const { t } = useLocale();
+  const watchLabel = t("wt.watchedBadge");
   // Controlled fold (amendment №2): small premise sets open by default so
   // their dependency edges draw without interaction; user toggles sync back
   // through onToggle so the badge fallback below stays truthful.
@@ -463,6 +490,8 @@ function TopicSection({
                 onSelect={onSelect}
                 selected={selectedNodeId === node.id}
                 subNodeCount={subCount(node.id)}
+                watched={isWatched(node.id)}
+                watchLabel={watchLabel}
               />
             ))}
           </div>
@@ -487,6 +516,8 @@ function TopicSection({
                 selected={selectedNodeId === node.id}
                 subNodeCount={subCount(node.id)}
                 trailing={node.confirmedAt?.slice(0, 10)}
+                watched={isWatched(node.id)}
+                watchLabel={watchLabel}
               />
             ))}
           </div>
@@ -511,6 +542,8 @@ function TopicSection({
                   premiseCount={premiseDepCount(question.id)}
                   selected={selectedNodeId === question.id}
                   subNodeCount={subCount(question.id)}
+                  watched={isWatched(question.id)}
+                  watchLabel={watchLabel}
                 />
                 {(lanes.candidatesByQuestion.get(question.id) ?? []).map(
                   (candidate) => (
@@ -563,6 +596,8 @@ function TopicSection({
                 premiseCount={premiseDepCount(candidate.id)}
                 selected={selectedNodeId === candidate.id}
                 subNodeCount={subCount(candidate.id)}
+                watched={isWatched(candidate.id)}
+                watchLabel={watchLabel}
               />
             ))}
             {lanes.ideas.map((idea) => (
@@ -636,6 +671,7 @@ export function SemanticLanes({
   onBackgroundClick,
   onSelect,
   selectedNodeId,
+  watchedNodeIds,
 }: SemanticLanesProps) {
   const { t } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -676,6 +712,7 @@ export function SemanticLanes({
       : false;
   const subCount = (nodeId: string) =>
     childrenByParent.get(nodeId)?.length ?? 0;
+  const isWatched = (nodeId: string) => watchedNodeIds?.has(nodeId) ?? false;
 
   // Clicking empty space between lanes deselects, matching the old canvas.
   function handleBackground(event: MouseEvent<HTMLDivElement>) {
@@ -743,6 +780,7 @@ export function SemanticLanes({
       {groups.map(({ lanes, topic }) => (
         <TopicSection
           isDimmed={isDimmed}
+          isWatched={isWatched}
           key={topic.id ?? "unassigned"}
           lanes={lanes}
           model={model}

@@ -28,6 +28,9 @@ export type TruthGraphProps = {
   // geometry so they stay aligned.
   detailSlot?: ReactNode;
   edges: TruthGraphFlowEdge["edge"][];
+  // Extra header controls (e.g. the research-agent settings popover),
+  // rendered at the right end of the graph toolbar.
+  headerSlot?: ReactNode;
   mode: TruthGraphMode;
   nodes: IRNode[];
   onModeChange: (mode: TruthGraphMode) => void;
@@ -36,6 +39,8 @@ export type TruthGraphProps = {
   onStartConversation?: () => void;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
+  // Nodes under Watchtower patrol — rows get a subtle radar badge.
+  watchedNodeIds?: Set<string>;
 };
 
 const GRAPH_MIN_NODE_COUNT = 3;
@@ -203,6 +208,7 @@ export function TruthGraph({
   childrenByParent,
   detailSlot,
   edges,
+  headerSlot,
   mode,
   nodes,
   onModeChange,
@@ -210,6 +216,7 @@ export function TruthGraph({
   onStartConversation,
   selectedNodeId,
   topics,
+  watchedNodeIds,
 }: TruthGraphProps) {
   const { t } = useLocale();
   const model = useMemo(
@@ -363,10 +370,13 @@ export function TruthGraph({
               </button>
             ))}
           </div>
-          <span className="text-[11px] font-medium text-[var(--z-text-3)]">
-            {nodes.length}{" "}
-            {mode === "all" ? t("graph.nodes") : t("graph.truths")}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-[var(--z-text-3)]">
+              {nodes.length}{" "}
+              {mode === "all" ? t("graph.nodes") : t("graph.truths")}
+            </span>
+            {headerSlot}
+          </div>
         </div>
         {/* Semantic-lanes overview (amendment №1): position carries structure,
             density follows lifecycle, and cards self-label — so the legend and
@@ -391,6 +401,7 @@ export function TruthGraph({
             onBackgroundClick={() => onSelect(null)}
             onSelect={onSelect}
             selectedNodeId={activeSelectedNodeId}
+            watchedNodeIds={watchedNodeIds}
           />
         </div>
       </section>

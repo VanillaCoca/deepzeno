@@ -2,8 +2,9 @@ import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
-import { getIRNodeForUser } from "@/lib/ir/queries";
+import { getIRNodeForUser, IRNotReadyError } from "@/lib/ir/queries";
 import {
+  DEFAULT_AGENT_SETTINGS,
   isPatrolCadence,
   PATROL_CADENCES,
 } from "@/lib/research/agent-settings";
@@ -45,11 +46,24 @@ export async function GET(request: Request) {
     }
     await assertProject(projectId, session.user.id);
 
-    const [watches, settings] = await Promise.all([
-      listWatchesByProject(projectId),
-      getProjectAgentSettings(projectId),
-    ]);
-    return Response.json({ watches, settings });
+    try {
+      const [watches, settings] = await Promise.all([
+        listWatchesByProject(projectId),
+        getProjectAgentSettings(projectId),
+      ]);
+      return Response.json({ watches, settings, not_migrated: false });
+    } catch (error) {
+      if (error instanceof IRNotReadyError) {
+        // Pre-migration database — the UI still renders, with patrols
+        // marked unavailable instead of a 503.
+        return Response.json({
+          watches: [],
+          settings: DEFAULT_AGENT_SETTINGS,
+          not_migrated: true,
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     return irErrorToResponse(error, "Failed to load watches");
   }
