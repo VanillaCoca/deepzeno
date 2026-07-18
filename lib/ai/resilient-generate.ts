@@ -18,6 +18,7 @@ import {
   providerBreaker,
   providerKeyForModel,
 } from "@/lib/ai/resilience";
+import { systemForModel } from "@/lib/ai/schema-prompt";
 
 type Usage = { inputTokens?: number | null; outputTokens?: number | null };
 
@@ -38,19 +39,28 @@ export async function generateObjectResilient<T>({
   system,
   prompt,
   schema,
+  preferredModelId,
 }: {
   task: ModelTask;
   system: string;
   prompt: string;
   schema: z.Schema<T>;
+  // Explicit model preference (e.g. the project's research-agent model,
+  // DeepSeek by default). The policy validates it (active + healthy) and
+  // falls back to tier routing when it can't be honored.
+  preferredModelId?: string | null;
 }): Promise<ResilientGenerateResult<T>> {
-  const primaryId = selectModelForTask(task);
+  const primaryId = selectModelForTask(task, {
+    userModelId: preferredModelId ?? null,
+  });
   const primaryProvider = providerKeyForModel(primaryId);
 
   try {
     const result = await generateObject({
       model: getLanguageModel(primaryId),
-      system,
+      // Models without native json_schema support get the schema serialized
+      // into the system prompt (schema-prompt.ts) — otherwise it's dropped.
+      system: systemForModel(primaryId, system, schema),
       prompt,
       schema,
     });
@@ -93,7 +103,7 @@ export async function generateObjectResilient<T>({
     try {
       const result = await generateObject({
         model: getLanguageModel(retryId),
-        system,
+        system: systemForModel(retryId, system, schema),
         prompt,
         schema,
       });

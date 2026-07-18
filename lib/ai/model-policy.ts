@@ -179,11 +179,24 @@ export function selectModelForTask(
 
     // kickoff_synthesis (L1 Kickoff) and research_* (L2 Research pipeline)
     // are wired; semantic_search is still groundwork (P3).
+    // research_* honor an explicit model preference (the project's research
+    // agent setting — DeepSeek by default) when that model is active and its
+    // provider isn't circuit-broken; otherwise fall back to tier routing.
     case "kickoff_synthesis":
     case "research_synthesis":
     case "semantic_search":
     case "research_worker":
     case "research_plan": {
+      const preferred = options.userModelId;
+      if (
+        preferred &&
+        task !== "kickoff_synthesis" &&
+        task !== "semantic_search" &&
+        getActiveModels(env).some((model) => model.id === preferred) &&
+        !providerBreaker.isOpen(providerKeyForModel(preferred))
+      ) {
+        return preferred;
+      }
       const tier = TASK_TIER[task];
       return tier ? pickModelByTier(tier, env) : getDefaultModelId(env);
     }

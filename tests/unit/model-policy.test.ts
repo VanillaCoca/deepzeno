@@ -104,6 +104,26 @@ describe("selectModelForTask", () => {
       "anthropic:claude-sonnet-4-6"
     );
   });
+
+  it("honors an explicit research model preference when active", () => {
+    assert.equal(
+      selectModelForTask("research_synthesis", {
+        env: sonnetAndDeepseek,
+        userModelId: "deepseek:default",
+      }),
+      "deepseek:default"
+    );
+  });
+
+  it("ignores an inactive research model preference (tier fallback)", () => {
+    assert.equal(
+      selectModelForTask("research_plan", {
+        env: sonnetAndDeepseek,
+        userModelId: "openai:gpt-4.1",
+      }),
+      "anthropic:claude-sonnet-4-6"
+    );
+  });
 });
 
 describe("classifyTier", () => {
