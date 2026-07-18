@@ -5,6 +5,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { gateway, generateText, type ToolSet } from "ai";
 
 import {
+  fixturesDir,
   resolveSearchProvider,
   SEARCH_PROVIDER_MISSING_MESSAGE,
   type SearchProvider,
@@ -61,11 +62,45 @@ function dedupeSources(
 // searchWeb
 // ---------------------------------------------------------------------------
 
+// Fixture search: `${dir}/search.json` is
+// { "queries": { "<key>": [{url,title}] }, "default": [{url,title}] } —
+// exact key match first, then the first key contained in the query, then
+// the default list. Dev/test only (gated in search-provider.ts).
+async function searchFixtures(
+  query: string,
+  dir: string
+): Promise<WebSearchOutcome> {
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const raw = JSON.parse(await readFile(join(dir, "search.json"), "utf8")) as {
+    queries?: Record<string, WebSearchResult[]>;
+    default?: WebSearchResult[];
+  };
+  const queries = raw.queries ?? {};
+  const exact = queries[query];
+  const partialKey = Object.keys(queries).find((key) => query.includes(key));
+  const results =
+    exact ?? (partialKey ? queries[partialKey] : raw.default) ?? [];
+  return {
+    results,
+    provider: "fixtures",
+    usage: { inputTokens: 0, outputTokens: 0 },
+  };
+}
+
 export async function searchWeb(query: string): Promise<WebSearchOutcome> {
   const provider = resolveSearchProvider();
 
   if (!provider) {
     throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
+  }
+
+  if (provider === "fixtures") {
+    const dir = fixturesDir();
+    if (!dir) {
+      throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
+    }
+    return await searchFixtures(query, dir);
   }
 
   if (provider === "anthropic") {

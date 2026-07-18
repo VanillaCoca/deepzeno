@@ -1,0 +1,5 @@
+IRCC Express Entry overview (fixture page for offline tests).
+
+Express Entry is the online system used to manage skilled worker applications for permanent residence. Candidates are ranked using the Comprehensive Ranking System. Draws are typically held every two weeks, and cutoff scores have historically remained stable between 470 and 490 points.
+
+This page has been rewritten and no longer contains earlier statements about program timelines.

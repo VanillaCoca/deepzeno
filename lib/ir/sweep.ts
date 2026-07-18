@@ -27,6 +27,7 @@ import {
   truncateIRTitle,
   validateIRKindSubtype,
 } from "@/lib/ir/types";
+import { suggestWatchForNode } from "@/lib/research/watch-suggest";
 import { listWorkspaceMessagesByConversationId } from "@/lib/workspace/queries";
 import type { WorkspaceMessageRecord } from "@/lib/workspace/types";
 
@@ -691,6 +692,19 @@ async function persistSweepItem({
   });
 
   contextNodes.push(node);
+
+  if (node.kind === "hypothesis") {
+    // A freshly extracted falsifiable assumption goes under Watchtower
+    // consideration right away (Iron Law 0). Best-effort by contract.
+    await suggestWatchForNode({
+      id: node.id,
+      projectId,
+      kind: node.kind,
+      title: node.title,
+    }).catch(() => {
+      // Suggestion must never fail the sweep.
+    });
+  }
 
   const contradictionsFlagged = relations.filter(
     (relation) => relation.relation === "contradicts"

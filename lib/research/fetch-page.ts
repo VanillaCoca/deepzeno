@@ -1,5 +1,6 @@
 import "server-only";
 
+import { fixturesDir } from "./search-provider";
 import { extractReadableText } from "./text";
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -11,10 +12,38 @@ export type FetchedPage = {
   retrievedAt: string;
 };
 
+// Fixture pages: `${dir}/pages.json` maps url → text-file name in the same
+// dir. Dev/test only (gated in search-provider.ts).
+async function fetchFixturePage(
+  url: string,
+  dir: string
+): Promise<FetchedPage | null> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const pages = JSON.parse(
+      await readFile(join(dir, "pages.json"), "utf8")
+    ) as Record<string, string>;
+    const file = pages[url];
+    if (!file) {
+      return null;
+    }
+    const text = await readFile(join(dir, file), "utf8");
+    return { url, text, retrievedAt: new Date().toISOString() };
+  } catch {
+    return null;
+  }
+}
+
 // Read-only by construction: GET only, no cookies, no auth forwarding.
 // Returns null on any failure — the pipeline treats an unfetchable page as
 // a miss, never as evidence (Iron Law 2).
 export async function fetchPageText(url: string): Promise<FetchedPage | null> {
+  const fixtures = fixturesDir();
+  if (fixtures) {
+    return await fetchFixturePage(url, fixtures);
+  }
+
   try {
     const parsed = new URL(url);
 

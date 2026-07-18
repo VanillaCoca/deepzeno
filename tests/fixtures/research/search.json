@@ -1,0 +1,26 @@
+{
+  "queries": {
+    "抽分": [
+      {
+        "url": "https://fixtures.zeno.test/ircc-update",
+        "title": "IRCC Express Entry policy update (fixture)"
+      }
+    ],
+    "Express Entry": [
+      {
+        "url": "https://fixtures.zeno.test/ircc-update",
+        "title": "IRCC Express Entry policy update (fixture)"
+      }
+    ]
+  },
+  "default": [
+    {
+      "url": "https://fixtures.zeno.test/ircc-update",
+      "title": "IRCC Express Entry policy update (fixture)"
+    },
+    {
+      "url": "https://fixtures.zeno.test/ircc-baseline",
+      "title": "IRCC Express Entry overview (fixture)"
+    }
+  ]
+}

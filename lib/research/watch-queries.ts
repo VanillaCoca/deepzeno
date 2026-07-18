@@ -295,6 +295,19 @@ export async function countRecentWatchtowerAlerts(
   return count ?? 0;
 }
 
+// Cron patrols run without a session; the project owner is the acting user
+// for candidate creation (all access checks then pass by construction).
+export async function getProjectOwnerId(
+  projectId: string
+): Promise<string | null> {
+  const db = getClient();
+  const row = await ensureResult<Record<string, unknown> | null>(
+    db.from("projects").select("user_id").eq("id", projectId).maybeSingle(),
+    "Failed to load project owner"
+  );
+  return row ? String(row.user_id) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Project agent settings
 // ---------------------------------------------------------------------------

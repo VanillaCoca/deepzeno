@@ -36,6 +36,7 @@ import {
 import { rankBySourceScore, scoreSource } from "./source-score";
 import { verifyQuote } from "./text";
 import { getProjectAgentSettings } from "./watch-queries";
+import { suggestWatchForNode } from "./watch-suggest";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -736,6 +737,15 @@ export async function runResearchPipeline({
         fetchAttempts,
         provider,
       },
+    });
+
+    // Iron Law 0: a researched node now carries dated web evidence — put it
+    // under automatic freshness patrol (Watchtower). Best-effort.
+    await suggestWatchForNode({
+      id: originNodeId,
+      projectId: node.projectId,
+      kind: node.kind,
+      title: node.title,
     });
 
     const finalRun: ResearchRun = {
