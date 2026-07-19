@@ -214,18 +214,26 @@ async function main() {
       .eq("project_id", project.id);
     check((evidence?.length ?? 0) >= 3, "3+ evidence rows", evidence?.length);
 
+    // select * so this works on both schema versions (next_directions is a
+    // later migration; naming it explicitly would error the whole query).
     const { data: watches } = await db
       .from("ir_watches")
-      .select("id,cadence,status,next_directions")
+      .select("*")
       .eq("project_id", project.id);
     if (watches?.length) {
       check(watches[0].status === "active", "watch is active");
-      check(
-        Array.isArray(watches[0].next_directions) &&
-          watches[0].next_directions.length === 3,
-        "watch carries 3 next_directions",
-        watches[0].next_directions
-      );
+      const directions = watches[0].next_directions;
+      if (directions === undefined) {
+        console.log(
+          "SKIP  next_directions check (20260719000001 migration pending)"
+        );
+      } else {
+        check(
+          Array.isArray(directions) && directions.length === 3,
+          "watch carries 3 next_directions",
+          directions
+        );
+      }
       check(
         (nodes ?? []).some(
           (n: { source_layer: string }) => n.source_layer === "watchtower"

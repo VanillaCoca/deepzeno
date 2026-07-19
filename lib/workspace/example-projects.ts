@@ -331,18 +331,13 @@ async function seedResearchArtifacts({
 
     // 2. Active watch (needs the watchtower migration; skip quietly without).
     if (entry.watch) {
-      const { error: watchError } = await client.from("ir_watches").insert({
+      const watchRow = {
         project_id: projectId,
         node_id: nodeId,
         origin: "zeno_suggested",
         reason: entry.watch.reason,
         cadence: entry.watch.cadence,
         status: "active",
-        // next_directions needs the 20260719000001 migration; the whole
-        // insert is already skipped-with-a-warning on older databases.
-        ...(entry.watch.nextDirections
-          ? { next_directions: entry.watch.nextDirections }
-          : {}),
         last_patrol_at: nowIso,
         ...(entry.alert
           ? { last_signal_at: nowIso, last_alert_at: nowIso }
@@ -350,7 +345,27 @@ async function seedResearchArtifacts({
         next_due_at: new Date(
           new Date(nowIso).getTime() + 24 * 3600 * 1000
         ).toISOString(),
-      });
+      };
+      // next_directions arrived in a later migration (20260719000001). Retry
+      // without it rather than losing the whole watch: the monitoring section,
+      // the radar badge and the exploration board all still work, and the
+      // board falls back to the run plan exactly as it does before a watch's
+      // first patrol.
+      let watchInsert = await client
+        .from("ir_watches")
+        .insert(
+          entry.watch.nextDirections
+            ? { ...watchRow, next_directions: entry.watch.nextDirections }
+            : watchRow
+        );
+      if (watchInsert.error && entry.watch.nextDirections) {
+        console.warn(
+          "[example-seed] next_directions unavailable; seeding watch without it",
+          watchInsert.error.message
+        );
+        watchInsert = await client.from("ir_watches").insert(watchRow);
+      }
+      const { error: watchError } = watchInsert;
       if (watchError) {
         console.warn(
           "[example-seed] watch skipped (watchtower migration pending?)",
