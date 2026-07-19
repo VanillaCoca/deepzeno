@@ -286,6 +286,7 @@ function LaneRow({
   strike,
   subNodeCount,
   trailing,
+  variant = "full",
   watchLabel,
   watched,
 }: {
@@ -300,13 +301,22 @@ function LaneRow({
   strike?: boolean;
   subNodeCount: number;
   trailing?: string;
+  // "cell" is the multi-column form (amendment №3): an equal-width column in
+  // a wrapping lane instead of one full-width row. Width comes only from the
+  // container, so wrapping is predictable and the edge overlay can measure it.
+  variant?: "full" | "cell";
   watchLabel?: string;
   watched?: boolean;
 }) {
+  const isCell = variant === "cell";
+
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--z-node-fill)]",
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-[var(--z-node-fill)]",
+        isCell
+          ? "min-w-[var(--z-cell-min-w)] max-w-[var(--z-cell-max-w)] shrink grow basis-[var(--z-cell-basis)] border border-[var(--z-topic-border)]"
+          : "w-full",
         selected && "bg-[var(--z-node-fill)]"
       )}
       data-testid={`truth-graph-node-${node.id}`}
@@ -329,13 +339,16 @@ function LaneRow({
       <SubNodeBadge count={subNodeCount} />
       <PremiseBadge count={premiseCount} />
       <WatchBadge label={watchLabel ?? ""} watched={watched ?? false} />
-      {trailing ? (
+      {trailing && !isCell ? (
         <span className="shrink-0 text-[11px] text-[var(--z-text-3)]">
           {trailing}
         </span>
       ) : null}
-      {/* Disclosure hint: rows open the detail card — say so visually. */}
-      <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--z-text-3)] opacity-60" />
+      {/* Disclosure hint: rows open the detail card — say so visually.
+          Cells are narrow; the affordance yields to the title there. */}
+      {isCell ? null : (
+        <ChevronRightIcon className="size-3.5 shrink-0 text-[var(--z-text-3)] opacity-60" />
+      )}
     </button>
   );
 }
@@ -478,7 +491,10 @@ function TopicSection({
             {t("graph.premisesFold", { count: lanes.premises.length })}
             <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
           </summary>
-          <div className="mt-1 space-y-0.5 pl-4">
+          {/* Multi-column (amendment №3): premises are what dependency
+              edges point AT, so laying them side by side puts converging
+              premises under one decision instead of down a long column. */}
+          <div className="mt-1 flex flex-wrap gap-x-[var(--z-cell-gap-x)] gap-y-[var(--z-cell-gap-y)] pl-4">
             {lanes.premises.map((node) => (
               <LaneRow
                 dimmed={isDimmed(node.id)}
@@ -490,6 +506,7 @@ function TopicSection({
                 onSelect={onSelect}
                 selected={selectedNodeId === node.id}
                 subNodeCount={subCount(node.id)}
+                variant="cell"
                 watched={isWatched(node.id)}
                 watchLabel={watchLabel}
               />
@@ -503,7 +520,10 @@ function TopicSection({
           <LaneHeading>
             {t("graph.laneSettled")} · {lanes.settled.length}
           </LaneHeading>
-          <div className="space-y-0.5">
+          {/* Multi-column (amendment №3): settled truths are the fastest-
+              growing lane, so columns keep the visible area near-constant as
+              a project ages. */}
+          <div className="flex flex-wrap gap-x-[var(--z-cell-gap-x)] gap-y-[var(--z-cell-gap-y)]">
             {lanes.settled.map((node) => (
               <LaneRow
                 dimmed={isDimmed(node.id)}
@@ -516,6 +536,7 @@ function TopicSection({
                 selected={selectedNodeId === node.id}
                 subNodeCount={subCount(node.id)}
                 trailing={node.confirmedAt?.slice(0, 10)}
+                variant="cell"
                 watched={isWatched(node.id)}
                 watchLabel={watchLabel}
               />

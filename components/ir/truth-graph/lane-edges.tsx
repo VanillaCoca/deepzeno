@@ -46,10 +46,28 @@ const GEOMETRY = {
   cornerRadius: 6,
   entrySpread: 8,
   arrowLength: 5,
+  // --z-lane-hlane-gap / --z-tight-arrow-gap / --z-cell-basis (×1.5).
+  hLaneGap: 6,
+  tightMaxGap: 44,
+  stepMaxJog: 330,
 };
 
 const ARROW_HALF_HEIGHT = 3;
 const LABEL_HEIGHT = 16;
+
+// Arrowhead triangle for each approach direction: tight edges arrive
+// horizontally (either way), step edges from above.
+function arrowPoints(
+  tip: { x: number; y: number },
+  direction: "right" | "left" | "down"
+) {
+  if (direction === "down") {
+    return `${tip.x},${tip.y} ${tip.x - ARROW_HALF_HEIGHT},${tip.y - GEOMETRY.arrowLength} ${tip.x + ARROW_HALF_HEIGHT},${tip.y - GEOMETRY.arrowLength}`;
+  }
+  const sign = direction === "right" ? 1 : -1;
+  const baseX = tip.x - sign * GEOMETRY.arrowLength;
+  return `${tip.x},${tip.y} ${baseX},${tip.y - ARROW_HALF_HEIGHT} ${baseX},${tip.y + ARROW_HALF_HEIGHT}`;
+}
 const CJK_PATTERN = /[　-鿿豈-﫿]/;
 
 // Width estimate for the hover label pill (10.5px font): CJK glyphs are
@@ -96,6 +114,7 @@ function measureRows(container: HTMLDivElement): MeasuredRows {
       top: rect.top - containerRect.top,
       height: rect.height,
       left: rect.left - containerRect.left,
+      width: rect.width,
     });
   }
 
@@ -103,10 +122,12 @@ function measureRows(container: HTMLDivElement): MeasuredRows {
     rows,
     height: container.scrollHeight,
     width: container.clientWidth,
+    // Width participates: in a wrapping multi-column lane a cell can change
+    // width (or swap columns) without the container's own box changing.
     signature: rows
       .map(
         (row) =>
-          `${row.id}:${Math.round(row.top)}:${Math.round(row.left)}:${Math.round(row.height)}`
+          `${row.id}:${Math.round(row.top)}:${Math.round(row.left)}:${Math.round(row.height)}:${Math.round(row.width)}`
       )
       .join("|"),
   };
@@ -185,8 +206,14 @@ export function LaneEdgesOverlay({
       frame = requestAnimationFrame(remeasure);
     });
     observer.observe(container);
+    // A measurement taken before the first layout settles (web fonts, lane
+    // wrapping) can come back empty, and nothing else would re-trigger one:
+    // the observer only fires again if the container's own box changes. One
+    // extra pass on the next frame closes that hole.
+    const settle = requestAnimationFrame(remeasure);
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(settle);
       observer.disconnect();
     };
   }, [containerRef, remeasure]);
@@ -240,7 +267,6 @@ export function LaneEdgesOverlay({
         const customLabel = flowEdge?.edge.label?.trim();
         const fallbackKey = flowEdge ? relationKey(flowEdge.edge.relation) : null;
         const label = customLabel || (fallbackKey ? t(fallbackKey) : null);
-        const badgeX = path.arrow.x - GEOMETRY.arrowLength - 8;
 
         return (
           <g
@@ -264,16 +290,17 @@ export function LaneEdgesOverlay({
             />
             <polygon
               fill={stroke}
-              points={`${path.arrow.x},${path.arrow.y} ${path.arrow.x - GEOMETRY.arrowLength},${path.arrow.y - ARROW_HALF_HEIGHT} ${path.arrow.x - GEOMETRY.arrowLength},${path.arrow.y + ARROW_HALF_HEIGHT}`}
+              points={arrowPoints(path.arrow, path.arrowDir)}
               style={{ transition: "fill var(--z-transition)" }}
             />
-            {path.entryIndex !== null ? (
+            {path.entryIndex !== null && path.badgeAt ? (
               // Convergence numbering (v1 §5.3): parallel premises entering
-              // one node read ①② top-to-bottom — visible without selection.
+              // one node read ①②③ in reading order — top-to-bottom, then
+              // left-to-right within a row (amendment №3).
               <g>
                 <circle
-                  cx={badgeX}
-                  cy={path.arrow.y}
+                  cx={path.badgeAt.x}
+                  cy={path.badgeAt.y}
                   fill="var(--z-edge-label-bg)"
                   r={6}
                   stroke={stroke}
@@ -286,8 +313,8 @@ export function LaneEdgesOverlay({
                   fill={active ? "var(--z-edge-label)" : "var(--z-text-3)"}
                   style={{ fontSize: "var(--z-font-badge)" }}
                   textAnchor="middle"
-                  x={badgeX}
-                  y={path.arrow.y + 3.5}
+                  x={path.badgeAt.x}
+                  y={path.badgeAt.y + 3.5}
                 >
                   {path.entryIndex}
                 </text>

@@ -134,6 +134,14 @@
   --z-lane-channel-gap: 9px; /* gutter 内相邻垂直通道间距 (窄于单链层 channel-gap) */
   --z-edge-label-bg: var(--z-card-bg); /* 悬停边标签底色 (压住线条) */
 
+  /* ---- 带内多列 (修订案 №3: 前提带/已定带一行多节点) --------------------- */
+  --z-cell-basis: 220px; /* 多列 cell 的 flex-basis (自然 2-3 列) */
+  --z-cell-min-w: 170px; /* cell 最小宽 (窄容器下退化为单列) */
+  --z-cell-max-w: 360px; /* cell 最大宽 (单列时不铺满到难读) */
+  --z-cell-gap-x: 20px; /* 同行 cell 列间距 (须容纳 tight 直箭头,见修订案 №3 §3) */
+  --z-cell-gap-y: 8px; /* 行间距 = 行间水平走廊高度下限 */
+  --z-lane-hlane-gap: 6px; /* 行间走廊内相邻水平 lane 间距 */
+
   /* ---- 聚焦三级透明度 (CSS opacity,过渡而非重绘,见规则文档 §4.6) ------- */
   --z-focus-full: 1; /* 聚焦节点 */
   --z-focus-related: 0.55; /* 直接相关 (一跳) */
