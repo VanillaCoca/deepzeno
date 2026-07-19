@@ -511,6 +511,9 @@ export const irWatch = pgTable("ir_watches", {
   status: text("status").notNull().default("active"),
   // Per-watch model override; null = the project's research model setting.
   modelId: text("model_id"),
+  // Patrol-proposed exploration directions for the next visit (nullable
+  // jsonb array of { query, goal }); see 20260719000001 migration.
+  nextDirections: jsonb("next_directions"),
   lastPatrolAt: timestamp("last_patrol_at", { withTimezone: true }),
   lastSignalAt: timestamp("last_signal_at", { withTimezone: true }),
   lastAlertAt: timestamp("last_alert_at", { withTimezone: true }),

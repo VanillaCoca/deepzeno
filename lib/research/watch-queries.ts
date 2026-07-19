@@ -13,9 +13,20 @@ import {
 // Types (pure module — importable from client components too)
 // ---------------------------------------------------------------------------
 
-import type { IRWatch, WatchOrigin, WatchStatus } from "./watch-types";
+import {
+  type ExplorationDirection,
+  type IRWatch,
+  isExplorationDirectionArray,
+  type WatchOrigin,
+  type WatchStatus,
+} from "./watch-types";
 
-export type { IRWatch, WatchOrigin, WatchStatus } from "./watch-types";
+export type {
+  ExplorationDirection,
+  IRWatch,
+  WatchOrigin,
+  WatchStatus,
+} from "./watch-types";
 
 // ---------------------------------------------------------------------------
 // Module-internal helpers (mirrors lib/research/queries.ts pattern)
@@ -96,6 +107,11 @@ function mapWatch(row: Record<string, unknown>): IRWatch {
     cadence: String(row.cadence) as PatrolCadence,
     status: String(row.status) as WatchStatus,
     modelId: typeof row.model_id === "string" ? row.model_id : null,
+    // Defensive parse: pre-migration rows have no column (undefined) and
+    // hand-edited jsonb may be malformed — both collapse to null.
+    nextDirections: isExplorationDirectionArray(row.next_directions)
+      ? row.next_directions
+      : null,
     lastPatrolAt: toNullableIso(row.last_patrol_at),
     lastSignalAt: toNullableIso(row.last_signal_at),
     lastAlertAt: toNullableIso(row.last_alert_at),
@@ -155,6 +171,7 @@ export async function updateWatch({
   lastSignalAt,
   lastAlertAt,
   nextDueAt,
+  nextDirections,
 }: {
   id: string;
   cadence?: PatrolCadence;
@@ -164,6 +181,7 @@ export async function updateWatch({
   lastSignalAt?: string;
   lastAlertAt?: string;
   nextDueAt?: string;
+  nextDirections?: ExplorationDirection[] | null;
 }): Promise<void> {
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -188,6 +206,9 @@ export async function updateWatch({
   }
   if (nextDueAt !== undefined) {
     patch.next_due_at = nextDueAt;
+  }
+  if (nextDirections !== undefined) {
+    patch.next_directions = nextDirections;
   }
 
   const db = getClient();

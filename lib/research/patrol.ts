@@ -37,6 +37,7 @@ import { scoreSource } from "./source-score";
 import { verifyQuote } from "./text";
 import {
   countRecentWatchtowerAlerts,
+  type ExplorationDirection,
   getProjectAgentSettings,
   getProjectOwnerId,
   getWatchById,
@@ -74,8 +75,10 @@ function isPlanIntentArray(
   );
 }
 
-// Reuse the persisted plan from the node's most recent completed run;
-// otherwise generate 1-2 fresh intents on the patrol model.
+// Reuse the persisted plan from the node's most recent completed run —
+// which, after a patrol has visited once, is that patrol's proposed
+// next_directions carried through the watch — otherwise generate 1-2 fresh
+// intents on the patrol model.
 async function resolveIntents({
   watch,
   nodeTitle,
@@ -86,7 +89,13 @@ async function resolveIntents({
   nodeTitle: string;
   preferredModelId: string | null;
   maxSearches: number;
-}): Promise<string[]> {
+}): Promise<ExplorationDirection[]> {
+  // A previous patrol's proposed directions take precedence: they were
+  // written specifically as "what to try NEXT" for this watch.
+  if (watch.nextDirections && watch.nextDirections.length > 0) {
+    return watch.nextDirections.slice(0, maxSearches);
+  }
+
   const runs = await listResearchRunsForNode({
     nodeId: watch.nodeId,
     limit: 5,
@@ -98,7 +107,9 @@ async function resolveIntents({
   )?.plan;
 
   if (isPlanIntentArray(donePlan)) {
-    return donePlan.slice(0, maxSearches).map((intent) => intent.query);
+    return donePlan
+      .slice(0, maxSearches)
+      .map((intent) => ({ query: intent.query, goal: intent.goal ?? "" }));
   }
 
   const result = await generateObjectResilient({
@@ -109,9 +120,49 @@ async function resolveIntents({
     schema: patrolIntentSchema,
     preferredModelId,
   });
-  return result.object.intents
-    .slice(0, maxSearches)
-    .map((intent) => intent.query);
+  return result.object.intents.slice(0, maxSearches);
+}
+
+const nextDirectionsSchema = z.object({
+  directions: z
+    .array(
+      z.object({ query: z.string().min(3).max(200), goal: z.string().max(300) })
+    )
+    .min(2)
+    .max(4),
+});
+
+// Propose fresh exploration angles for the NEXT patrol visit — the
+// "human-like research directions" surfaced on the hypothesis board.
+// Best-effort: returns undefined on any failure so a patrol never fails
+// because direction generation did.
+async function generateNextDirections({
+  nodeTitle,
+  priorDirections,
+  signalKind,
+  preferredModelId,
+}: {
+  nodeTitle: string;
+  priorDirections: ExplorationDirection[];
+  signalKind: string | null;
+  preferredModelId: string | null;
+}): Promise<ExplorationDirection[] | undefined> {
+  try {
+    const prior = priorDirections
+      .map((direction) => `- ${direction.query}`)
+      .join("\n");
+    const result = await generateObjectResilient({
+      task: "research_plan",
+      system:
+        "You are a curious human researcher keeping standing watch over one assumption. Propose 2-4 concrete exploration angles for your NEXT visit: at least one reverse-validation angle (actively hunt for counterexamples or evidence AGAINST the assumption), and prefer adjacent signals (ecosystem moves, competitors, upstream policy or data shifts) or one bold-but-checkable hunch over rerunning obvious queries. Never repeat a prior angle. Write each goal in the same language as the assumption title. Respond with a JSON object: {\"directions\": [{\"query\": \"web search query\", \"goal\": \"what this angle would reveal\"}]}.",
+      prompt: `## Watched assumption\n${nodeTitle}\n\n## Angles already tried\n${prior || "(none)"}\n\n## Last visit outcome\n${signalKind ? `signal detected: ${signalKind}` : "quiet — nothing new found"}\n\nPropose the next exploration directions as JSON.`,
+      schema: nextDirectionsSchema,
+      preferredModelId,
+    });
+    return result.object.directions.slice(0, 4);
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runPatrolForWatch({
@@ -194,10 +245,16 @@ export async function runPatrolForWatch({
       maxSearches: budget.maxSearches,
     });
 
+    // Persist the plan BEFORE searching: a patrol that dies mid-run still
+    // shows which angles it was pursuing on the exploration board.
+    await updateResearchRun({ id: run.id, plan: intents }).catch(() => {
+      // Plan persistence is observability, never a reason to fail a patrol.
+    });
+
     const urls = new Map<string, string | null>();
-    for (const query of intents.slice(0, budget.maxSearches)) {
+    for (const intent of intents.slice(0, budget.maxSearches)) {
       try {
-        const outcome = await searchWeb(query);
+        const outcome = await searchWeb(intent.query);
         for (const result of outcome.results) {
           if (!urls.has(result.url)) {
             urls.set(result.url, result.title);
@@ -255,13 +312,24 @@ export async function runPatrolForWatch({
       refetchedPages,
     });
 
+    // Propose where to look next, whatever the outcome — a quiet patrol is
+    // exactly when a fresh angle matters most. Undefined on failure, in
+    // which case the watch keeps its existing directions.
+    const nextDirections = await generateNextDirections({
+      nodeTitle: node.title,
+      priorDirections: intents,
+      signalKind: signal.signal ? signal.kind : null,
+      preferredModelId,
+    });
+    const directionsPatch = nextDirections ? { nextDirections } : {};
+
     if (!signal.signal) {
       await updateResearchRun({
         id: run.id,
         status: "done",
         finishedAt: new Date().toISOString(),
       });
-      await reschedule({});
+      await reschedule(directionsPatch);
       await logIREvent({
         projectId: watch.projectId,
         topicId: node.topicId,
@@ -291,7 +359,10 @@ export async function runPatrolForWatch({
         status: "done",
         finishedAt: new Date().toISOString(),
       });
-      await reschedule({ lastSignalAt: now.toISOString() });
+      await reschedule({
+        lastSignalAt: now.toISOString(),
+        ...directionsPatch,
+      });
       await logIREvent({
         projectId: watch.projectId,
         topicId: node.topicId,
@@ -371,6 +442,7 @@ export async function runPatrolForWatch({
     await reschedule({
       lastSignalAt: now.toISOString(),
       lastAlertAt: now.toISOString(),
+      ...directionsPatch,
     });
     await logIREvent({
       projectId: watch.projectId,
