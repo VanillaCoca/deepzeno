@@ -44,6 +44,11 @@
     --node-stroke-faint:#2A231F;
     --edge:#2C2420;
     --edge-live:#4A403A;
+    --green:#9DB88A;
+    --green-soft:rgba(157,184,138,.13);
+    --amber:#C9924B;
+    --amber-soft:rgba(201,146,75,.14);
+    --purple:#A79BD8;
     --radius:16px;
     --radius-sm:11px;
     --maxw:1120px;
@@ -79,6 +84,11 @@
     --node-stroke-faint:#E0D6C6;
     --edge:#DDD2C0;
     --edge-live:#C9BCA6;
+    --green:#5F7F49;
+    --green-soft:rgba(95,127,73,.10);
+    --amber:#9A6B22;
+    --amber-soft:rgba(154,107,34,.10);
+    --purple:#6F5FB0;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
@@ -176,6 +186,8 @@
   .cmp li .mk{font-family:var(--mono);padding-top:1px}
   .cmp.old li .mk{color:var(--faint)}
   .cmp.zeno li .mk{color:var(--text)}
+  .cmp svg{display:block;width:100%;height:auto;margin-top:20px}
+  .cmp-line{margin-top:16px;color:var(--dim);font-size:15px;line-height:1.55}
 
   /* vision art band */
   .vision{position:relative;padding:128px 0;text-align:center;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);overflow:hidden}
@@ -272,6 +284,50 @@
   .nlab.dim{fill:var(--dim)}
   .ntag{font-family:var(--mono);font-size:9px;letter-spacing:.08em}
 
+  /* hero truth-graph showcase (semantic bands, real-case data) */
+  .tg .band{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;fill:var(--faint)}
+  .tg .band.amber{fill:var(--amber)}
+  .tg .cell{fill:var(--bg-2);stroke:var(--node-stroke)}
+  .tg .cell.hypo{stroke-dasharray:5 4}
+  .tg .cell.truth{fill:var(--green-soft);stroke:var(--green)}
+  .tg .cell.open{fill:var(--amber-soft);stroke:var(--amber)}
+  .tg .cell.cand{fill:transparent;stroke:var(--purple);stroke-dasharray:4 3}
+  .tg .cell.alert{fill:var(--amber-soft);stroke:var(--amber)}
+  .tg .tag{font-family:var(--mono);font-size:9px;letter-spacing:.08em;fill:var(--faint)}
+  .tg .tag.green{fill:var(--green)}
+  .tg .tag.amber{fill:var(--amber)}
+  .tg .tag.purple{fill:var(--purple)}
+  .tg .txt{font-family:var(--sans);font-size:13px;fill:var(--text)}
+  .tg .txt.dim{fill:var(--dim)}
+  .tg .tg-e{stroke:var(--edge-live);stroke-width:1.4;fill:none}
+  .tg .tg-e.dashed{stroke-dasharray:5 4}
+  .tg .tg-e.amberline{stroke:var(--amber);stroke-dasharray:4 3;stroke-width:1.3}
+  .tg .arr{fill:var(--edge-live)}
+  .tg .arr.amber{fill:var(--amber)}
+  .tg .badge circle{fill:var(--bg-1);stroke:var(--edge-live);stroke-width:1.2}
+  .tg .badge text{font-family:var(--mono);font-size:10px;fill:var(--dim)}
+  .tg .elab rect{fill:var(--bg-1);stroke:var(--line)}
+  .tg .elab text{font-family:var(--mono);font-size:9.5px;fill:var(--dim)}
+  .tg .radar-dot{fill:var(--amber)}
+  .tg .radar-ring{fill:none;stroke:var(--amber);stroke-width:1.2;opacity:0;transform-box:fill-box;transform-origin:center}
+  /* entrance choreography — runs once the hero window reveals (.in) */
+  @keyframes tg-in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+  @keyframes tg-fade{from{opacity:0}to{opacity:1}}
+  @keyframes tg-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+  @keyframes tg-pop{0%{opacity:0;transform:scale(.4)}70%{transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
+  @keyframes tg-pulse{0%{transform:scale(.5);opacity:.75}80%,100%{transform:scale(2.6);opacity:0}}
+  .tg .tg-n,.tg .badge,.tg .elab{transform-box:fill-box;transform-origin:center}
+  .window.in .tg .tg-n{animation:tg-in .55s cubic-bezier(.2,.6,.2,1) backwards}
+  .window.in .tg .tg-e.solid{stroke-dasharray:1;stroke-dashoffset:0;animation:tg-draw .55s ease backwards}
+  .window.in .tg .tg-e.dashed,.window.in .tg .tg-e.amberline{animation:tg-fade .55s ease backwards}
+  .window.in .tg .badge,.window.in .tg .elab{animation:tg-pop .4s cubic-bezier(.2,.6,.3,1.4) backwards}
+  .window.in .tg .radar-ring{animation:tg-pulse 2.4s ease-out 2.4s infinite}
+  @media(prefers-reduced-motion:reduce){
+    .window.in .tg .tg-n,.window.in .tg .tg-e.solid,.window.in .tg .tg-e.dashed,
+    .window.in .tg .tg-e.amberline,.window.in .tg .badge,.window.in .tg .elab,
+    .window.in .tg .radar-ring{animation:none}
+  }
+
   /* partner / programs strip */
   .partners{border-top:1px solid var(--line-2)}
   .partners .wrap{padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:18px}
@@ -342,45 +398,75 @@
       <div class="window reveal">
         <div class="win-bar">
           <div class="win-dots"><span></span><span></span><span></span></div>
-          <div class="win-title">project · <b>where-to-put-my-money</b></div>
+          <div class="win-title">project · <b>ai-coding-product-strategy</b></div>
         </div>
         <div class="win-body">
-          <svg viewBox="0 0 960 380" width="100%" role="img" aria-label="A project graph: one vague question branching into connected topics, some confirmed as truth, some pending.">
-            <path class="edge-live" d="M150 92 C 260 92, 250 150, 330 150" />
-            <path class="edge-live" d="M150 92 C 250 92, 250 250, 330 250" />
-            <path class="edge-live" d="M470 150 C 560 150, 560 92, 650 92" />
-            <path class="edge" d="M470 250 C 560 250, 560 200, 650 200" />
-            <path class="edge" d="M790 92 C 850 92, 840 300, 720 312" />
-            <g>
-              <rect class="node-truth" x="30" y="68" width="240" height="48" rx="11"/>
-              <text class="ntag" x="46" y="86" fill="currentColor">TRUTH</text>
-              <text class="nlab" x="46" y="103">"How do I get stable returns?"</text>
+          <svg class="tg" viewBox="0 0 960 404" width="100%" role="img" aria-label="A real decision graph: two premises support a confirmed north-star metric, an open question waits with a candidate answer, and ZENO's watchtower flags a new signal against a watched assumption.">
+            <!-- band: premises -->
+            <text class="band" x="40" y="28">PREMISES — WHAT THIS RESTS ON</text>
+            <g class="tg-n" style="animation-delay:.15s">
+              <rect class="cell hypo" x="40" y="40" width="420" height="54" rx="11"/>
+              <text class="tag amber" x="56" y="60">ASSUMPTION · WATCHED</text>
+              <text class="txt" x="56" y="80">Serious builders are the target users</text>
+              <circle class="radar-dot" cx="443" cy="55" r="3"/>
+              <circle class="radar-ring" cx="443" cy="55" r="8"/>
             </g>
-            <g>
-              <rect class="node-truth" x="330" y="126" width="140" height="48" rx="11"/>
-              <text class="ntag" x="346" y="144" fill="currentColor">TRUTH</text>
-              <text class="nlab" x="346" y="161">Currency risk</text>
+            <g class="tg-n" style="animation-delay:.3s">
+              <rect class="cell" x="500" y="40" width="420" height="54" rx="11"/>
+              <text class="tag" x="516" y="60">CONSTRAINT</text>
+              <text class="txt" x="516" y="80">Apps deploy to the platform's cloud</text>
             </g>
-            <g>
-              <rect class="node-cand" x="330" y="226" width="160" height="48" rx="11"/>
-              <text class="ntag" x="346" y="244" fill="#9A9AA0">CANDIDATE</text>
-              <text class="nlab dim" x="346" y="261">Move assets abroad</text>
+
+            <!-- band: settled -->
+            <text class="band" x="40" y="138">SETTLED — CONFIRMED TRUTH</text>
+            <g class="tg-n" style="animation-delay:.5s">
+              <rect class="cell truth" x="40" y="150" width="420" height="54" rx="11"/>
+              <text class="tag green" x="56" y="170">TRUTH · CONFIRMED</text>
+              <text class="txt" x="56" y="190">North star: % of apps still iterating at day 30</text>
             </g>
-            <g>
-              <rect class="node-cand" x="650" y="68" width="140" height="48" rx="11"/>
-              <text class="ntag" x="666" y="86" fill="#9A9AA0">CANDIDATE</text>
-              <text class="nlab dim" x="666" y="103">Second residency</text>
+            <g class="tg-n" style="animation-delay:.65s">
+              <rect class="cell truth" x="500" y="150" width="420" height="54" rx="11"/>
+              <text class="tag green" x="516" y="170">TRUTH · CONFIRMED</text>
+              <text class="txt" x="516" y="190">The moat is the post-deploy lifecycle</text>
             </g>
-            <g>
-              <rect class="node-idea" x="650" y="178" width="150" height="46" rx="11"/>
-              <text class="ntag" x="666" y="195" fill="#5E5E64">IDEA</text>
-              <text class="nlab dim" x="666" y="212">Tax exposure</text>
+
+            <!-- dependency edges: premises → settled -->
+            <path class="tg-e dashed" style="animation-delay:1.25s" d="M150 94 L150 141"/>
+            <polygon class="arr tg-n" style="animation-delay:1.25s" points="150,148 146,141 154,141"/>
+            <path class="tg-e solid" pathLength="1" style="animation-delay:1.4s" d="M610 94 L610 116 Q610 122 604 122 L296 122 Q290 122 290 128 L290 141"/>
+            <polygon class="arr tg-n" style="animation-delay:1.55s" points="290,148 286,141 294,141"/>
+            <path class="tg-e solid" pathLength="1" style="animation-delay:1.55s" d="M760 94 L760 141"/>
+            <polygon class="arr tg-n" style="animation-delay:1.7s" points="760,148 756,141 764,141"/>
+            <g class="badge" style="animation-delay:2s"><circle cx="150" cy="126" r="8"/><text x="150" y="129.5" text-anchor="middle">1</text></g>
+            <g class="badge" style="animation-delay:2.1s"><circle cx="290" cy="132" r="8"/><text x="290" y="135.5" text-anchor="middle">2</text></g>
+            <g class="elab" style="animation-delay:1.9s">
+              <rect x="380" y="104" width="164" height="19" rx="5"/>
+              <text x="390" y="117">only if usage stays serious</text>
             </g>
-            <g>
-              <rect class="node-idea" x="600" y="292" width="190" height="46" rx="11"/>
-              <text class="ntag" x="616" y="309" fill="#5E5E64">OPEN QUESTION</text>
-              <text class="nlab dim" x="616" y="326">Where would I actually live?</text>
+
+            <!-- band: open -->
+            <text class="band amber" x="40" y="248">OPEN — NEEDS YOU</text>
+            <g class="tg-n" style="animation-delay:.85s">
+              <rect class="cell open" x="40" y="260" width="560" height="54" rx="11"/>
+              <text class="tag amber" x="56" y="280">OPEN QUESTION</text>
+              <text class="txt" x="56" y="300">Where do acceptance criteria come from?</text>
             </g>
+            <path class="tg-e" style="animation-delay:1s" d="M58 314 L58 349 L68 349" opacity=".7"/>
+            <g class="tg-n" style="animation-delay:1s">
+              <rect class="cell cand" x="76" y="326" width="484" height="46" rx="11"/>
+              <text class="tag purple" x="92" y="345">CANDIDATE — AWAITING YOU</text>
+              <text class="txt dim" x="92" y="363">Distill criteria from the requirement chat</text>
+            </g>
+
+            <!-- watchtower alert: the agent came back with a new signal -->
+            <g class="tg-n" style="animation-delay:2.9s">
+              <rect class="cell alert" x="620" y="326" width="300" height="64" rx="11"/>
+              <text class="tag amber" x="636" y="346">WATCHTOWER · OVERNIGHT PATROL</text>
+              <text class="txt" x="636" y="364">New signal on this assumption —</text>
+              <text class="txt dim" x="636" y="381">revisit before it hardens?</text>
+            </g>
+            <path class="tg-e amberline" style="animation-delay:3.2s" d="M770 326 L770 242 Q770 236 764 236 L30 236 Q24 236 24 230 L24 73 Q24 67 30 67 L33 67"/>
+            <polygon class="arr amber tg-n" style="animation-delay:3.4s" points="40,67 33,63 33,71"/>
           </svg>
         </div>
       </div>
@@ -427,22 +513,38 @@
         <div class="cmp old reveal">
           <div class="tag">Single-shot tools</div>
           <h3>Answer, then forget</h3>
-          <ul>
-            <li><span class="mk">—</span>Every question starts from zero.</li>
-            <li><span class="mk">—</span>The structure of your inquiry lives only in your head.</li>
-            <li><span class="mk">—</span>Findings scatter across disconnected chats.</li>
-            <li><span class="mk">—</span>When the goal turns, the thread breaks.</li>
-          </ul>
+          <svg viewBox="0 0 340 150" aria-hidden="true">
+            <rect class="node-pill" x="16" y="12" width="150" height="30" rx="9"/>
+            <text class="nlab dim" x="32" y="31" font-size="12">chat · monday</text>
+            <path class="edge" d="M60 42 L60 56" stroke-dasharray="3 3"/>
+            <text x="60" y="66" text-anchor="middle" font-size="11" fill="var(--faint)" font-family="var(--mono)">×</text>
+            <rect class="node-pill" x="16" y="72" width="180" height="30" rx="9" opacity=".75"/>
+            <text class="nlab dim" x="32" y="91" font-size="12">chat · wednesday</text>
+            <path class="edge" d="M60 102 L60 116" stroke-dasharray="3 3"/>
+            <text x="60" y="126" text-anchor="middle" font-size="11" fill="var(--faint)" font-family="var(--mono)">×</text>
+            <rect class="node-pill" x="16" y="120" width="150" height="30" rx="9" opacity=".45"/>
+            <text class="nlab dim" x="32" y="139" font-size="12" opacity=".8">chat · friday…</text>
+            <text x="250" y="80" text-anchor="middle" font-size="12" fill="var(--faint)" font-family="var(--mono)">no thread</text>
+          </svg>
+          <p class="cmp-line">Every chat starts from zero — the structure of your inquiry lives only in your head.</p>
         </div>
         <div class="cmp zeno reveal">
           <div class="tag">ZENO</div>
           <h3>One project that holds the whole journey</h3>
-          <ul>
-            <li><span class="mk">→</span>A vague idea is caught and followed wherever it turns.</li>
-            <li><span class="mk">→</span>Each branch gets investigated, not re-derived.</li>
-            <li><span class="mk">→</span>What you confirm accumulates as durable truth.</li>
-            <li><span class="mk">→</span>The thread holds even when the goal moves 180°.</li>
-          </ul>
+          <svg viewBox="0 0 340 150" aria-hidden="true">
+            <path class="edge-live" d="M84 42 L84 60 Q84 66 90 66 L150 66"/>
+            <path class="edge-live" d="M84 42 L84 112 Q84 118 90 118 L150 118"/>
+            <path class="edge" d="M262 66 L286 66"/>
+            <rect class="node-truth" x="16" y="12" width="136" height="30" rx="9"/>
+            <text class="nlab" x="32" y="31" font-size="12">first worry</text>
+            <rect x="150" y="52" width="112" height="28" rx="9" fill="var(--green-soft)" stroke="var(--green)"/>
+            <text class="nlab" x="164" y="70" font-size="12">confirmed ✓</text>
+            <rect x="286" y="52" width="38" height="28" rx="9" fill="var(--amber-soft)" stroke="var(--amber)"/>
+            <text x="305" y="70" text-anchor="middle" font-size="12" fill="var(--amber)">?</text>
+            <rect class="node-cand" x="150" y="104" width="130" height="28" rx="9"/>
+            <text class="nlab dim" x="164" y="122" font-size="12">candidate…</text>
+          </svg>
+          <p class="cmp-line">Branches stay connected — what you confirm accumulates as durable, reusable truth.</p>
         </div>
       </div>
     </div>
@@ -574,12 +676,12 @@
         <h2>Built around the project,<br/>not the chat.</h2>
       </div>
       <div class="bgrid">
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div><h4>A project, not a question</h4><p>Topics, findings, and open questions in one place — not a new chat every time.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h4>Confirmed before it's truth</h4><p>Nothing is saved as true until you confirm it. ZENO never writes truth on its own.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="9" r="2.4"/><circle cx="9" cy="18" r="2.4"/><path d="M8 7l8 1M8 8l1 8"/></svg></div><h4>A graph you can read</h4><p>See how every branch connects back to the question that spawned it — at a glance.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/></svg></div><h4>Context that inherits</h4><p>Every new session already knows what you decided and why. No pasting context.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></div><h4>Re-research on a schedule</h4><p>ZENO can re-check key assumptions on a schedule and flag when one stops holding.</p></div>
-        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="m8 16-4-4 4-4M16 8l4 4-4 4M14 5l-4 14"/></svg></div><h4>Feeds coding agents</h4><p>When it's time to build, the same confirmed truth feeds Claude Code, Cursor, or Codex via MCP.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg></div><h4>A project, not a question</h4><p>Every topic and finding lives in one place.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div><h4>Confirmed before it's truth</h4><p>Nothing becomes truth until you confirm it.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="9" r="2.4"/><circle cx="9" cy="18" r="2.4"/><path d="M8 7l8 1M8 8l1 8"/></svg></div><h4>A graph you can read</h4><p>Every branch traces back to its question.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2M4 7h16M4 7v12a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V7"/></svg></div><h4>Context that inherits</h4><p>New sessions start knowing what you decided.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8.5"/></svg></div><h4>Re-research on a schedule</h4><p>Watchtower re-checks assumptions as the world moves.</p></div>
+        <div class="bcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="m8 16-4-4 4-4M16 8l4 4-4 4M14 5l-4 14"/></svg></div><h4>Feeds coding agents</h4><p>Confirmed truth feeds Claude Code &amp; Cursor via MCP.</p></div>
       </div>
     </div>
   </section>
