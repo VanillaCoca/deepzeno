@@ -37,6 +37,14 @@ export const watchtowerMessages: LocaleMessages = {
       "Signal noted, alert withheld (cooldown / weekly cap).",
     "wt.patrolFailed": "Patrol failed: {detail}",
     "wt.watchedBadge": "Watched by Zeno",
+    "wt.directions": "Exploration",
+    "wt.directionsTitle": "Exploration directions",
+    "wt.directionsHint":
+      "Where Zeno plans to look next for this assumption, and every angle it has already tried.",
+    "wt.directionsUpcoming": "Next",
+    "wt.directionsTried": "Already explored",
+    "wt.directionsEmpty":
+      "No directions yet — they appear after the first patrol.",
   },
   zh: {
     "wt.settingsTitle": "调研 Agent",
@@ -71,6 +79,13 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.patrolSuppressed": "已记录信号,按稀缺规则暂不告警(冷却/每周上限)。",
     "wt.patrolFailed": "巡检失败:{detail}",
     "wt.watchedBadge": "Zeno 监测中",
+    "wt.directions": "探索方向",
+    "wt.directionsTitle": "探索方向",
+    "wt.directionsTried": "已探索过的方向",
+    "wt.directionsHint":
+      "Zeno 接下来打算从哪些角度追查这个前提,以及它已经试过的所有方向。",
+    "wt.directionsUpcoming": "即将探索",
+    "wt.directionsEmpty": "暂无方向——首次巡检后会在这里出现。",
   },
   fr: {
     "wt.settingsTitle": "Agent de recherche",
@@ -107,5 +122,13 @@ export const watchtowerMessages: LocaleMessages = {
       "Signal noté, alerte retenue (refroidissement / plafond hebdomadaire).",
     "wt.patrolFailed": "Échec de la patrouille : {detail}",
     "wt.watchedBadge": "Surveillé par Zeno",
+    "wt.directions": "Exploration",
+    "wt.directionsTitle": "Directions d'exploration",
+    "wt.directionsHint":
+      "Où Zeno compte chercher ensuite pour cette hypothèse, et tous les angles déjà tentés.",
+    "wt.directionsUpcoming": "À venir",
+    "wt.directionsTried": "Déjà exploré",
+    "wt.directionsEmpty":
+      "Aucune direction pour l'instant — elles apparaissent après la première patrouille.",
   },
 };

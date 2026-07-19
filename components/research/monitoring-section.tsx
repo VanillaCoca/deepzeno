@@ -9,6 +9,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { toast } from "@/components/chat/toast";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { ExplorationDirections } from "@/components/research/exploration-directions";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -20,6 +21,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import type { IRNode } from "@/lib/ir/types";
 import type { PatrolCadence } from "@/lib/research/agent-settings";
+import type { ExplorationDirection } from "@/lib/research/watch-types";
 import { fetcher } from "@/lib/utils";
 
 // Local mirror of lib/research/watch-queries.ts types (server-only module).
@@ -31,6 +33,7 @@ type WatchPayload = {
     cadence: PatrolCadence;
     reason: string;
     lastPatrolAt: string | null;
+    nextDirections: ExplorationDirection[] | null;
   }>;
   not_migrated?: boolean;
 };
@@ -214,6 +217,10 @@ export function MonitoringSection({
                   })
                 : t("wt.neverPatrolled")}
             </span>
+            <ExplorationDirections
+              directions={watch.nextDirections ?? null}
+              nodeId={node.id}
+            />
             <Button
               data-testid="monitoring-patrol-now"
               disabled={isPatrolling || watch.status !== "active"}
