@@ -11,7 +11,7 @@ const OPTIONS: LaneEdgeGeometryOptions = {
   gutterWidth: 40,
   channelGap: 9,
   cornerRadius: 6,
-  entrySpread: 8,
+  entrySpread: 14,
   arrowLength: 5,
   hLaneGap: 6,
   tightMaxGap: 44,
@@ -32,8 +32,36 @@ function row(
 // First coordinate pair of an SVG path ("M x y ...").
 function startPoint(path: string) {
   const match = path.match(/^M (-?[\d.]+) (-?[\d.]+)/);
+  // biome-ignore lint/suspicious/noMisplacedAssertion: shared helper, always called from within it() blocks.
   assert.ok(match, `path should start with a move command: ${path}`);
   return { x: Number(match[1]), y: Number(match[2]) };
+}
+
+// Every coordinate pair in a path (M/L endpoints and Q control/end points).
+function pathPoints(path: string) {
+  const points: Array<{ x: number; y: number }> = [];
+  const numbers = path.match(/-?[\d.]+/g) ?? [];
+  for (let index = 0; index + 1 < numbers.length; index += 2) {
+    points.push({ x: Number(numbers[index]), y: Number(numbers[index + 1]) });
+  }
+  return points;
+}
+
+// No path vertex may sit inside a box's interior — the amendment №3
+// "edges never cross a box" invariant, checked on the polyline's corners.
+function assertAvoidsBox(path: string, box: LaneRowBox, edgeId: string) {
+  for (const point of pathPoints(path)) {
+    const inside =
+      point.x > box.left + 1 &&
+      point.x < box.left + box.width - 1 &&
+      point.y > box.top + 1 &&
+      point.y < box.top + box.height - 1;
+    // biome-ignore lint/suspicious/noMisplacedAssertion: shared helper, always called from within it() blocks.
+    assert.ok(
+      !inside,
+      `${edgeId}: point (${point.x}, ${point.y}) crosses box ${box.id}`
+    );
+  }
 }
 
 function byEdgeId(paths: LaneEdgePath[]) {
@@ -163,7 +191,10 @@ describe("computeLaneEdgePaths", () => {
       options: OPTIONS,
     });
     assert.equal(path.kind, "gutter");
-    assert.equal(path.arrowDir, "right");
+    // "far" is not its row's leftmost cell, so a left-edge entry would run
+    // straight through "left" — it must descend into the top edge instead.
+    assert.equal(path.arrowDir, "down");
+    assertAvoidsBox(path.path, row("left", 0, 40, 200), "wide");
   });
 
   it("falls back to the gutter when a third cell sits between the endpoints", () => {
@@ -249,6 +280,86 @@ describe("computeLaneEdgePaths", () => {
     assert.ok(laneY(a) !== "" && laneY(b) !== "");
   });
 
+  it("enters a non-leftmost child from the top, never crossing its row-mates", () => {
+    // The screenshot bug: premises feeding a column-1 settled cell used to
+    // enter from the left, running the horizontal segment straight through
+    // the column-0 cell — which read as a strike-through on that node.
+    const colA = row("colA", 160, 40, 300);
+    const paths = computeLaneEdgePaths({
+      rows: [
+        row("prem1", 0, 40, 640),
+        row("prem2", 80, 40, 640),
+        colA,
+        row("colB", 160, 360, 300),
+      ],
+      edges: [
+        { id: "e1", parentId: "prem1", childId: "colB" },
+        { id: "e2", parentId: "prem2", childId: "colB" },
+      ],
+      options: OPTIONS,
+    });
+    const map = byEdgeId(paths);
+    const e1 = map.get("e1") as LaneEdgePath;
+    const e2 = map.get("e2") as LaneEdgePath;
+    // prem1 is two rows up → gutter; prem2 is directly above → step. Both
+    // must land on colB's TOP edge and stay clear of its row-mate.
+    assert.equal(e1.kind, "gutter");
+    assert.equal(e2.kind, "step");
+    for (const [id, path] of [
+      ["e1", e1],
+      ["e2", e2],
+    ] as const) {
+      assert.equal(path.arrowDir, "down", id);
+      // Arrow lands on colB's top edge, inside its horizontal extent.
+      assert.ok(path.arrow.x >= 360 && path.arrow.x <= 660, id);
+      assert.ok(Math.abs(path.arrow.y - 160) <= 3, id);
+      assertAvoidsBox(path.path, colA, id);
+    }
+    // Mixed-route entries still converge into one ①② pool: distinct x
+    // positions, numbered top-to-bottom by premise position.
+    assert.notEqual(e1.arrow.x, e2.arrow.x);
+    assert.equal(e1.entryIndex, 1);
+    assert.equal(e2.entryIndex, 2);
+  });
+
+  it("exits a non-leftmost parent through its bottom edge", () => {
+    // A full-width row between parent and child forces the gutter route.
+    const colA = row("colA", 0, 40, 300);
+    const [path] = computeLaneEdgePaths({
+      rows: [
+        colA,
+        row("colB", 0, 360, 300),
+        row("mid", 100, 40, 640),
+        row("child", 200, 40, 640),
+      ],
+      edges: [{ id: "exit", parentId: "colB", childId: "child" }],
+      options: OPTIONS,
+    }).filter((candidate) => candidate.edgeId === "exit");
+    assert.equal(path.kind, "gutter");
+    const start = startPoint(path.path);
+    // Leaves colB's bottom edge (not its left edge, which would cross colA).
+    assert.ok(start.x >= 360 && start.x <= 660);
+    assert.ok(Math.abs(start.y - 32) <= 1);
+    assertAvoidsBox(path.path, colA, "exit");
+    assertAvoidsBox(path.path, row("mid", 100, 40, 640), "exit");
+  });
+
+  it("enters a non-leftmost child from below on upward edges", () => {
+    const colA = row("colA", 0, 40, 300);
+    const [path] = computeLaneEdgePaths({
+      rows: [colA, row("colB", 0, 360, 300), row("late", 200, 40, 640)],
+      edges: [{ id: "up", parentId: "late", childId: "colB" }],
+      options: OPTIONS,
+    });
+    assert.equal(path.kind, "gutter");
+    assert.equal(path.arrowDir, "up");
+    // Arrow points up into colB's bottom edge.
+    assert.ok(path.arrow.x >= 360 && path.arrow.x <= 660);
+    assert.ok(Math.abs(path.arrow.y - 34) <= 1);
+    assertAvoidsBox(path.path, colA, "up");
+    assert.ok(!path.path.includes("NaN"));
+  });
+
   it("draws upward edges (child above parent) without NaN coordinates", () => {
     const [path] = computeLaneEdgePaths({
       rows: [row("late", 300), row("early", 0)],
@@ -257,6 +368,75 @@ describe("computeLaneEdgePaths", () => {
     });
     assert.ok(!path.path.includes("NaN"));
     assert.ok(path.arrow.y < 300);
+  });
+
+  it("keeps every edge clear of every box in the coze-example layout", () => {
+    // Faithful desktop replica of the flagship example's main topic — the
+    // exact layout the overlap screenshot came from: five premises in two
+    // columns, two settled cells side by side, three premises converging on
+    // the column-1 settled cell, two more on the column-0 cell.
+    const boxes = [
+      // Premises band, 2-col (rows at 0 / 42 / 84; cells 344px wide).
+      row("c-cloud", 0, 40, 344, 34),
+      row("c-selfrescue", 0, 404, 344, 34),
+      row("h-serious", 42, 40, 344, 34),
+      row("h-trust", 42, 404, 344, 34),
+      row("h-commodity", 84, 40, 708, 34),
+      // Settled band, 2-col (heading gap above).
+      row("d-northstar", 152, 40, 344, 34),
+      row("d-moat", 152, 404, 344, 34),
+      // Frontier below, full width.
+      row("q-form", 220, 40, 708, 88),
+    ];
+    const edges = [
+      { id: "e-ns-1", parentId: "h-serious", childId: "d-northstar" },
+      { id: "e-ns-2", parentId: "h-commodity", childId: "d-northstar" },
+      { id: "e-moat-1", parentId: "h-commodity", childId: "d-moat" },
+      { id: "e-moat-2", parentId: "c-cloud", childId: "d-moat" },
+      { id: "e-moat-3", parentId: "c-selfrescue", childId: "d-moat" },
+      { id: "e-q", parentId: "d-northstar", childId: "q-form" },
+    ];
+    const paths = computeLaneEdgePaths({
+      rows: boxes,
+      edges,
+      options: OPTIONS,
+    });
+    assert.equal(paths.length, edges.length);
+
+    for (const path of paths) {
+      assert.ok(!path.path.includes("NaN"), path.edgeId);
+      for (const box of boxes) {
+        if (box.id === path.parentId || box.id === path.childId) {
+          continue;
+        }
+        assertAvoidsBox(path.path, box, path.edgeId);
+      }
+    }
+
+    // The column-1 convergence that produced the screenshot: all three
+    // entries land on d-moat's own edges, numbered in reading order.
+    const map = byEdgeId(paths);
+    const moatEntries = ["e-moat-1", "e-moat-2", "e-moat-3"].map(
+      (id) => map.get(id) as LaneEdgePath
+    );
+    for (const entry of moatEntries) {
+      assert.ok(entry.arrow.x >= 404 && entry.arrow.x <= 748, entry.edgeId);
+    }
+    const indices = moatEntries.map((entry) => entry.entryIndex).sort();
+    assert.deepEqual(indices, [1, 2, 3]);
+    // Badges must not overlap: pairwise distance ≥ badge diameter (12px).
+    for (let a = 0; a < moatEntries.length; a += 1) {
+      for (let b = a + 1; b < moatEntries.length; b += 1) {
+        const pa = moatEntries[a].badgeAt;
+        const pb = moatEntries[b].badgeAt;
+        assert.ok(pa && pb);
+        const distance = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+        assert.ok(
+          distance >= 12,
+          `badges ${moatEntries[a].edgeId}/${moatEntries[b].edgeId} overlap (${distance}px)`
+        );
+      }
+    }
   });
 
   it("never emits NaN across a mixed multi-column layout", () => {

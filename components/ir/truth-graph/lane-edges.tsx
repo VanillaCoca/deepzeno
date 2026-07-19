@@ -4,8 +4,9 @@
 // №2). An absolutely-positioned SVG inside the lanes container draws
 // orthogonal arrows from each premise / earlier event to the rows that build
 // on it — visible without selecting anything, quiet enough to never read as a
-// hairball: gutter channels, --z-line strokes, labels only on hover or when
-// the edge belongs to the selected chain.
+// hairball: gutter channels, --z-line strokes. Labels are HOVER-ONLY — the
+// selected chain's relationships are already spelled out in the Chain card,
+// and persistent pills stack illegibly when several premises converge.
 
 import {
   type RefObject,
@@ -44,7 +45,8 @@ const GEOMETRY = {
   gutterWidth: 40,
   channelGap: 9,
   cornerRadius: 6,
-  entrySpread: 8,
+  // ≥ the ①② badge diameter (12px), so converging badges never overlap.
+  entrySpread: 14,
   arrowLength: 5,
   // --z-lane-hlane-gap / --z-tight-arrow-gap / --z-cell-basis (×1.5).
   hLaneGap: 6,
@@ -56,13 +58,17 @@ const ARROW_HALF_HEIGHT = 3;
 const LABEL_HEIGHT = 16;
 
 // Arrowhead triangle for each approach direction: tight edges arrive
-// horizontally (either way), step edges from above.
+// horizontally (either way), corridor entries from above or below.
 function arrowPoints(
   tip: { x: number; y: number },
-  direction: "right" | "left" | "down"
+  direction: "right" | "left" | "down" | "up"
 ) {
-  if (direction === "down") {
-    return `${tip.x},${tip.y} ${tip.x - ARROW_HALF_HEIGHT},${tip.y - GEOMETRY.arrowLength} ${tip.x + ARROW_HALF_HEIGHT},${tip.y - GEOMETRY.arrowLength}`;
+  if (direction === "down" || direction === "up") {
+    const baseY =
+      direction === "down"
+        ? tip.y - GEOMETRY.arrowLength
+        : tip.y + GEOMETRY.arrowLength;
+    return `${tip.x},${tip.y} ${tip.x - ARROW_HALF_HEIGHT},${baseY} ${tip.x + ARROW_HALF_HEIGHT},${baseY}`;
   }
   const sign = direction === "right" ? 1 : -1;
   const baseX = tip.x - sign * GEOMETRY.arrowLength;
@@ -258,6 +264,9 @@ export function LaneEdgesOverlay({
           hoveredEdgeId === path.edgeId ||
           hoveredNodeId === path.parentId ||
           hoveredNodeId === path.childId;
+        // Stroke highlight follows the chain; the label pill is hover-only
+        // (persistent pills stack when several premises converge on one node,
+        // and the Chain card already lists every chain relationship).
         const active = isHovered || (hasSelection && onChain);
         const dimmed = hasSelection && !onChain && !isHovered;
         // A hypothesis premise is by nature unsettled → dashed (v1 §4.3);
@@ -265,7 +274,9 @@ export function LaneEdgesOverlay({
         const dashed = parentNode?.kind === "hypothesis";
         const stroke = active ? "var(--z-arrow)" : "var(--z-line)";
         const customLabel = flowEdge?.edge.label?.trim();
-        const fallbackKey = flowEdge ? relationKey(flowEdge.edge.relation) : null;
+        const fallbackKey = flowEdge
+          ? relationKey(flowEdge.edge.relation)
+          : null;
         const label = customLabel || (fallbackKey ? t(fallbackKey) : null);
 
         return (
@@ -320,28 +331,41 @@ export function LaneEdgesOverlay({
                 </text>
               </g>
             ) : null}
-            {label && active ? (
-              <g>
-                <rect
-                  fill="var(--z-edge-label-bg)"
-                  height={LABEL_HEIGHT}
-                  rx={4}
-                  stroke="var(--z-line)"
-                  style={{ strokeWidth: 0.5 }}
-                  width={labelPillWidth(label)}
-                  x={path.labelAt.x}
-                  y={path.labelAt.y - LABEL_HEIGHT + 4}
-                />
-                <text
-                  fill="var(--z-edge-label)"
-                  style={{ fontSize: "var(--z-font-edge)" }}
-                  x={path.labelAt.x + 6}
-                  y={path.labelAt.y}
-                >
-                  {label}
-                </text>
-              </g>
-            ) : null}
+            {label && isHovered
+              ? (() => {
+                  // Vertical arrows carry labelAt as the pill's horizontal
+                  // CENTRE (geometry cannot know the rendered pill width);
+                  // horizontal arrows keep it as the pill's left edge.
+                  const pillWidth = labelPillWidth(label);
+                  const vertical =
+                    path.arrowDir === "down" || path.arrowDir === "up";
+                  const pillX = vertical
+                    ? Math.max(path.labelAt.x - pillWidth / 2, 2)
+                    : path.labelAt.x;
+                  return (
+                    <g>
+                      <rect
+                        fill="var(--z-edge-label-bg)"
+                        height={LABEL_HEIGHT}
+                        rx={4}
+                        stroke="var(--z-line)"
+                        style={{ strokeWidth: 0.5 }}
+                        width={pillWidth}
+                        x={pillX}
+                        y={path.labelAt.y - LABEL_HEIGHT + 4}
+                      />
+                      <text
+                        fill="var(--z-edge-label)"
+                        style={{ fontSize: "var(--z-font-edge)" }}
+                        x={pillX + 6}
+                        y={path.labelAt.y}
+                      >
+                        {label}
+                      </text>
+                    </g>
+                  );
+                })()
+              : null}
             {/* Invisible wide twin — the hover target for the edge itself. */}
             {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-only affordance that reveals the edge label; the relationship stays reachable via the chain card for keyboard users. */}
             <path

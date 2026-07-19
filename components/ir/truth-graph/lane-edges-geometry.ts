@@ -16,8 +16,16 @@
 //            the child's top edge. Several premises feeding one node spread
 //            along its top edge and read ①②③ left-to-right.
 //   gutter — everything else (long spans, upward edges, non-adjacent
-//            same-row pairs): the amendment №2 behaviour, routed through
-//            independent vertical channels in the left gutter.
+//            same-row pairs): routed through independent vertical channels
+//            in the left gutter.
+//
+// Attach sides (the amendment №3 invariant that keeps multi-column lanes
+// legible): a gutter edge may only touch a box's LEFT edge when that box is
+// the leftmost of its visual row — otherwise the horizontal run would cross
+// every sibling cell between the gutter and the box. Any other cell is
+// entered/left through its TOP or BOTTOM edge via the corridor between rows,
+// where horizontal lanes are packed to never overlap. Edges never cross a
+// box interior.
 
 export type LaneRowBox = {
   id: string;
@@ -36,7 +44,7 @@ export type LaneEdgeInput = {
 };
 
 export type LaneEdgeKind = "tight" | "step" | "gutter";
-export type LaneArrowDirection = "right" | "left" | "down";
+export type LaneArrowDirection = "right" | "left" | "down" | "up";
 
 export type LaneEdgePath = {
   edgeId: string;
@@ -46,7 +54,9 @@ export type LaneEdgePath = {
   // Arrow tip, sitting on the child's edge.
   arrow: { x: number; y: number };
   arrowDir: LaneArrowDirection;
-  // Anchor for the hover label pill (left edge of the pill's baseline).
+  // Anchor for the hover label pill. For horizontal arrows it is the pill's
+  // left edge at baseline; for vertical arrows it is the pill's horizontal
+  // CENTRE (the renderer centres the measured pill on it).
   labelAt: { x: number; y: number };
   // Centre of the ①② convergence badge, or null when this edge is the
   // child's only drawn in-edge.
@@ -66,7 +76,8 @@ export type LaneEdgeGeometryOptions = {
   // Horizontal distance between adjacent vertical channels.
   channelGap: number;
   cornerRadius: number;
-  // Spread between multiple edges touching one row's edge.
+  // Spread between multiple edges touching one row's edge. Must be at least
+  // the ①② badge diameter, or converging badges overlap.
   entrySpread: number;
   arrowLength: number;
   // Vertical distance between horizontal lanes inside one row corridor.
@@ -87,6 +98,8 @@ const ROW_OVERLAP_RATIO = 0.5;
 const EDGE_MARGIN = 8;
 const BADGE_OFFSET = 8;
 const LABEL_RISE = 12;
+// Height of the virtual corridors above the first and below the last row.
+const OUTER_CORRIDOR = 24;
 
 type VisualRow = {
   top: number;
@@ -96,6 +109,8 @@ type VisualRow = {
 };
 
 type Point = { x: number; y: number };
+
+type AttachSide = "left" | "right" | "top" | "bottom";
 
 function round(value: number) {
   return Math.round(value * 100) / 100;
@@ -166,7 +181,11 @@ function roundedPolyline(points: Point[], cornerRadius: number): string {
   const pts: Point[] = [];
   for (const point of points) {
     const last = pts.at(-1);
-    if (!last || Math.abs(last.x - point.x) > 0.5 || Math.abs(last.y - point.y) > 0.5) {
+    if (
+      !last ||
+      Math.abs(last.x - point.x) > 0.5 ||
+      Math.abs(last.y - point.y) > 0.5
+    ) {
       pts.push(point);
     }
   }
@@ -213,7 +232,7 @@ function packIntervals(
   const sorted = [...items].sort(
     (a, b) => a.span - b.span || a.id.localeCompare(b.id)
   );
-  const tracks: Array<Array<[number, number]>> = [];
+  const tracks: [number, number][][] = [];
   const trackById = new Map<string, number>();
 
   for (const item of sorted) {
@@ -298,6 +317,75 @@ function classify({
   return { ...base, kind: "gutter" };
 }
 
+// The attach side of each endpoint (amendment №3). Left is only legal for a
+// row's leftmost box; anything else goes through the corridor on the side
+// facing the other endpoint.
+function sidesFor(
+  item: Classified,
+  rows: VisualRow[]
+): {
+  parentSide: AttachSide;
+  childSide: AttachSide;
+  parentCorridor: number | null;
+  childCorridor: number | null;
+  arrowDir: LaneArrowDirection;
+} {
+  if (item.kind === "tight") {
+    return {
+      arrowDir: item.parentOnLeft ? "right" : "left",
+      childCorridor: null,
+      childSide: item.parentOnLeft ? "left" : "right",
+      parentCorridor: null,
+      parentSide: item.parentOnLeft ? "right" : "left",
+    };
+  }
+
+  if (item.kind === "step") {
+    return {
+      arrowDir: "down",
+      childCorridor: item.childRow - 1,
+      childSide: "top",
+      parentCorridor: item.parentRow,
+      parentSide: "bottom",
+    };
+  }
+
+  const parentLeftmost = rows[item.parentRow].boxes[0]?.id === item.parent.id;
+  const childLeftmost = rows[item.childRow].boxes[0]?.id === item.child.id;
+  const sameRow = item.parentRow === item.childRow;
+  const downward = item.childRow > item.parentRow;
+
+  const childSide: AttachSide = childLeftmost
+    ? "left"
+    : sameRow || downward
+      ? "top"
+      : "bottom";
+  const parentSide: AttachSide = parentLeftmost
+    ? "left"
+    : sameRow || !downward
+      ? "top"
+      : "bottom";
+
+  return {
+    arrowDir:
+      childSide === "left" ? "right" : childSide === "top" ? "down" : "up",
+    childCorridor:
+      childSide === "top"
+        ? item.childRow - 1
+        : childSide === "bottom"
+          ? item.childRow
+          : null,
+    childSide,
+    parentCorridor:
+      parentSide === "top"
+        ? item.parentRow - 1
+        : parentSide === "bottom"
+          ? item.parentRow
+          : null,
+    parentSide,
+  };
+}
+
 export function computeLaneEdgePaths({
   rows,
   edges,
@@ -335,6 +423,37 @@ export function computeLaneEdgePaths({
     }
   });
 
+  // Corridors sit between consecutive visual rows; -1 and rows.length-1 are
+  // thin virtual bands above the first / below the last row, so endpoints on
+  // the outermost rows still have somewhere to run their horizontal jog.
+  function corridorBounds(index: number): { top: number; bottom: number } {
+    if (index < 0) {
+      return {
+        bottom: visualRows[0].top,
+        top: visualRows[0].top - OUTER_CORRIDOR,
+      };
+    }
+    if (index >= visualRows.length - 1) {
+      const last = visualRows.at(-1) as VisualRow;
+      return { bottom: last.bottom + OUTER_CORRIDOR, top: last.bottom };
+    }
+    return { bottom: visualRows[index + 1].top, top: visualRows[index].bottom };
+  }
+
+  // One shared y-mapping per corridor: lanes hug the corridor's bottom (the
+  // next row's top edge, minus room for the arrowhead) and stack upward.
+  // Every horizontal run in a corridor uses this mapping, so distinct lanes
+  // can never share a y.
+  function laneYFor(corridor: number, lane: number) {
+    const bounds = corridorBounds(corridor);
+    return Math.max(
+      bounds.bottom -
+        (options.arrowLength + ROW_EDGE_INSET) -
+        lane * options.hLaneGap,
+      bounds.top + 2
+    );
+  }
+
   const classified = drawable.map((edge) => {
     const parent = boxById.get(edge.parentId) as LaneRowBox;
     const child = boxById.get(edge.childId) as LaneRowBox;
@@ -363,8 +482,12 @@ export function computeLaneEdgePaths({
       item,
     ]);
   }
-  const readingOrder = (a: LaneRowBox, b: LaneRowBox, aRow: number, bRow: number) =>
-    aRow - bRow || a.left - b.left;
+  const readingOrder = (
+    a: LaneRowBox,
+    b: LaneRowBox,
+    aRow: number,
+    bRow: number
+  ) => aRow - bRow || a.left - b.left;
   for (const list of byChild.values()) {
     list.sort((a, b) =>
       readingOrder(a.parent, b.parent, a.parentRow, b.parentRow)
@@ -374,31 +497,93 @@ export function computeLaneEdgePaths({
     list.sort((a, b) => readingOrder(a.child, b.child, a.childRow, b.childRow));
   }
 
-  // Gutter channels use vertical intervals; corridor lanes use horizontal
-  // intervals grouped per corridor. Both are packed shortest-span-first.
-  const gutterItems: Array<{ id: string; lo: number; hi: number; span: number }> =
-    [];
+  const sides = new Map(
+    classified.map((item) => [item.edge.id, sidesFor(item, visualRows)])
+  );
+
+  // Attachment pools: edges touching the same box edge spread jointly, no
+  // matter which route brought them there (a step entry and a gutter-top
+  // entry into one node must not stack on the same point).
+  const entryPools = new Map<string, string[]>();
+  const exitPools = new Map<string, string[]>();
+  for (const [childId, list] of byChild) {
+    for (const item of list) {
+      const side = sides.get(item.edge.id)?.childSide as AttachSide;
+      const key = `${childId}|${side}`;
+      entryPools.set(key, [...(entryPools.get(key) ?? []), item.edge.id]);
+    }
+  }
+  for (const [parentId, list] of byParent) {
+    for (const item of list) {
+      const side = sides.get(item.edge.id)?.parentSide as AttachSide;
+      const key = `${parentId}|${side}`;
+      exitPools.set(key, [...(exitPools.get(key) ?? []), item.edge.id]);
+    }
+  }
+
+  function poolOffset({
+    pools,
+    nodeId,
+    side,
+    edgeId,
+    box,
+    spread,
+  }: {
+    pools: Map<string, string[]>;
+    nodeId: string;
+    side: AttachSide;
+    edgeId: string;
+    box: LaneRowBox;
+    spread: number;
+  }) {
+    const pool = pools.get(`${nodeId}|${side}`) ?? [edgeId];
+    const horizontal = side === "top" || side === "bottom";
+    return attachmentOffset({
+      count: pool.length,
+      extent: horizontal ? box.width : box.height,
+      index: pool.indexOf(edgeId),
+      spread,
+      start: horizontal ? box.left : box.top,
+    });
+  }
+
+  // Corridor lane packing: every horizontal run in a corridor claims an
+  // x-interval. Gutter-attached runs extend to the gutter (x=0) so parallel
+  // runs from the channels always take distinct lanes.
   const corridorItems = new Map<
     number,
     Array<{ id: string; lo: number; hi: number; span: number }>
   >();
+  function registerCorridorRun(
+    corridor: number,
+    id: string,
+    a: number,
+    b: number
+  ) {
+    const lo = Math.min(a, b) - 2;
+    const hi = Math.max(a, b) + 2;
+    const bucket = corridorItems.get(corridor) ?? [];
+    bucket.push({ hi, id, lo, span: hi - lo });
+    corridorItems.set(corridor, bucket);
+  }
 
   type Prepared = Classified & {
+    parentSide: AttachSide;
+    childSide: AttachSide;
+    parentCorridor: number | null;
+    childCorridor: number | null;
+    arrowDir: LaneArrowDirection;
     exitPoint: Point;
     entryPoint: Point;
-    arrowDir: LaneArrowDirection;
     entryIndex: number | null;
     entryCount: number;
-    corridor: number | null;
   };
 
   const prepared: Prepared[] = classified.map((item) => {
+    const side = sides.get(item.edge.id) as ReturnType<typeof sidesFor>;
     const entrySiblings = byChild.get(item.edge.childId) ?? [];
-    const exitSiblings = byParent.get(item.edge.parentId) ?? [];
     const entryCount = entrySiblings.length;
-    const entryOrder = entrySiblings.indexOf(item);
-    const exitOrder = exitSiblings.indexOf(item);
-    const entryIndex = entryCount >= 2 ? entryOrder + 1 : null;
+    const entryIndex = entryCount >= 2 ? entrySiblings.indexOf(item) + 1 : null;
 
     if (item.kind === "tight") {
       // Same visual row → equal heights, so one shared centre line reads
@@ -417,8 +602,7 @@ export function computeLaneEdgePaths({
         : item.child.left + item.child.width + ROW_EDGE_INSET;
       return {
         ...item,
-        arrowDir: item.parentOnLeft ? "right" : "left",
-        corridor: null,
+        ...side,
         entryCount,
         entryIndex,
         entryPoint: { x: entryX, y },
@@ -426,78 +610,100 @@ export function computeLaneEdgePaths({
       };
     }
 
-    if (item.kind === "step") {
-      // Spread along the horizontal edges: several premises entering one
-      // node fan across its top edge instead of stacking on one point.
-      const topEntrants = entrySiblings.filter((sibling) => sibling.kind === "step");
-      const bottomExits = exitSiblings.filter((sibling) => sibling.kind === "step");
-      const exitX = attachmentOffset({
-        count: bottomExits.length,
-        extent: item.parent.width,
-        index: bottomExits.indexOf(item),
-        spread: options.entrySpread * 2,
-        start: item.parent.left,
-      });
-      const entryX = attachmentOffset({
-        count: topEntrants.length,
-        extent: item.child.width,
-        index: topEntrants.indexOf(item),
-        spread: options.entrySpread * 2,
-        start: item.child.left,
-      });
-      const corridor = item.parentRow;
-      const lo = Math.min(exitX, entryX);
-      const hi = Math.max(exitX, entryX);
-      const bucket = corridorItems.get(corridor) ?? [];
-      bucket.push({ hi, id: item.edge.id, lo, span: hi - lo });
-      corridorItems.set(corridor, bucket);
-
-      return {
-        ...item,
-        arrowDir: "down",
-        corridor,
-        entryCount,
-        entryIndex,
-        entryPoint: { x: entryX, y: item.child.top - ROW_EDGE_INSET },
-        exitPoint: { x: exitX, y: item.parent.top + item.parent.height },
+    // Entry anchor (arrow tip) on the child edge.
+    let entryPoint: Point;
+    if (side.childSide === "left") {
+      entryPoint = {
+        x: item.child.left - ROW_EDGE_INSET,
+        y: poolOffset({
+          box: item.child,
+          edgeId: item.edge.id,
+          nodeId: item.edge.childId,
+          pools: entryPools,
+          side: "left",
+          spread: options.entrySpread,
+        }),
       };
+    } else {
+      const x = poolOffset({
+        box: item.child,
+        edgeId: item.edge.id,
+        nodeId: item.edge.childId,
+        pools: entryPools,
+        side: side.childSide,
+        spread: options.entrySpread * 2,
+      });
+      entryPoint =
+        side.childSide === "top"
+          ? { x, y: item.child.top - ROW_EDGE_INSET }
+          : { x, y: item.child.top + item.child.height + ROW_EDGE_INSET };
     }
 
-    // Gutter: vertical span through the left channels.
-    const exitY = attachmentOffset({
-      count: exitSiblings.filter((sibling) => sibling.kind === "gutter").length,
-      extent: item.parent.height,
-      index: exitSiblings
-        .filter((sibling) => sibling.kind === "gutter")
-        .indexOf(item),
-      spread: options.entrySpread,
-      start: item.parent.top,
-    });
-    const entryY = attachmentOffset({
-      count: entrySiblings.filter((sibling) => sibling.kind === "gutter").length,
-      extent: item.child.height,
-      index: entrySiblings
-        .filter((sibling) => sibling.kind === "gutter")
-        .indexOf(item),
-      spread: options.entrySpread,
-      start: item.child.top,
-    });
-    const lo = Math.min(exitY, entryY) - CHANNEL_OVERLAP_PAD;
-    const hi = Math.max(exitY, entryY) + CHANNEL_OVERLAP_PAD;
-    gutterItems.push({ hi, id: item.edge.id, lo, span: hi - lo });
+    // Exit anchor on the parent edge.
+    let exitPoint: Point;
+    if (side.parentSide === "left") {
+      exitPoint = {
+        x: item.parent.left - ROW_EDGE_INSET,
+        y: poolOffset({
+          box: item.parent,
+          edgeId: item.edge.id,
+          nodeId: item.edge.parentId,
+          pools: exitPools,
+          side: "left",
+          spread: options.entrySpread,
+        }),
+      };
+    } else {
+      const x = poolOffset({
+        box: item.parent,
+        edgeId: item.edge.id,
+        nodeId: item.edge.parentId,
+        pools: exitPools,
+        side: side.parentSide,
+        spread: options.entrySpread * 2,
+      });
+      exitPoint =
+        side.parentSide === "top"
+          ? { x, y: item.parent.top }
+          : { x, y: item.parent.top + item.parent.height };
+    }
+
+    if (item.kind === "step") {
+      registerCorridorRun(
+        side.parentCorridor as number,
+        item.edge.id,
+        exitPoint.x,
+        entryPoint.x
+      );
+    } else {
+      if (side.parentCorridor !== null) {
+        registerCorridorRun(
+          side.parentCorridor,
+          `${item.edge.id}:p`,
+          0,
+          exitPoint.x
+        );
+      }
+      if (side.childCorridor !== null) {
+        registerCorridorRun(
+          side.childCorridor,
+          `${item.edge.id}:c`,
+          0,
+          entryPoint.x
+        );
+      }
+    }
 
     return {
       ...item,
-      arrowDir: "right",
-      corridor: null,
+      ...side,
       entryCount,
       entryIndex,
-      entryPoint: { x: item.child.left - ROW_EDGE_INSET, y: entryY },
-      exitPoint: { x: item.parent.left - ROW_EDGE_INSET, y: exitY },
+      entryPoint,
+      exitPoint,
     };
   });
 
-  const gutterChannel = packIntervals(gutterItems);
   const corridorLane = new Map<string, number>();
   for (const [corridor, items] of corridorItems) {
     const packed = packIntervals(items);
@@ -505,6 +711,40 @@ export function computeLaneEdgePaths({
       corridorLane.set(`${corridor}:${id}`, lane);
     }
   }
+
+  // Gutter channel packing over vertical spans. Corridor-attached endpoints
+  // approximate their y with the corridor midpoint — exact lane y is at most
+  // half a corridor away, well inside the overlap pad.
+  const gutterItems: Array<{
+    id: string;
+    lo: number;
+    hi: number;
+    span: number;
+  }> = [];
+  const corridorMid = (index: number) => {
+    const bounds = corridorBounds(index);
+    return (bounds.top + bounds.bottom) / 2;
+  };
+  for (const item of prepared) {
+    if (item.kind !== "gutter") {
+      continue;
+    }
+    const yExit =
+      item.parentSide === "left"
+        ? item.exitPoint.y
+        : corridorMid(item.parentCorridor as number);
+    const yEntry =
+      item.childSide === "left"
+        ? item.entryPoint.y
+        : corridorMid(item.childCorridor as number);
+    gutterItems.push({
+      hi: Math.max(yExit, yEntry) + CHANNEL_OVERLAP_PAD,
+      id: item.edge.id,
+      lo: Math.min(yExit, yEntry) - CHANNEL_OVERLAP_PAD,
+      span: Math.abs(yExit - yEntry) + 2 * CHANNEL_OVERLAP_PAD,
+    });
+  }
+  const gutterChannel = packIntervals(gutterItems);
 
   const maxChannels = Math.max(
     Math.floor((options.gutterWidth - EDGE_MARGIN) / options.channelGap),
@@ -537,19 +777,9 @@ export function computeLaneEdgePaths({
           ? null
           : { x: base.x - sign * BADGE_OFFSET, y: arrow.y };
     } else if (item.kind === "step") {
-      const corridorIndex = item.corridor as number;
-      const corridorTop = visualRows[corridorIndex].bottom;
-      const corridorBottom = visualRows[corridorIndex + 1].top;
-      const lane = corridorLane.get(`${corridorIndex}:${item.edge.id}`) ?? 0;
-      const maxLanes = Math.max(
-        Math.floor((corridorBottom - corridorTop - 6) / options.hLaneGap),
-        1
-      );
-      // Lanes hug the child row and stack upward into the corridor.
-      const laneY = Math.max(
-        corridorBottom - 4 - Math.min(lane, maxLanes - 1) * options.hLaneGap,
-        corridorTop + 2
-      );
+      const corridor = item.parentCorridor as number;
+      const lane = corridorLane.get(`${corridor}:${item.edge.id}`) ?? 0;
+      const laneY = laneYFor(corridor, lane);
       arrow = item.entryPoint;
       const base = { x: arrow.x, y: arrow.y - arrowLength };
       path = roundedPolyline(
@@ -561,7 +791,7 @@ export function computeLaneEdgePaths({
         ],
         cornerRadius
       );
-      labelAt = { x: arrow.x + 6, y: arrow.y - 6 };
+      labelAt = { x: arrow.x, y: base.y - 6 };
       badgeAt =
         item.entryIndex === null
           ? null
@@ -573,29 +803,60 @@ export function computeLaneEdgePaths({
         3
       );
       arrow = item.entryPoint;
-      const base = { x: arrow.x - arrowLength, y: arrow.y };
-      path = roundedPolyline(
-        [
-          item.exitPoint,
-          { x: channelX, y: item.exitPoint.y },
-          { x: channelX, y: arrow.y },
-          base,
-        ],
-        cornerRadius
-      );
-      labelAt = { x: arrow.x + 4, y: arrow.y - LABEL_RISE };
-      badgeAt =
-        item.entryIndex === null
-          ? null
-          : { x: base.x - BADGE_OFFSET, y: arrow.y };
+
+      const points: Point[] = [item.exitPoint];
+      // Parent → gutter.
+      if (item.parentSide === "left") {
+        points.push({ x: channelX, y: item.exitPoint.y });
+      } else {
+        const lane =
+          corridorLane.get(`${item.parentCorridor}:${item.edge.id}:p`) ?? 0;
+        const laneY = laneYFor(item.parentCorridor as number, lane);
+        points.push(
+          { x: item.exitPoint.x, y: laneY },
+          { x: channelX, y: laneY }
+        );
+      }
+      // Gutter → child.
+      let base: Point;
+      if (item.childSide === "left") {
+        base = { x: arrow.x - arrowLength, y: arrow.y };
+        points.push({ x: channelX, y: arrow.y }, base);
+        labelAt = { x: arrow.x + 4, y: arrow.y - LABEL_RISE };
+        badgeAt =
+          item.entryIndex === null
+            ? null
+            : { x: base.x - BADGE_OFFSET, y: arrow.y };
+      } else if (item.childSide === "top") {
+        const lane =
+          corridorLane.get(`${item.childCorridor}:${item.edge.id}:c`) ?? 0;
+        const laneY = laneYFor(item.childCorridor as number, lane);
+        base = { x: arrow.x, y: arrow.y - arrowLength };
+        points.push({ x: channelX, y: laneY }, { x: arrow.x, y: laneY }, base);
+        labelAt = { x: arrow.x, y: base.y - 6 };
+        badgeAt =
+          item.entryIndex === null
+            ? null
+            : { x: arrow.x, y: base.y - BADGE_OFFSET };
+      } else {
+        const lane =
+          corridorLane.get(`${item.childCorridor}:${item.edge.id}:c`) ?? 0;
+        const laneY = laneYFor(item.childCorridor as number, lane);
+        base = { x: arrow.x, y: arrow.y + arrowLength };
+        points.push({ x: channelX, y: laneY }, { x: arrow.x, y: laneY }, base);
+        labelAt = { x: arrow.x, y: base.y + LABEL_RISE + 2 };
+        badgeAt =
+          item.entryIndex === null
+            ? null
+            : { x: arrow.x, y: base.y + BADGE_OFFSET };
+      }
+      path = roundedPolyline(points, cornerRadius);
     }
 
     return {
       arrow: { x: round(arrow.x), y: round(arrow.y) },
       arrowDir: item.arrowDir,
-      badgeAt: badgeAt
-        ? { x: round(badgeAt.x), y: round(badgeAt.y) }
-        : null,
+      badgeAt: badgeAt ? { x: round(badgeAt.x), y: round(badgeAt.y) } : null,
       channel,
       childId: item.edge.childId,
       edgeId: item.edge.id,
