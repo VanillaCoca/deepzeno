@@ -504,7 +504,6 @@ export function IRDetailPane({
           }}
         />
 
-
         <section className="space-y-1.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ir-text-tertiary)]">
             {t("detail.source")}

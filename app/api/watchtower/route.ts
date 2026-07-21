@@ -151,7 +151,7 @@ export async function PATCH(request: Request) {
           ? { cadence: body.cadence }
           : {}),
         ...(body.status ? { status: body.status } : {}),
-        ...(body.model_id !== undefined ? { modelId: body.model_id } : {}),
+        ...(body.model_id === undefined ? {} : { modelId: body.model_id }),
       });
       const updated = await getWatchById(watch.id);
       return Response.json({ watch: updated });
@@ -160,15 +160,15 @@ export async function PATCH(request: Request) {
     if (body.project_id) {
       await assertProject(body.project_id, session.user.id);
       const settings = await updateProjectAgentSettings(body.project_id, {
-        ...(body.patrol_enabled !== undefined
-          ? { patrolEnabled: body.patrol_enabled }
-          : {}),
+        ...(body.patrol_enabled === undefined
+          ? {}
+          : { patrolEnabled: body.patrol_enabled }),
         ...(body.default_cadence
           ? { defaultCadence: body.default_cadence }
           : {}),
-        ...(body.research_model_id !== undefined
-          ? { researchModelId: body.research_model_id }
-          : {}),
+        ...(body.research_model_id === undefined
+          ? {}
+          : { researchModelId: body.research_model_id }),
       });
       return Response.json({ settings });
     }

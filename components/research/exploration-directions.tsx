@@ -47,7 +47,10 @@ function DirectionList({ directions }: { directions: ExplorationDirection[] }) {
   return (
     <ul className="space-y-2">
       {directions.map((direction) => (
-        <li className="space-y-0.5" key={`${direction.query}-${direction.goal}`}>
+        <li
+          className="space-y-0.5"
+          key={`${direction.query}-${direction.goal}`}
+        >
           {/* Goal leads: it is the human-readable "why this angle". The
               query is the mechanical artifact and stays secondary. */}
           <p className="text-[13px] text-[var(--ir-text-primary)] leading-[1.5]">

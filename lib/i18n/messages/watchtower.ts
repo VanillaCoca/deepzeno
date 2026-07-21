@@ -32,7 +32,8 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.reason": "Why: {reason}",
     "wt.patrolQuiet": "No signal",
     "wt.patrolSignal": "Signal found",
-    "wt.patrolAlerted": "Alert candidate created — review it in the frontier lane.",
+    "wt.patrolAlerted":
+      "Alert candidate created — review it in the frontier lane.",
     "wt.patrolSuppressed":
       "Signal noted, alert withheld (cooldown / weekly cap).",
     "wt.patrolFailed": "Patrol failed: {detail}",
