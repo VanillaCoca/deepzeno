@@ -9,7 +9,6 @@ import "server-only";
 // (Iron Law 0/4; v1 rules §6.4: only the user can declare an assumption dead).
 
 import { z } from "zod";
-import { selectModelForTask } from "@/lib/ai/model-policy";
 import { generateObjectResilient } from "@/lib/ai/resilient-generate";
 import {
   createIRNodeForUser,
@@ -315,9 +314,6 @@ export async function runPatrolForWatch({
       url: string;
       title: string | null;
     }> = [];
-    const extractModelId =
-      preferredModelId ?? selectModelForTask("research_worker");
-
     let fetchesUsed = 0;
     for (const url of fetchOrder) {
       const page = await fetchPageText(url);
@@ -334,7 +330,7 @@ export async function runPatrolForWatch({
       });
       try {
         const extraction = await extractEvidenceItems({
-          modelId: extractModelId,
+          preferredModelId,
           originQuestion: `Is this assumption still true today? ${node.title}`,
           url,
           pageText: page.text,
@@ -344,8 +340,18 @@ export async function runPatrolForWatch({
             freshItems.push({ ...item, url, title: urls.get(url) ?? null });
           }
         }
-      } catch {
-        // Extraction failures are quiet misses.
+      } catch (error) {
+        // A patrol that cannot extract is a patrol that reports "nothing
+        // changed" — the most expensive silence in the product, because the
+        // user reads it as reassurance. Quiet for the run, loud in the logs.
+        console.warn(
+          JSON.stringify({
+            type: "extraction_failed",
+            runId: run.id,
+            url,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        );
       }
     }
 

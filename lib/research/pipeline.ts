@@ -2,7 +2,6 @@ import "server-only";
 
 import { z } from "zod";
 
-import { selectModelForTask } from "@/lib/ai/model-policy";
 import { findModelById } from "@/lib/ai/models";
 import { generateObjectResilient } from "@/lib/ai/resilient-generate";
 import { assembleContext } from "@/lib/context-assembly";
@@ -213,12 +212,12 @@ async function collectPhase(
   fetchesUsed: number;
   fetchAttempts: number;
   provider: string;
+  extractionAttempts: number;
+  extractionFailures: number;
 }> {
-  const modelId = selectModelForTask("research_worker", {
-    userModelId: preferredModelId,
-  });
-
   const verifiedRows: VerifiedRow[] = [];
+  let extractionAttempts = 0;
+  let extractionFailures = 0;
   let partial = false;
   let droppedQuotes = 0;
   let searchesUsed = 0;
@@ -307,20 +306,36 @@ async function collectPhase(
     });
 
     let extraction: Awaited<ReturnType<typeof extractEvidenceItems>>;
+    extractionAttempts += 1;
     try {
       extraction = await extractEvidenceItems({
-        modelId,
+        preferredModelId,
         originQuestion,
         url,
         pageText: page.text,
       });
-    } catch {
-      // Extraction failure for a single page: skip it, set partial
+    } catch (error) {
+      // Extraction failure for a single page: skip it, set partial — but say
+      // so out loud. This catch was silent, and that is exactly how a retired
+      // model name stayed invisible for weeks: ten consecutive failures
+      // produced zero log lines, and the run reported "no evidence found",
+      // which reads as a finding about the world rather than a broken tool.
       partial = true;
+      extractionFailures += 1;
+      console.warn(
+        JSON.stringify({
+          type: "extraction_failed",
+          runId,
+          url,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
       continue;
     }
 
-    addUsage(modelsUsed, modelId, extraction.usage);
+    // Bill the model that actually answered, which after a degrade is not the
+    // one routing first asked for.
+    addUsage(modelsUsed, extraction.modelId, extraction.usage);
 
     for (const item of extraction.items) {
       if (verifiedRows.length >= budget.maxEvidence) {
@@ -357,6 +372,8 @@ async function collectPhase(
     fetchesUsed,
     fetchAttempts,
     provider: lastProvider,
+    extractionAttempts,
+    extractionFailures,
   };
 }
 
@@ -669,6 +686,8 @@ export async function runResearchPipeline({
       fetchesUsed,
       fetchAttempts,
       provider,
+      extractionAttempts,
+      extractionFailures,
     } = await collectPhase(
       intents,
       originQuestion,
@@ -685,11 +704,21 @@ export async function runResearchPipeline({
 
     // ── 5. Judge phase ────────────────────────────────────────────────────────
     if (verifiedRows.length === 0) {
+      // Two very different failures land here, and conflating them is an Iron
+      // Law 2 violation in its most dangerous direction: "we searched and
+      // found nothing" is a statement about the world the user will act on,
+      // while "every extraction call errored" is a statement about our own
+      // tooling. Say which one happened.
+      const extractorDown =
+        extractionAttempts > 0 && extractionFailures === extractionAttempts;
+      const failureReason = extractorDown
+        ? `Evidence extraction failed on all ${extractionAttempts} fetched pages — the extraction model is unavailable; this is a tool outage, not an empty web`
+        : "No quote-verified evidence collected";
       const now = new Date().toISOString();
       await updateResearchRun({
         id: run.id,
         status: "failed",
-        error: "No quote-verified evidence collected",
+        error: failureReason,
         // Plan + collect tokens were spent even though nothing landed.
         modelsUsed,
         costEstimate: computeCostEstimate(modelsUsed),
@@ -703,7 +732,9 @@ export async function runResearchPipeline({
         layer: "research",
         metadata: {
           runId: run.id,
-          error: "No quote-verified evidence collected",
+          error: failureReason,
+          extractionAttempts,
+          extractionFailures,
         },
       });
 
@@ -711,7 +742,7 @@ export async function runResearchPipeline({
       const failedRun: ResearchRun = {
         ...run,
         status: "failed",
-        error: "No quote-verified evidence collected",
+        error: failureReason,
         finishedAt: now,
       };
       return {

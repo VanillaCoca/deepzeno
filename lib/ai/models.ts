@@ -51,6 +51,11 @@ export type ResolvedChatModel = ChatModel & {
 
 export const DEFAULT_CHAT_MODEL = "anthropic:claude-sonnet-4-6";
 
+// The provider-side model name used when DEEPSEEK_MODEL is unset. Named rather
+// than inlined because it is a moving target: a vendor retiring a model name
+// turns every call into a hard error, and the fix must be one line in one place.
+const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash";
+
 const modelCatalog: ChatModelDefinition[] = [
   {
     id: "anthropic:claude-sonnet-4-6",
@@ -285,9 +290,15 @@ const modelCatalog: ChatModelDefinition[] = [
     inputCostPerMTok: null,
     outputCostPerMTok: null,
     envKeys: ["DEEPSEEK_API_KEY"],
-    resolveModelId: (env) => env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    // "deepseek-chat" was retired by DeepSeek; the live API now answers every
+    // request against it with "The supported API model names are
+    // deepseek-v4-pro or deepseek-v4-flash". This entry is tier "economy", so
+    // the flash variant is the one that matches what routing asks for here.
+    // DEEPSEEK_MODEL still overrides — a name pinned in the environment
+    // outranks this default and needs no redeploy of the code.
+    resolveModelId: (env) => env.DEEPSEEK_MODEL ?? DEEPSEEK_DEFAULT_MODEL,
     resolveName: (env) => {
-      const configuredModel = env.DEEPSEEK_MODEL ?? "deepseek-chat";
+      const configuredModel = env.DEEPSEEK_MODEL ?? DEEPSEEK_DEFAULT_MODEL;
       return `${humanizeModelName(configuredModel)} (DeepSeek)`;
     },
   },

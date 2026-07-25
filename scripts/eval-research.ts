@@ -58,8 +58,11 @@ async function runLiveEval() {
     : DEFAULT_QUESTIONS;
   const maxFetches = Number(readFlag("--max-fetches") ?? 4);
 
+  // Routing now happens per call inside extractEvidenceItems, so this is the
+  // model the eval will *start* on — a degrade mid-eval is reported by the
+  // model_routing log lines, not here.
   const modelId = selectModelForTask("research_worker");
-  console.log(`Extraction model: ${modelId}`);
+  console.log(`Extraction model (primary route): ${modelId}`);
   console.log(
     `Questions: ${questions.length}, max fetches/question: ${maxFetches}\n`
   );
@@ -93,7 +96,7 @@ async function runLiveEval() {
 
       try {
         const extraction = await extractEvidenceItems({
-          modelId,
+          preferredModelId: null,
           originQuestion: question,
           url,
           pageText: page.text,
