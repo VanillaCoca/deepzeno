@@ -20,6 +20,7 @@ import {
 } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
+import { createStartResearchTool } from "@/lib/ai/tools/start-research";
 import { isProductionEnvironment } from "@/lib/constants";
 import { prepareCompactedContext } from "@/lib/context/compaction";
 import { assembleContext } from "@/lib/context-assembly";
@@ -56,7 +57,18 @@ import type { WorkspaceMessageRecord } from "@/lib/workspace/types";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
-export const maxDuration = 60;
+/**
+ * 300s, not the 60s this route ran on until the chat model could start research.
+ *
+ * `after()` work counts against this route's budget, and this route registers
+ * two tails: the IR sweep, and now a research run that takes minutes. 60s cut
+ * the research tail off shortly after the stream ended, which does not produce
+ * an error — it produces a `research_run` row stuck at `running` that every
+ * client's activity bar polls forever. The ceiling is free when unused (Fluid
+ * compute bills active time, not the reservation) and it is the same ceiling
+ * `/api/research/run` already needs to finish the identical pipeline.
+ */
+export const maxDuration = 300;
 
 function getMessageModelOverride(text: string) {
   const match = text.match(/(?:^|\s)@([^\s]+)/);
@@ -358,6 +370,10 @@ export async function POST(request: Request) {
         requestHints,
         languageName: locale ? localePromptName[locale] : undefined,
         modelName: resolvedModel.name,
+        // Same gate as the tool binding below. Describing a capability the
+        // model has not been given would turn an honest "I can't" into a
+        // promise it cannot keep.
+        researchEnabled: shouldInjectWorkspaceContext,
       }),
       shouldInjectWorkspaceContext
         ? buildDecisionContextBlock(decisionContext)
@@ -393,6 +409,26 @@ export async function POST(request: Request) {
       .join("\n\n");
     const modelMessages = await convertToModelMessages(payloadUiMessages);
 
+    // Gated exactly like inline markers and the sweep, and for the same reason:
+    // the General topic is deliberately outside the choice tree, so nothing
+    // there mints IR nodes. A research run's whole output is a question node
+    // plus candidates hanging off it — starting one somewhere the graph does
+    // not apply would land evidence with nowhere to belong.
+    //
+    // Built per request so the tool closes over this user, this project, and
+    // this turn's launch counter. A module-level singleton could not hold any
+    // of the three.
+    const tools = shouldInjectWorkspaceContext
+      ? {
+          startResearch: createStartResearchTool({
+            userId: session.user.id,
+            projectId,
+            topicId,
+            conversationId,
+          }),
+        }
+      : undefined;
+
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
@@ -400,6 +436,7 @@ export async function POST(request: Request) {
           model: getLanguageModel(chatModel),
           system: fullSystemText,
           messages: modelMessages,
+          tools,
           stopWhen: stepCountIs(5),
           providerOptions: {
             ...(resolvedModel.gatewayOrder && {

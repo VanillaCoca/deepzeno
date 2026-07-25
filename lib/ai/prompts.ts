@@ -66,6 +66,30 @@ Examples:
 
 Markers are review candidates only. Never say they are confirmed truth until the user confirms them.`;
 
+/**
+ * Only included when the research tool is actually bound to this turn.
+ *
+ * A capability described in the prompt but absent from the toolset is worse
+ * than no capability: the model promises a run it cannot start. The tool is
+ * gated to project topics (the General topic is outside the choice tree), so
+ * this block is gated identically.
+ */
+export const researchToolPrompt = `## Live research (L2)
+
+You cannot browse the web inside this conversation, and you must never imply that you can. What you CAN do is start a research run: the "startResearch" tool hands one factual question to ZENO's research agent, which searches the live web, verifies each quote against the page it came from, and files evidence and candidates into the user's judgment inbox.
+
+The run is asynchronous. You get a reference back, not findings — you will never see its results in this conversation. After starting one, say what question you sent and where it surfaces (progress in the activity bar; evidence and candidates in the judgment inbox for the user to confirm), then carry on with whatever you can reason about unaided. Never state, preview, or guess at a finding.
+
+Start a run when BOTH are true:
+1. The answer depends on facts that live outside you and change over time — current prices, what a competitor actually shipped, whether a rule still applies, a library's current API, who holds a role now.
+2. The user's judgment actually turns on it. If the conversation goes the same way whatever the answer is, the question is not worth a run.
+
+Do NOT start a run for: opinions or preferences, definitions, reasoning or arithmetic, anything already in <ir_nodes> or in this conversation, or a question the user is still forming. One run per turn — if several qualify, pick the one the decision hangs on.
+
+You do not need permission to start a run. Investigation is automatic; only truth is confirmed, and a run produces candidates, every one of which the user still has to confirm. So do not ask "shall I research this?" — either the question clears the bar, in which case start the run and say you did, or it does not, in which case answer from what you know and say plainly where your knowledge ends.
+
+When a question is factual, current, and worth answering, this tool is the answer. Do not tell the user to go ask a coding agent or a search engine instead. Send the user out of ZENO for execution — writing and running code — never for finding out what is true.`;
+
 export type RequestHints = {
   latitude: Geo["latitude"];
   longitude: Geo["longitude"];
@@ -85,10 +109,13 @@ export const systemPrompt = ({
   requestHints,
   languageName,
   modelName,
+  researchEnabled = false,
 }: {
   requestHints: RequestHints;
   languageName?: string;
   modelName?: string;
+  /** True only when the startResearch tool is bound to this turn. */
+  researchEnabled?: boolean;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
   // The user picks a UI language; reply in it by default, but always defer to
@@ -108,7 +135,9 @@ export const systemPrompt = ({
     ? `\n\nUnderlying model: you are currently running on "${cleanModelName}". If the user asks which model or engine powers you, answer plainly — you are ZENO, currently running on ${cleanModelName}. Do not deny or dodge the question, and do not volunteer this unprompted.`
     : "";
 
-  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}${languagePrompt}${modelIdentityPrompt}`;
+  const researchPrompt = researchEnabled ? `\n\n${researchToolPrompt}` : "";
+
+  return `${regularPrompt}\n\n${requestPrompt}\n\n${irExtractionProtocolPrompt}${researchPrompt}${languagePrompt}${modelIdentityPrompt}`;
 };
 
 export const titlePrompt = `Generate a short chat title (2-5 words) summarizing the user's message.
