@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
@@ -21,6 +22,12 @@ const sweepSchema = z.object({
   chat_session_id: z.string().uuid(),
   blocking: z.boolean().default(false),
 });
+
+// The sweep continues past the response on the queued path, and `after()` work
+// counts against the invocation's budget. 60s (the platform default) would cut
+// a slow sweep off right after the blocking branch's own 60s wait, so the tail
+// is given room the sweep can actually use.
+export const maxDuration = 120;
 
 const BLOCKING_MODEL_SOFT_TIMEOUT_MS = 30_000;
 const QUEUED_MODEL_SOFT_TIMEOUT_MS = 12_000;
@@ -193,22 +200,35 @@ export async function POST(request: Request) {
         id: runId,
         progress: { phase: "extract", at: new Date().toISOString() },
       });
-
-      // Settlement rides on the sweep promise itself rather than on whatever
-      // the request awaits. When the blocking branch times out at 60s the
-      // sweep is still running, and a row settled `failed` at that moment
-      // would be a lie about work still in flight that may yet land
-      // candidates. This also gives the promise a terminal rejection handler
-      // on the blocking-timeout path, where it previously had none.
-      sweepPromise
-        .then(
-          (result) => closeSweepRun({ runId, result }),
-          (error) => closeSweepRun({ runId, error })
-        )
-        .catch(() => {
-          // Settling is best-effort; closeSweepRun already logged.
-        });
     }
+
+    // Settlement rides on the sweep promise itself rather than on whatever the
+    // request awaits. When the blocking branch times out at 60s the sweep is
+    // still running, and a row settled `failed` at that moment would be a lie
+    // about work still in flight that may yet land candidates. This is also
+    // the promise's only terminal rejection handler on the timeout path.
+    const settled = sweepPromise.then(
+      (result) => (runId ? closeSweepRun({ runId, result }) : undefined),
+      (error) => {
+        console.error("Manual IR sweep failed", error);
+        return runId ? closeSweepRun({ runId, error }) : undefined;
+      }
+    );
+
+    // `after()` is what makes the queued path real. On Vercel a promise the
+    // response does not await is frozen the instant the invocation returns:
+    // the queued branch below answers `{"status":"queued"}` immediately, so
+    // `runIRSweep` was being suspended mid-flight and its run row left at
+    // `running` forever. That zombie is not inert — every client's activity
+    // bar reads it as work in progress and holds its 5s active poll for as
+    // long as the row exists. Registering the tail here keeps the invocation
+    // alive until the sweep settles and the row is closed.
+    //
+    // Registered unconditionally, not inside `if (runId)`: whether the sweep
+    // got a progress bar has nothing to do with whether it should be allowed
+    // to finish. A failed `openSweepRun` costs the user a bar; it must not
+    // also cost them their candidates.
+    after(settled);
 
     if (body.blocking) {
       const result = await withTimeout(sweepPromise, 60_000);
@@ -240,10 +260,8 @@ export async function POST(request: Request) {
       });
     }
 
-    sweepPromise.catch((error) => {
-      console.error("Queued manual IR sweep failed", error);
-    });
-
+    // No `.catch` here: the `settled` chain above already owns this promise's
+    // rejection, and logging it twice would read as two failures.
     return Response.json({ sweep_id: sweepId, status: "queued" });
   } catch (error) {
     if (error instanceof SweepTimeoutError) {
