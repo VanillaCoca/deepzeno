@@ -23,13 +23,32 @@ const bedrockProvider = process.env.BEDROCK_API_KEY
     })
   : null;
 
-// OpenAI flagships on Bedrock speak the OpenAI Chat Completions shape through
-// the mantle endpoint, so they ride the openai-compatible transport.
+// The Bedrock mantle endpoint exposes TWO distinct surfaces, and the OpenAI
+// flagships live on only one of them:
+//
+//   .../v1/chat/completions        generic OpenAI-compatible surface. Serves the
+//                                  open-weight / third-party models (gpt-oss,
+//                                  qwen, glm, ...). Rejects openai.gpt-5.x.
+//   .../openai/v1/responses        OpenAI-native surface. The ONLY route that
+//                                  serves openai.gpt-5.4 / 5.5 / 5.6.
+//
+// Calling gpt-5.x on the first surface returns HTTP 400 "does not support the
+// '/v1/chat/completions' API", which the app surfaced as an empty assistant
+// message. So the flagships must ride @ai-sdk/openai's Responses transport
+// against the /openai/v1 base, not the openai-compatible chat transport.
+//
+// BEDROCK_MANTLE_BASE_URL stays pointed at .../v1 (the compatible surface);
+// the OpenAI base is derived from it so only one env var has to be maintained.
+function mantleOpenAIBaseURL(baseURL: string): string {
+  // https://bedrock-mantle.<region>.api.aws/v1 -> .../openai/v1
+  return baseURL.replace(/\/v1\/?$/, "/openai/v1");
+}
+
 const bedrockMantleProvider =
   process.env.BEDROCK_MANTLE_API_KEY && process.env.BEDROCK_MANTLE_BASE_URL
-    ? createOpenAICompatible({
+    ? createOpenAI({
         apiKey: process.env.BEDROCK_MANTLE_API_KEY,
-        baseURL: process.env.BEDROCK_MANTLE_BASE_URL,
+        baseURL: mantleOpenAIBaseURL(process.env.BEDROCK_MANTLE_BASE_URL),
         name: "bedrock-openai",
       })
     : null;
@@ -122,7 +141,9 @@ export function getLanguageModel(modelId: string) {
           throw new Error("Bedrock (OpenAI) is not configured.");
         }
 
-        return bedrockMantleProvider.chatModel(model.providerModelId);
+        // Responses API, not chat completions — see the comment on
+        // bedrockMantleProvider above.
+        return bedrockMantleProvider.responses(model.providerModelId);
       }
 
       if (model.id.startsWith("openrouter:")) {
