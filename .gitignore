@@ -28,3 +28,8 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 .superpowers/
 .env*
+
+# Scratch trash folder. The remote agent sandbox cannot delete files on this
+# machine, so anything it wants gone gets moved here for you to delete by hand.
+# Nothing in it is ever part of the project.
+_to_delete/
