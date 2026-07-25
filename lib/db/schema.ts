@@ -1,6 +1,7 @@
 import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -387,6 +388,17 @@ export const apiKey = pgTable("api_keys", {
 });
 
 export type ApiKey = InferSelectModel<typeof apiKey>;
+
+// One row per IR id prefix (D, Q, H, …), holding the highest number handed
+// out. Nothing in TypeScript reads or writes it — allocation happens entirely
+// inside the `next_ir_id(text)` function (migration 0008), because the point
+// of the table is that the read and the increment are one statement. It is
+// declared here only so a future `drizzle-kit generate` sees a table it knows
+// about instead of proposing to drop it.
+export const irIdCounter = pgTable("ir_id_counter", {
+  prefix: text("prefix").primaryKey().notNull(),
+  lastValue: bigint("last_value", { mode: "number" }).notNull(),
+});
 
 export const irNode = pgTable("ir_nodes", {
   id: text("id").primaryKey().notNull(),

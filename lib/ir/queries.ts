@@ -209,6 +209,25 @@ async function listNodesByIds(ids: string[]) {
   return (rows ?? []).map(mapIRNode);
 }
 
+/**
+ * Allocate the next id for an IR kind — D2326, Q1262, and so on.
+ *
+ * The id is minted by the database (`next_ir_id`, migration 0008), not here.
+ * This function used to read every node whose id starts with the prefix and
+ * take max+1 in JavaScript, which failed in production on 2026-07-25 for a
+ * reason worth remembering: PostgREST caps an unbounded select at 1000 rows,
+ * so once a prefix crossed that many nodes the scan quietly stopped seeing the
+ * tail of the table. The "max" it computed was 1899 while D2325 already
+ * existed. Because the truncated window is stable rather than random, it
+ * returned that same dead id on every call — every decision node creation
+ * failed with 23505, and each lost candidate surfaced as nothing but a warn
+ * line in the function log.
+ *
+ * There is deliberately no fallback to the old path. A fallback here would
+ * mean the failure mode we just fixed comes back silently whenever the RPC is
+ * missing; a missing RPC should stop node creation loudly instead, which is
+ * what ensureResult does with PGRST202.
+ */
 export async function getNextIRId({
   kind,
   subtype,
@@ -217,22 +236,16 @@ export async function getNextIRId({
   subtype?: IRPlanSubtype | null;
 }) {
   const prefix = getIRPrefix(kind, subtype);
-  const rows = await ensureResult<DatabaseRecord[]>(
-    getClient().from("ir_nodes").select("id").like("id", `${prefix}%`),
+  const id = await ensureResult<string>(
+    getClient().rpc("next_ir_id", { p_prefix: prefix }),
     "Failed to generate IR id"
   );
-  let max = 0;
 
-  for (const row of rows ?? []) {
-    const id = String(row.id);
-    const match = id.match(new RegExp(`^${prefix}(\\d+)$`));
-
-    if (match) {
-      max = Math.max(max, Number(match[1]));
-    }
+  if (typeof id !== "string" || id.length === 0) {
+    throw new ChatbotError("bad_request:database", "Failed to generate IR id");
   }
 
-  return `${prefix}${max + 1}`;
+  return id;
 }
 
 export async function findDuplicateIRCandidate({

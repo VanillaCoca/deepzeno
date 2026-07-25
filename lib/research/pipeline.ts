@@ -791,7 +791,12 @@ export async function runResearchPipeline({
     // Compute cost estimate
     const costEstimate = computeCostEstimate(modelsUsed);
 
-    const finalStatus = partial ? "partial" : "done";
+    // A candidate that the run produced but could not write is a lost finding,
+    // and until now it did not move the status at all: `candidatesFailed` went
+    // into the IR event metadata and the run still reported "done". That is
+    // how a broken id allocator dropped a research conclusion on 2026-07-25
+    // while the UI showed a green run. Partial is what the user needs to see.
+    const finalStatus = partial || candidatesFailed > 0 ? "partial" : "done";
     const now = new Date().toISOString();
 
     await updateResearchRun({
