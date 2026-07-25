@@ -19,6 +19,8 @@ export const inboxMessages = {
     "inbox.tierReshape": "Reshapes truth",
     "inbox.tierAdditive": "Additive",
     "inbox.unassigned": "Unassigned",
+    "inbox.ideasHeld":
+      "{count} ideas are held back — not claims yet, so they don't ask for a ruling.",
   },
   zh: {
     "view.inbox": "收件箱",
@@ -37,6 +39,7 @@ export const inboxMessages = {
     "inbox.tierReshape": "重塑真相",
     "inbox.tierAdditive": "新增",
     "inbox.unassigned": "未指派",
+    "inbox.ideasHeld": "另有 {count} 条想法未入队 —— 它们还不是主张,不需要裁决。",
   },
   fr: {
     "view.inbox": "File",
@@ -56,5 +59,7 @@ export const inboxMessages = {
     "inbox.tierReshape": "Remodèle la vérité",
     "inbox.tierAdditive": "Additif",
     "inbox.unassigned": "Non assigné",
+    "inbox.ideasHeld":
+      "{count} idées sont retenues — pas encore des affirmations, donc sans décision à rendre.",
   },
 };

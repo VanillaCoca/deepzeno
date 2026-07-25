@@ -25,15 +25,23 @@ export async function GET(request: Request) {
     });
 
     try {
-      const items = await listPendingInboxForUser({
+      const { items, ideaCount } = await listPendingInboxForUser({
         userId: session.user.id,
         projectId: input.project_id,
       });
-      return Response.json({ items, not_migrated: false });
+      // `idea_count` is what the queue is NOT showing. The queue itself is
+      // unchanged — ideas still do not ask for a ruling — but an empty inbox
+      // sitting on top of 51 unshown ideas is a lie of omission, and the
+      // number was one query away the whole time.
+      return Response.json({
+        items,
+        idea_count: ideaCount,
+        not_migrated: false,
+      });
     } catch (error) {
       if (error instanceof IRNotReadyError) {
         // Pre-migration database — render an empty inbox instead of a 503.
-        return Response.json({ items: [], not_migrated: true });
+        return Response.json({ items: [], idea_count: 0, not_migrated: true });
       }
       throw error;
     }

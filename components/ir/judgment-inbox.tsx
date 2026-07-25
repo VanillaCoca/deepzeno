@@ -15,7 +15,14 @@ import { InboxTier, type InboxItem } from "@/lib/ir/inbox-core";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
 import { cn, fetcher } from "@/lib/utils";
 
-type InboxResponse = { items: InboxItem[]; not_migrated?: boolean };
+type InboxResponse = {
+  items: InboxItem[];
+  // Ideas the queue deliberately withholds. Optional so a client running
+  // against an older deployment degrades to "say nothing" rather than "say 0",
+  // which would be a confident wrong number.
+  idea_count?: number;
+  not_migrated?: boolean;
+};
 
 export function inboxKey(projectId: string | null) {
   return projectId
@@ -205,6 +212,7 @@ export function JudgmentInbox() {
   const { activeProjectId } = useWorkspace();
   const { data, isLoading } = useInbox(activeProjectId);
   const items = data?.items ?? [];
+  const ideaCount = data?.idea_count ?? 0;
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Keep the selection valid: seed the first item, and clear when the current
@@ -240,6 +248,14 @@ export function JudgmentInbox() {
         <p className="text-sm text-[var(--ir-text-tertiary)]">
           {t("inbox.emptyHint")}
         </p>
+        {/* "Empty" was previously indistinguishable from "empty except for
+            everything we chose not to show you". This is the line that makes
+            the difference legible. */}
+        {ideaCount > 0 ? (
+          <p className="text-[12px] text-[var(--ir-text-tertiary)]">
+            {t("inbox.ideasHeld", { count: ideaCount })}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -266,6 +282,11 @@ export function JudgmentInbox() {
             />
           ))}
         </div>
+        {ideaCount > 0 ? (
+          <div className="border-[var(--ir-border-default)] border-t px-3 py-2 text-[11px] text-[var(--ir-text-tertiary)]">
+            {t("inbox.ideasHeld", { count: ideaCount })}
+          </div>
+        ) : null}
       </aside>
 
       <div className="min-h-0 flex-1">
