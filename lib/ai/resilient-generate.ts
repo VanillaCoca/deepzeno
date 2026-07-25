@@ -97,6 +97,12 @@ export async function generateObjectResilient<T>({
       modelId: retryId,
       outcome: "degraded",
       degradedFrom: primaryId,
+      // Whether the failure above was the one that tripped the primary
+      // endpoint's breaker. A degrade with this false is a blip; a run of
+      // degrades with it true is an outage, and the two want different
+      // responses from you. The distinction was already in memory and was
+      // simply never written down.
+      primaryBreakerOpen: providerBreaker.isOpen(primaryProvider),
       error: primaryMessage,
     });
 

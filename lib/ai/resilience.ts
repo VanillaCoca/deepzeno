@@ -82,19 +82,39 @@ export const providerBreaker = new ProviderCircuitBreaker();
 // Pick the model to retry on after `failedModelId` errored: nearest active
 // model to the task's tier that is not the failed model, preferring a
 // different provider. Null when the failed model was the only option.
+//
+// Circuit-broken endpoints are skipped while healthy alternatives exist, the
+// same rule `pickModel` uses — an open breaker must never leave routing with
+// zero models. This is the call the breaker was built for and the one place
+// it was not being consulted: the retry happens immediately after a failure,
+// so it is the most likely moment in the whole system to pick an endpoint
+// that is already known to be down. Sorting merely *preferred* a different
+// provider, which is not the same as avoiding a burning one — with two models
+// behind one failing endpoint, the "different provider" tiebreak could still
+// hand the retry straight back to it.
 export function chooseRetryModel(
   failedModelId: string,
   tier: ModelTier,
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
+  breaker: Pick<ProviderCircuitBreaker, "isOpen"> = providerBreaker
 ): string | null {
   const failedProvider = providerKeyForModel(failedModelId);
-  const candidates = getActiveModels(env).filter(
+  const active = getActiveModels(env).filter(
     (model) => model.id !== failedModelId
   );
 
-  if (candidates.length === 0) {
+  if (active.length === 0) {
     return null;
   }
+
+  const healthy = active.filter(
+    (model) => !breaker.isOpen(providerKeyForModel(model.id))
+  );
+  // Everything cooling down at once means every endpoint is failing. Retrying
+  // into that is unlikely to work, but returning null here would convert a
+  // recoverable blip into a hard run failure, and the breaker's own half-open
+  // rule already caps how long "open" lasts. Try the best of a bad set.
+  const candidates = healthy.length > 0 ? healthy : active;
 
   const tierRank: Record<ModelTier, number> = {
     economy: 0,
