@@ -1,5 +1,11 @@
 import "server-only";
 
+import {
+  type ContextIREdge,
+  type ContextIRNode,
+  MAX_CONTEXT_CHARS,
+  serializeIRWithinBudget,
+} from "@/lib/context/truth-budget";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getProjectActiveTopicIds,
@@ -14,30 +20,7 @@ import type {
   WorkspaceTopicRelation,
 } from "@/lib/workspace/types";
 
-const MAX_CONTEXT_CHARS = 18_000;
-
 type DatabaseRecord = Record<string, unknown>;
-
-type ContextIRNode = {
-  id: string;
-  projectId: string;
-  topicId: string | null;
-  kind: string;
-  subtype: string | null;
-  title: string;
-  content: string | null;
-  rationale: string | null;
-  createdAt: string;
-};
-
-type ContextIREdge = {
-  id: string;
-  projectId: string;
-  fromNode: string;
-  toNode: string;
-  relation: string;
-  status: string;
-};
 
 function getClient(): any {
   return getSupabaseAdminClient() as any;
@@ -108,59 +91,6 @@ function serializeTopicRelations(relations: WorkspaceTopicRelation[]) {
     .join("\n");
 }
 
-function serializeIR({
-  nodes,
-  edges,
-}: {
-  nodes: ContextIRNode[];
-  edges: ContextIREdge[];
-}) {
-  if (nodes.length === 0) {
-    return "";
-  }
-
-  const topicLabel = (node: ContextIRNode) =>
-    node.topicId ? `topic=${node.topicId}` : "unassigned";
-  const nodeLines = [...nodes]
-    .sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind.localeCompare(right.kind);
-      }
-
-      return right.createdAt.localeCompare(left.createdAt);
-    })
-    .map((node) => {
-      const type =
-        node.kind === "plan" && node.subtype
-          ? `${node.kind}/${node.subtype}`
-          : node.kind;
-      const body = node.content?.trim();
-      const rationale = node.rationale?.trim();
-      const details = [
-        body && body !== node.title ? body : null,
-        rationale ? `because ${rationale}` : null,
-      ].filter(Boolean);
-
-      return `- [${node.id}] (${type}, ${topicLabel(node)}) ${node.title}${
-        details.length > 0 ? ` — ${details.join(" | ")}` : ""
-      }`;
-    });
-  const edgeLines = edges.map(
-    (edge) => `- ${edge.fromNode} ${edge.relation} ${edge.toNode}`
-  );
-
-  return [
-    "<ir_nodes>",
-    ...nodeLines,
-    "</ir_nodes>",
-    edgeLines.length > 0 ? "<ir_edges>" : "",
-    ...edgeLines,
-    edgeLines.length > 0 ? "</ir_edges>" : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 async function listActiveIRForTopicIds(projectId: string, topicIds: string[]) {
   if (topicIds.length === 0) {
     return [];
@@ -209,12 +139,6 @@ async function listActiveIREdgesForNodeIds(
     .filter((edge) => nodeIdSet.has(edge.toNode));
 }
 
-function clampContext(context: string) {
-  return context.length <= MAX_CONTEXT_CHARS
-    ? context
-    : context.slice(0, MAX_CONTEXT_CHARS);
-}
-
 export async function assembleContext(topicId: string, projectId: string) {
   const [topics, relations] = await Promise.all([
     listTopicsByProjectId(projectId),
@@ -238,14 +162,20 @@ export async function assembleContext(topicId: string, projectId: string) {
   }
 
   const relevantTopics = topics.filter((topic) => topicIds.includes(topic.id));
-  return clampContext(
-    [
-      "<topic_context>",
-      serializeTopicList(relevantTopics),
-      "</topic_context>",
-      serializeIR({ nodes, edges }),
-    ].join("\n")
-  );
+  const header = [
+    "<topic_context>",
+    serializeTopicList(relevantTopics),
+    "</topic_context>",
+  ].join("\n");
+
+  const irBlock = serializeIRWithinBudget({
+    nodes,
+    edges,
+    budgetChars: MAX_CONTEXT_CHARS - header.length - 1,
+    activeTopicId: topicId,
+  });
+
+  return [header, irBlock].filter(Boolean).join("\n");
 }
 
 export async function assembleProjectContext(projectId: string) {
@@ -268,15 +198,22 @@ export async function assembleProjectContext(projectId: string) {
       topicIds.includes(relation.toTopicId)
   );
 
-  return clampContext(
-    [
-      "<project_context>",
-      serializeTopicList(activeTopics) || "(no decided or executing topics)",
-      "</project_context>",
-      "<topic_relations>",
-      serializeTopicRelations(activeRelations),
-      "</topic_relations>",
-      serializeIR({ nodes, edges }) || "(no active IR)",
-    ].join("\n")
-  );
+  const header = [
+    "<project_context>",
+    serializeTopicList(activeTopics) || "(no decided or executing topics)",
+    "</project_context>",
+    "<topic_relations>",
+    serializeTopicRelations(activeRelations),
+    "</topic_relations>",
+  ].join("\n");
+
+  const irBlock =
+    serializeIRWithinBudget({
+      nodes,
+      edges,
+      budgetChars: MAX_CONTEXT_CHARS - header.length - 1,
+      activeTopicId: null,
+    }) || "(no active IR)";
+
+  return [header, irBlock].join("\n");
 }
