@@ -3,15 +3,18 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  InboxIcon,
   Loader2Icon,
   MessagesSquareIcon,
   NetworkIcon,
   PanelLeftIcon,
   SparklesIcon,
 } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocale } from "@/components/i18n/locale-provider";
+import { useInbox } from "@/components/ir/judgment-inbox";
 import { useIR } from "@/components/ir/ir-provider";
 import {
   AlertDialog,
@@ -28,7 +31,21 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { cn } from "@/lib/utils";
 
-export type WorkspaceView = "conversation" | "truth-graph";
+export type WorkspaceView = "conversation" | "truth-graph" | "inbox";
+
+const VIEW_TABS: {
+  value: WorkspaceView;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  labelKey: string;
+}[] = [
+  {
+    value: "conversation",
+    Icon: MessagesSquareIcon,
+    labelKey: "view.conversation",
+  },
+  { value: "truth-graph", Icon: NetworkIcon, labelKey: "view.truthGraph" },
+  { value: "inbox", Icon: InboxIcon, labelKey: "view.inbox" },
+];
 
 const ISLAND =
   "pointer-events-auto inline-flex h-9 items-center gap-1 rounded-xl border border-[var(--ir-border-default)] bg-[color-mix(in_srgb,var(--ir-bg-panel)_72%,transparent)] px-1.5 backdrop-blur-md";
@@ -57,6 +74,8 @@ export function WorkspaceHeader({
     clearConversation,
     isActiveConversationEmpty,
   } = useWorkspace();
+  const { data: inboxData } = useInbox(activeProjectId);
+  const inboxCount = inboxData?.items?.length ?? 0;
   const [exploreOpen, setExploreOpen] = useState(false);
   const [isExploring, setIsExploring] = useState(false);
 
@@ -174,7 +193,7 @@ export function WorkspaceHeader({
           className={cn(ISLAND, "gap-1 p-1")}
           role="radiogroup"
         >
-          {(["conversation", "truth-graph"] as const).map((value) => (
+          {VIEW_TABS.map(({ value, Icon, labelKey }) => (
             <Button
               aria-checked={view === value}
               className={cn(
@@ -189,14 +208,13 @@ export function WorkspaceHeader({
               size="xs"
               variant="ghost"
             >
-              {value === "conversation" ? (
-                <MessagesSquareIcon className="size-3.5" />
-              ) : (
-                <NetworkIcon className="size-3.5" />
-              )}
-              {value === "conversation"
-                ? t("view.conversation")
-                : t("view.truthGraph")}
+              <Icon className="size-3.5" />
+              {t(labelKey)}
+              {value === "inbox" && inboxCount > 0 ? (
+                <span className="ml-0.5 rounded-full bg-[color-mix(in_srgb,var(--ir-accent-blue)_18%,transparent)] px-1 font-medium text-[10px] text-[var(--ir-accent-blue)]">
+                  {inboxCount}
+                </span>
+              ) : null}
             </Button>
           ))}
         </div>
