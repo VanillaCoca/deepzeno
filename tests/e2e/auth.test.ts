@@ -5,7 +5,9 @@ test.describe("Authentication Pages", () => {
     await page.goto("/login");
 
     await expect(
-      page.getByRole("heading", { name: "Welcome to ZENO" })
+      page.getByRole("heading", {
+        name: "Make your research and planning more insightful.",
+      })
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Continue with Google" })

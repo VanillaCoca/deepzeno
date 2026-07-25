@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">ZENO</h1>
   <p align="center">
-    <strong>A judgment-native AI workspace for long-cycle projects</strong>
+    <strong>A project-based research workspace for ideas that start vague and turn as you learn</strong>
   </p>
 </p>
 
@@ -25,74 +25,64 @@
 
 ## What is ZENO?
 
-ZENO is an AI workspace where project judgment persists across sessions, topics, and AI agents — so the decisions, constraints, and open questions you've already worked through don't have to be reconstructed every time you return.
+ZENO is a workspace where you research a **project**, not a single question. You start from a vague idea; ZENO helps you break it into topics, investigate them, and keep the structure intact as your goal evolves — even when it ends up 180° from where you began.
 
-Unlike normal AI chat tools, ZENO does not treat conversation history as the source of truth. It treats **confirmed judgment** as the durable state of a project. Nothing enters project truth without explicit user confirmation.
+Unlike single-shot research tools (Perplexity, Deep Research, plain AI chat), ZENO doesn't treat each question as stateless. It treats the **project** — its evolving topics, confirmed findings, open questions, and how they connect — as durable state. And nothing becomes project truth without your explicit confirmation.
 
 ---
 
 ## Why ZENO exists
 
-When people use AI in long-cycle projects, the problem is rarely "the model is not smart enough." The real problem is that **project judgment does not accumulate**.
+When you start digging into something that matters — where to put your money, whether to move abroad, which direction to take your career — the question you end up needing to answer is almost never the one you started with.
 
-Over time:
+"How do I get stable returns?" turns into currency and macro risk, turns into moving some assets abroad, turns into needing a second residency, turns into where you'd actually live and work. One vague worry branches into a dozen large topics that have little to do with where you began.
 
-- context gets buried in chat history
-- prior decisions get forgotten
-- rationale disappears
-- different AI agents start from zero again and again
-
-65% of developers cite missing context as the top cause of poor AI code quality (Stack Overflow 2026). Projects with well-maintained context files see 40% fewer agent errors and 55% faster task completion (Anthropic Agentic Coding Report 2026). People are already solving this manually — maintaining CLAUDE.md files, writing session handoff notes, building 18,000-line PROJECT_JOURNAL systems. ZENO makes this structural, not manual.
+Today's tools lose this thread. Every question starts from zero; the structure of your own inquiry lives only in your head and a scatter of disconnected chats. ZENO is built for exactly this: a single project that catches a vague idea, follows it wherever it turns, researches each branch, and **accumulates what you've confirmed** — so you never re-derive it, and the thread never breaks no matter how far the goal moves.
 
 ---
 
 ## How it works
 
-### 1. Work inside a project, not isolated chats
-Each project has multiple topics. Each topic hosts an ongoing conversation — the **Sandbox** — where you actually think, explore, and decide.
+### 1. Work inside a project, not isolated questions
+Each project holds multiple topics. Each topic hosts an ongoing conversation — the **Sandbox** — where you actually think, explore, and dig.
 
-### 2. Three-stage funnel: Idea → Candidate → Truth
-Not every thought is project truth. ZENO uses a three-stage funnel (backed by node statuses `idea` → `pending` → `active`):
+### 2. A vague idea becomes topics and open questions
+You don't need a well-formed question to start. ZENO reads the conversation and surfaces the open questions and sub-topics hiding inside a fuzzy idea, so the project can branch as your thinking does. *(Automated kickoff decomposition — L1 — is in active development; today you structure topics yourself and ZENO seeds candidates from the conversation.)*
 
-- **Idea** — mid-confidence things ZENO noticed in your conversation but isn't sure are decisions yet. Quietly listed; no action required.
-- **Candidate** — high-confidence judgments waiting for your confirmation.
-- **Truth** — confirmed judgments. The durable state of your project. Read-only afterward; changes go through supersede, not edit.
+### 3. Investigate — and keep only what you confirm
+Not every thought is worth keeping. ZENO uses a three-stage funnel (node statuses `idea` → `pending` → `active`):
 
-### 3. Extraction mechanisms
-ZENO captures judgment from your conversation through several mechanisms, ordered by user-signal strength:
+- **Idea** — things ZENO noticed but isn't sure about yet. Quietly listed; no action required.
+- **Candidate** — high-confidence findings waiting for your confirmation.
+- **Truth** — what you've confirmed. The durable state of your project. Read-only afterward; changes go through supersede, not edit.
 
-| Mechanism | Trigger | Status |
-|---|---|---|
-| Inline marker | AI marks a clear judgment as it writes | ✅ Live |
-| Sweep on "Explore new idea" | You click "Explore new idea" — the primary signal | ✅ Live |
-| Manual sweep | You trigger an extraction sweep over the conversation | ✅ Live |
-| `/save` | You select text and save it manually | 🔜 Planned |
-| Periodic safety sweep | Auto-trigger after N turns as a backstop | 🔜 Planned |
-| Agent-handoff sweep | Blocking sweep before a coding agent reads truth via MCP | 🔜 Planned |
+ZENO captures these from your conversation through several mechanisms (inline marker, "Explore new idea" sweep, and manual sweep are live; `/save` and periodic safety sweeps are planned). The principle is simple: **prefer to miss something than to make it up**. ZENO never auto-writes truth — every candidate requires your explicit confirmation.
 
-The principle is simple: **prefer to miss a judgment than to make one up**. ZENO never auto-writes truth — every candidate requires your explicit confirmation.
+### 4. The Truth Graph holds the whole evolving inquiry
+The right panel renders your project as an interactive **graph canvas** (custom SVG + [ELK](https://github.com/kieler/elkjs) layout), not a flat list — so you can trace how a topic connects back to the question that spawned it, even after the goal has turned. Two scope modes: **All** (truths + candidates + ideas, with cross-stage edges) and **Truth** (confirmed only). Click any node — its rationale, source, relations, and actions open in a unified detail pane below the canvas. One place where details live: no modals, no nested panels.
 
-### 4. The Truth Graph makes judgment inspectable
-The right panel renders your project's judgment as an interactive **graph canvas** (custom SVG + [ELK](https://github.com/kieler/elkjs) layout), not a flat list. Two scope modes: **All** (truths + candidates + ideas, with cross-stage edges) and **Truth** (confirmed truths only). Click any node — its full detail (rationale, source, relations, actions) opens in a unified detail pane below the canvas. One place where details live: no modals, no nested panels.
+### 5. Re-research on a schedule, not just once
+Research can be a one-time pass or a standing task: ZENO is designed to re-check assumptions that depend on a moving world and report back when something you confirmed no longer holds. *(Scheduled re-verification — Watchtower / L3 — is on the near-term roadmap.)*
 
-### 5. Future sessions inherit truth automatically
-Every new conversation in the same project automatically receives the relevant confirmed truth as context. The AI knows what you've decided, what you've rejected, and why — without you pasting anything.
+### 6. Future sessions inherit what you've confirmed
+Every new conversation in the same project automatically receives the relevant confirmed truth as context. ZENO knows what you've decided, what you've ruled out, and why — without you pasting anything.
 
-### 6. Coding agents read your truth via MCP
-When you hand off to a coding agent (Claude Code, Cursor, Codex), ZENO's MCP server gives it the same project truth. It exposes **read tools** (project/topic context, decisions, open questions, rejections, IR search/get) plus **write tools**, all of them **candidate-first and enforced server-side**: every MCP write — create, update, archive, supersede, resolve, edges — lands as a candidate in your review queue and becomes truth only after you confirm it (Iron Law 4). There is no direct mutation path.
+### 7. (For builders) Hand the same project to a coding agent
+When an inquiry turns into something to build, ZENO's MCP server exposes the same confirmed project truth to coding agents (Claude Code, Cursor, Codex) — **read tools** plus **write tools**, all **candidate-first and enforced server-side**: every MCP write lands as a candidate in your review queue and becomes truth only after you confirm it (Iron Law 4). This is downstream of the research — a secondary path, not the main event.
 
 ---
 
 ## Who ZENO is for
 
-ZENO V1 is built for **solo founders and independent builders running long-cycle projects with AI**. More precisely: people who are both the judgment owner and the implementer, switching between thinking AI (for product/strategy decisions) and coding AI (for execution).
+ZENO is for people running a **real, evolving inquiry** — something important enough to research properly and open-ended enough to change shape as you learn. Money, a possible move abroad, a career turn, a big purchase, a business idea, a research question. People who want to *think rigorously* about a fuzzy problem, not just get a quick answer.
 
-V1 is not for everyone. It assumes:
+It assumes:
 
-- **You take project context seriously.** You already maintain CLAUDE.md / AGENTS.md / handoff notes manually; ZENO automates and structures this.
-- **You are the single judgment owner.** V1 assumes one person makes the calls. Multi-person team coordination is V2.
-- **You work across multiple AI agents.** Claude, GPT, Gemini for thinking; Claude Code / Cursor / Codex for implementation. ZENO gives them all the same judgment substrate.
-- **Your projects span weeks or months.** Short one-off tasks don't need ZENO.
+- **You're working on something that mutates.** The goal you start with isn't the goal you'll end with — and you want a place that holds the whole journey, not a fresh chat each time.
+- **You'll do the thinking.** ZENO researches, structures, and surfaces; you decide what's true. It rewards people who treat their own questions as worth investigating.
+- **Your inquiry spans days or weeks, not one sitting.** A one-off question doesn't need ZENO.
+
+**For builders:** if your project ends in something to build, the same confirmed project truth feeds coding agents (Claude Code, Cursor, Codex) via MCP. That's a downstream path, not the reason ZENO exists.
 
 ---
 
@@ -148,24 +138,24 @@ When AI generates a response and judges that the conversation just produced a cl
 
 ## What makes ZENO different
 
-Most AI products are built around one of these units: chat history, prompts, documents, or memory snippets.
+Most AI products are built around one of these units: a chat, a prompt, a document, or a memory snippet. Research tools are built around a single **question**.
 
-ZENO is built around a different unit:
+ZENO is built around a larger unit:
 
-### **Judgment**
+### **The project**
 
-A judgment is not just text. It has a kind, a status, a rationale, relations to other judgments, and consequences inside a project. That is the foundation of judgment continuity across time and agents.
+A project is a living structure of topics, findings, open questions, and confirmed judgment — and the relations between them. It persists across sessions and agents, and it holds together even when the goal turns 180°. The question is what you search; the project is what you keep.
 
 ---
 
 ## What ZENO is NOT
 
+- **Not a single-question research tool.** Perplexity, Deep Research, and plain AI chat answer one question at a time and forget the rest. ZENO holds the whole project and what you've confirmed.
 - Not a general-purpose chatbot
 - Not a tool aggregator or navigation hub
-- Not a multi-model shell
 - Not a one-shot result generator
 - Not a chat-history wrapper with "memory" branding
-- Not a competitor to coding agents — ZENO **feeds** them, doesn't replace them
+- Not a competitor to coding agents — ZENO can **feed** them, but that's downstream, not the point
 
 ---
 
@@ -198,7 +188,7 @@ Beyond the iron laws:
 
 ## Roadmap / not yet built
 
-These are designed but **not implemented yet** — listed for context, not commitment.
+These are designed but **not implemented yet** — listed for context, not commitment. The active-research items below (**L1 Kickoff**, **L2 Research Brief**, **Watchtower / L3**) are now the primary build focus — they are what turns ZENO from a place that *holds* judgment into one that actively *produces* research.
 
 | Item | Stage |
 |---|---|
@@ -219,7 +209,7 @@ These are designed but **not implemented yet** — listed for context, not commi
 
 ## Status
 
-🟢 **V1 — Private Beta (invite-only).** The core judgment-continuity loop is live behind invite codes: Sandbox conversation → extraction → 3-stage funnel → user confirmation → truth → inherited by future sessions and coding agents. Current focus is hardening the research pipeline (source scoring, quote verification, provider resilience) based on beta usage.
+🟢 **V1 — Private Beta (invite-only).** The project research loop is live behind invite codes: start from a vague idea → break it into topics → investigate → confirm what's true → hold it in the Truth Graph → inherit it in every future session. Current focus is hardening the research pipeline (source scoring, quote verification, provider resilience) based on beta usage.
 
 ---
 

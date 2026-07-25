@@ -22,7 +22,7 @@ async function InviteAwareLoginForm() {
 export default function Page() {
   return (
     <>
-      <div className="mb-8 flex items-center justify-center gap-2.5">
+      <div className="mb-6 flex items-center gap-2.5">
         <ZenoLogo className="size-8 text-foreground" />
         <span
           className="text-2xl text-foreground tracking-tight"
@@ -31,6 +31,18 @@ export default function Page() {
           ZENO
         </span>
       </div>
+      <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.18em]">
+        Insight-first AI
+      </p>
+      <h1 className="text-balance font-semibold text-3xl tracking-tight">
+        Make your research and planning more insightful.
+      </h1>
+      <p className="pb-2 text-muted-foreground text-sm leading-relaxed">
+        Most AI tools answer your question and forget it. ZENO treats your
+        project as a serious one — it does the digging, surfaces the assumptions
+        worth a second look, and keeps every judgment you confirm, even as the
+        goal shifts under you.
+      </p>
       <Suspense
         fallback={
           <div className="h-[260px] rounded-2xl border border-border/50 bg-muted/30" />

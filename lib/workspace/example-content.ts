@@ -1166,7 +1166,8 @@ const COZE_EXAMPLE: ExampleProject = {
           rationale:
             "非开发者写不出测试用例,因此「跑测试」只是工程问题,「验收标准的来源」才是产品问题。没有验收,用户不敢让 agent 碰线上应用,监控与自动维护都无从谈起。",
           sourceTurnIndex: 8,
-          sourceSpan: "非开发者根本没有能力判断「改完之后对不对」,他们写不出测试用例。",
+          sourceSpan:
+            "非开发者根本没有能力判断「改完之后对不对」,他们写不出测试用例。",
         },
         {
           key: "acceptance-cand",
@@ -1428,8 +1429,7 @@ const COZE_EXAMPLE: ExampleProject = {
               title: "极客公园:扣子团队的产品演进访谈",
               quote:
                 "工作流成为核心价值之后,留下来的用户逐渐收敛为那些靠它赚钱或解决实际工作问题的人。",
-              claim:
-                "平台方观察到用户结构向「严肃使用者」收敛,支持本假设。",
+              claim: "平台方观察到用户结构向「严肃使用者」收敛,支持本假设。",
               stance: "supports",
             },
             {
@@ -1437,8 +1437,7 @@ const COZE_EXAMPLE: ExampleProject = {
               title: "Coze Studio 开源仓库",
               quote:
                 "The platform targets developers building production-grade agent applications.",
-              claim:
-                "官方定位面向生产级应用开发者,与严肃使用者假设一致。",
+              claim: "官方定位面向生产级应用开发者,与严肃使用者假设一致。",
               stance: "supports",
             },
             {
@@ -1489,7 +1488,8 @@ const COZE_EXAMPLE: ExampleProject = {
         ],
       },
       alert: {
-        title: "「目标用户会收敛为严肃使用者」可能需要重估——多人协作场景正在扩大?",
+        title:
+          "「目标用户会收敛为严肃使用者」可能需要重估——多人协作场景正在扩大?",
         rationale:
           "Watchtower 巡检发现:同类产品近期主推多人协作与项目空间,使用者从个体严肃开发者扩展到团队中的非技术成员(演示数据)。若确认,「北极星指标」与「壁垒定位」都需要回沙盒重审。",
         edgeLabel: "巡检发现新信号",

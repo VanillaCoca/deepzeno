@@ -90,7 +90,10 @@ export function AgentSettingsPopover({
       body: JSON.stringify({ project_id: projectId, ...patch }),
     });
     if (!response.ok) {
-      toast({ type: "error", description: t("wt.patrolFailed", { detail: `${response.status}` }) });
+      toast({
+        type: "error",
+        description: t("wt.patrolFailed", { detail: `${response.status}` }),
+      });
       return;
     }
     onChanged();
@@ -164,7 +167,9 @@ export function AgentSettingsPopover({
         ) : null}
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[var(--z-text-2)]">{t("wt.patrolEnabled")}</span>
+          <span className="text-[var(--z-text-2)]">
+            {t("wt.patrolEnabled")}
+          </span>
           <Button
             data-testid="agent-settings-patrol-toggle"
             disabled={!settings}
@@ -179,7 +184,9 @@ export function AgentSettingsPopover({
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[var(--z-text-2)]">{t("wt.defaultCadence")}</span>
+          <span className="text-[var(--z-text-2)]">
+            {t("wt.defaultCadence")}
+          </span>
           <Select
             disabled={!settings}
             onValueChange={(value) => patchSettings({ default_cadence: value })}
@@ -199,11 +206,15 @@ export function AgentSettingsPopover({
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[var(--z-text-2)]">{t("wt.researchModel")}</span>
+          <span className="text-[var(--z-text-2)]">
+            {t("wt.researchModel")}
+          </span>
           <Select
             disabled={!settings}
             onValueChange={(value) =>
-              patchSettings({ research_model_id: value === "__default__" ? null : value })
+              patchSettings({
+                research_model_id: value === "__default__" ? null : value,
+              })
             }
             value={settings?.researchModelId ?? "__default__"}
           >

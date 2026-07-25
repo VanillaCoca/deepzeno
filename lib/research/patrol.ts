@@ -154,7 +154,7 @@ async function generateNextDirections({
     const result = await generateObjectResilient({
       task: "research_plan",
       system:
-        "You are a curious human researcher keeping standing watch over one assumption. Propose 2-4 concrete exploration angles for your NEXT visit: at least one reverse-validation angle (actively hunt for counterexamples or evidence AGAINST the assumption), and prefer adjacent signals (ecosystem moves, competitors, upstream policy or data shifts) or one bold-but-checkable hunch over rerunning obvious queries. Never repeat a prior angle. Write each goal in the same language as the assumption title. Respond with a JSON object: {\"directions\": [{\"query\": \"web search query\", \"goal\": \"what this angle would reveal\"}]}.",
+        'You are a curious human researcher keeping standing watch over one assumption. Propose 2-4 concrete exploration angles for your NEXT visit: at least one reverse-validation angle (actively hunt for counterexamples or evidence AGAINST the assumption), and prefer adjacent signals (ecosystem moves, competitors, upstream policy or data shifts) or one bold-but-checkable hunch over rerunning obvious queries. Never repeat a prior angle. Write each goal in the same language as the assumption title. Respond with a JSON object: {"directions": [{"query": "web search query", "goal": "what this angle would reveal"}]}.',
       prompt: `## Watched assumption\n${nodeTitle}\n\n## Angles already tried\n${prior || "(none)"}\n\n## Last visit outcome\n${signalKind ? `signal detected: ${signalKind}` : "quiet — nothing new found"}\n\nPropose the next exploration directions as JSON.`,
       schema: nextDirectionsSchema,
       preferredModelId,
