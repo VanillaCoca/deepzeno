@@ -1,0 +1,35 @@
+-- Remove the out-of-band CHECK constraints on research_run.
+--
+-- Why this exists: `research_run` was created directly in the Supabase SQL
+-- editor, before the migration folder covered it, and that hand-written DDL
+-- carried two CHECKs that no numbered migration has ever known about:
+--
+--   research_run_run_type_check  CHECK (run_type IN ('research','patrol'))
+--   research_run_status_check    CHECK (status   IN ('running','done','partial',...))
+--
+-- Neither list was updated when the code grew. Migration 0006 added the sweep
+-- run type and made `origin_node_id` nullable to carry it, but could not have
+-- known to widen a constraint that exists in no migration and in no drizzle
+-- snapshot. The result in production: every `run_type = 'sweep'` insert failed
+-- with 23514, `openSweepRun` swallowed it by design (a sweep must not die
+-- because its progress bar could not be created), and the feature was simply
+-- invisible. Nothing logged to the user. Nothing failed loudly.
+--
+-- Why drop rather than widen: schema.ts declares both columns as plain `text`
+-- and says so out loud -- "A text column, so the two cancel states cost no
+-- migration." That is the intended contract. The values are written from typed
+-- TypeScript constants (RUN_TYPES, RunStatus in lib/research/run-progress-core.ts)
+-- through exactly two functions in lib/research/queries.ts; there is no
+-- external writer for a database CHECK to defend against. So the constraint
+-- guards against a class of bug that cannot occur, while its own failure mode
+-- -- a silent 23514 in production months after the code shipped -- is precisely
+-- the bug we just spent a session chasing. Re-adding a widened list would
+-- rebuild the same trap for the next run type.
+--
+-- `status` is dropped in the same pass for the same reason and one more: the
+-- cancel path writes 'cancelling' then 'cancelled', and neither appears in the
+-- constraint's original list. The Stop button would have failed the same way
+-- the sweep row did, only later and with the user watching.
+
+ALTER TABLE "research_run" DROP CONSTRAINT IF EXISTS "research_run_run_type_check";--> statement-breakpoint
+ALTER TABLE "research_run" DROP CONSTRAINT IF EXISTS "research_run_status_check";
