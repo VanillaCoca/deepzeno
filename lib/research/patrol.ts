@@ -32,6 +32,8 @@ import {
   listResearchRunsForNode,
   updateResearchRun,
 } from "./queries";
+import type { RunReporter } from "./run-reporter";
+import { createRunReporter, RunCancelledError } from "./run-reporter";
 import { searchWeb } from "./search";
 import { scoreSource } from "./source-score";
 import { verifyQuote } from "./text";
@@ -47,7 +49,12 @@ import {
 
 export type PatrolResult = {
   watchId: string;
-  status: "signal_alerted" | "signal_suppressed" | "quiet" | "failed";
+  status:
+    | "signal_alerted"
+    | "signal_suppressed"
+    | "quiet"
+    | "cancelled"
+    | "failed";
   runId: string | null;
   detail: string | null;
 };
@@ -198,6 +205,13 @@ export async function runPatrolForWatch({
     });
   };
 
+  // Hoisted out of the try so the catch below can settle the run row. Without
+  // this a patrol that throws leaves its row `running` forever, and nothing
+  // ever corrects it — the exact condition the activity bar has to report as
+  // "lost contact" instead of quietly spinning.
+  let runId: string | null = null;
+  let reporter: RunReporter | null = null;
+
   try {
     const ownerId = await getProjectOwnerId(watch.projectId);
     if (!ownerId) {
@@ -231,6 +245,15 @@ export async function runPatrolForWatch({
       runType: "patrol",
       watchId: watch.id,
     });
+    runId = run.id;
+    // Patrol does not accumulate token usage, so it has no running cost to
+    // report. Null, not zero — a patrol is not free, it is unmeasured.
+    reporter = createRunReporter({
+      runId: run.id,
+      budget,
+      costEstimate: () => null,
+    });
+    await reporter.beat({ phase: "plan" });
 
     const priorEvidence = await listEvidenceForNode({
       nodeId: watch.nodeId,
@@ -251,7 +274,14 @@ export async function runPatrolForWatch({
       // Plan persistence is observability, never a reason to fail a patrol.
     });
 
+    await reporter.beat({
+      phase: "collect",
+      searchesUsed: 0,
+      fetchesUsed: 0,
+    });
+
     const urls = new Map<string, string | null>();
+    let searchesUsed = 0;
     for (const intent of intents.slice(0, budget.maxSearches)) {
       try {
         const outcome = await searchWeb(intent.query);
@@ -263,6 +293,12 @@ export async function runPatrolForWatch({
       } catch {
         // A failed search is a quiet miss, not a failed patrol.
       }
+      searchesUsed++;
+      await reporter.beat({
+        phase: "collect",
+        searchesUsed,
+        fetchesUsed: 0,
+      });
     }
     // Prior evidence pages first (quote-vanish detection), then new URLs.
     const priorUrls = [...new Set(priorEvidence.map((item) => item.url))];
@@ -282,12 +318,20 @@ export async function runPatrolForWatch({
     const extractModelId =
       preferredModelId ?? selectModelForTask("research_worker");
 
+    let fetchesUsed = 0;
     for (const url of fetchOrder) {
       const page = await fetchPageText(url);
       if (!page) {
         continue;
       }
       refetchedPages.push({ url, text: page.text });
+      fetchesUsed++;
+      await reporter.beat({
+        phase: "collect",
+        searchesUsed,
+        fetchesUsed,
+        evidence: freshItems.length,
+      });
       try {
         const extraction = await extractEvidenceItems({
           modelId: extractModelId,
@@ -306,6 +350,8 @@ export async function runPatrolForWatch({
     }
 
     // ── Evaluate ──────────────────────────────────────────────────────────
+    await reporter.beat({ phase: "judge", evidence: freshItems.length });
+
     const signal = evaluatePatrolSignal({
       newItems: freshItems,
       priorEvidence,
@@ -400,6 +446,13 @@ export async function runPatrolForWatch({
         sourceScore: scoreSource(item.url).score,
         retrievedAt,
       }));
+    // `report`, not `beat`: the signal is already found and paid for.
+    await reporter.report({
+      phase: "land",
+      evidence: toPersist.length,
+      candidates: 1,
+    });
+
     await insertEvidence(toPersist);
 
     const alertTitle =
@@ -469,6 +522,27 @@ export async function runPatrolForWatch({
   } catch (error) {
     await reschedule({});
     const message = error instanceof Error ? error.message : String(error);
-    return { watchId, status: "failed", runId: null, detail: message };
+    const cancelled = error instanceof RunCancelledError;
+
+    // Settle the row. Previously this path left it `running` forever, so a
+    // patrol that threw stayed on screen as work in flight that no longer
+    // existed — a progress bar's worst failure mode.
+    if (runId) {
+      await updateResearchRun({
+        id: runId,
+        status: cancelled ? "cancelled" : "failed",
+        error: cancelled ? null : message,
+        finishedAt: new Date().toISOString(),
+      }).catch(() => {
+        // Best-effort: the activity bar's staleness rule covers what this misses.
+      });
+    }
+
+    return {
+      watchId,
+      status: cancelled ? "cancelled" : "failed",
+      runId,
+      detail: cancelled ? null : message,
+    };
   }
 }

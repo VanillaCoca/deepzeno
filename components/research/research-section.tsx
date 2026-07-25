@@ -8,13 +8,35 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { irNodeKey } from "@/components/ir/ir-provider";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { formatCost } from "@/lib/research/run-progress-core";
 import { fetcher } from "@/lib/utils";
 
 // Types mirror lib/research/queries.ts (server-only module — `import type`
 // is erased at compile time but the Next bundler may still complain about
 // importing from a server-only file in a client component; local copies are
 // the safe fallback).
-type ResearchRunStatus = "running" | "done" | "partial" | "failed";
+type ResearchRunStatus =
+  | "running"
+  | "cancelling"
+  | "cancelled"
+  | "done"
+  | "partial"
+  | "failed";
+
+// Both states in which the run is still holding resources. `cancelling` counts:
+// the user has asked it to stop but it has not stopped yet, and offering them a
+// second "start research" button in that window would start a second run.
+const ACTIVE_STATUSES: readonly ResearchRunStatus[] = ["running", "cancelling"];
+
+type RunEstimate = {
+  budget: { max_searches: number; max_fetches: number };
+  bounds: {
+    maxSearches: { min: number; max: number };
+    maxFetches: { min: number; max: number };
+  };
+  typical_cost: number | null;
+  sample_size: number;
+};
 
 type ResearchRun = {
   id: string;
@@ -74,23 +96,42 @@ export function ResearchSection({
   const { t } = useLocale();
   const { mutate } = useSWRConfig();
   const [isStarting, setIsStarting] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  // Null means "use whatever the server's default is". Kept null rather than
+  // pre-filled with the default so an untouched panel sends no override at all,
+  // and a run started today is not silently pinned to yesterday's default.
+  const [override, setOverride] = useState<{
+    maxSearches: number | null;
+    maxFetches: number | null;
+  }>({ maxSearches: null, maxFetches: null });
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const runsKey = `${basePath}/api/research/runs?nodeId=${encodeURIComponent(nodeId)}`;
   const evidenceKey = `${basePath}/api/research/evidence?nodeId=${encodeURIComponent(nodeId)}`;
+  const estimateKey = `${basePath}/api/research/run?node_id=${encodeURIComponent(nodeId)}`;
   const { data: runsData, mutate: mutateRuns } = useSWR<{
     runs: ResearchRun[];
   }>(runsKey, fetcher, {
     revalidateOnFocus: false,
     // Function form: supported in installed SWR (refreshInterval?: number | ((latestData) => number))
     refreshInterval: (latest) =>
-      latest?.runs.some((run) => run.status === "running") ? POLL_MS : 0,
+      latest?.runs.some((run) => ACTIVE_STATUSES.includes(run.status))
+        ? POLL_MS
+        : 0,
   });
   const { data: evidenceData, mutate: mutateEvidence } = useSWR<{
     evidence: EvidenceItem[];
   }>(evidenceKey, fetcher, { revalidateOnFocus: false });
+  // Fetched once when the section opens. The anchor it provides is the median
+  // of this project's own finished runs — a measurement, not a forecast — so it
+  // does not need to be re-read while the user reads it.
+  const { data: estimate } = useSWR<RunEstimate>(estimateKey, fetcher, {
+    revalidateOnFocus: false,
+  });
 
   const latestRun = runsData?.runs[0] ?? null;
-  const isRunning = isStarting || latestRun?.status === "running";
+  const isRunning =
+    isStarting ||
+    (latestRun !== null && ACTIVE_STATUSES.includes(latestRun.status));
   // The evidence endpoint returns every row for the node across all runs; scope
   // the display to the latest run so it stays consistent with the run summary
   // (which only shows the latest run) instead of mixing evidence from old runs.
@@ -109,8 +150,15 @@ export function ResearchSection({
     const next = latestRun?.status;
     prevRunStatusRef.current = next;
     // Skip the first render (prev === undefined) and only fire when the run
-    // leaves "running" for a terminal state.
-    if (prev === "running" && next !== undefined && next !== "running") {
+    // leaves an active state for a terminal one. A cancelled run counts: it can
+    // still have landed evidence before it stopped.
+    if (
+      prev !== undefined &&
+      prev !== null &&
+      ACTIVE_STATUSES.includes(prev) &&
+      next !== undefined &&
+      !ACTIVE_STATUSES.includes(next)
+    ) {
       mutateEvidence().catch(console.error);
     }
   }, [latestRun?.status, mutateEvidence]);
@@ -122,7 +170,15 @@ export function ResearchSection({
       const response = await fetch(`${basePath}/api/research/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ node_id: nodeId }),
+        body: JSON.stringify({
+          node_id: nodeId,
+          ...(override.maxSearches === null
+            ? {}
+            : { max_searches: override.maxSearches }),
+          ...(override.maxFetches === null
+            ? {}
+            : { max_fetches: override.maxFetches }),
+        }),
       });
       const payload = await response.json();
 
@@ -175,7 +231,44 @@ export function ResearchSection({
           )}
           {isRunning ? t("detail.researchRunning") : t("detail.researchAction")}
         </Button>
+
+        {estimate ? (
+          <Button
+            className="text-xs"
+            onClick={() => setBudgetOpen((current) => !current)}
+            size="sm"
+            variant="ghost"
+          >
+            {t("detail.researchBudgetToggle")} ·{" "}
+            {override.maxSearches ?? estimate.budget.max_searches}/
+            {override.maxFetches ?? estimate.budget.max_fetches}
+          </Button>
+        ) : null}
       </div>
+
+      {/* What this is likely to cost, said before the money is spent rather
+          than after. It is the median of this project's own finished runs — a
+          measurement of history, not a priced forecast — so when there is no
+          history it says so instead of showing a placeholder number. */}
+      {estimate ? (
+        <p className="text-xs text-[var(--ir-text-tertiary)]">
+          {estimate.typical_cost === null
+            ? t("detail.researchEstimateUnknown")
+            : t("detail.researchEstimateKnown", {
+                cost: formatCost(estimate.typical_cost),
+                count: estimate.sample_size,
+              })}
+        </p>
+      ) : null}
+
+      {budgetOpen && estimate ? (
+        <BudgetEditor
+          estimate={estimate}
+          onChange={setOverride}
+          override={override}
+        />
+      ) : null}
+
       <p className="text-xs text-[var(--ir-text-tertiary)]">
         {t("detail.researchCaption")}
       </p>
@@ -239,16 +332,105 @@ export function ResearchSection({
   );
 }
 
+/**
+ * The pre-run budget.
+ *
+ * Two numbers, editable, bounded by what one serverless invocation can finish
+ * inside — the bounds come from the server rather than being duplicated here,
+ * because a field whose values silently cannot work is worse than no field.
+ *
+ * Deliberately does not rescale the cost estimate above when the user raises
+ * the budget. It would be easy to multiply, and the product would be a made-up
+ * number: past runs cost what they cost at the budgets they used, and that is
+ * the only thing we actually measured.
+ */
+function BudgetEditor({
+  estimate,
+  override,
+  onChange,
+}: {
+  estimate: RunEstimate;
+  override: { maxSearches: number | null; maxFetches: number | null };
+  onChange: (next: {
+    maxSearches: number | null;
+    maxFetches: number | null;
+  }) => void;
+}) {
+  const { t } = useLocale();
+
+  const fields = [
+    {
+      key: "maxSearches" as const,
+      label: t("detail.researchBudgetSearches"),
+      bounds: estimate.bounds.maxSearches,
+      fallback: estimate.budget.max_searches,
+    },
+    {
+      key: "maxFetches" as const,
+      label: t("detail.researchBudgetFetches"),
+      bounds: estimate.bounds.maxFetches,
+      fallback: estimate.budget.max_fetches,
+    },
+  ];
+
+  return (
+    <div className="space-y-2 rounded-lg border border-[var(--ir-border-default)] p-2">
+      <div className="flex flex-wrap items-center gap-3">
+        {fields.map((field) => (
+          <label
+            className="flex items-center gap-1.5 text-xs text-[var(--ir-text-secondary)]"
+            key={field.key}
+          >
+            {field.label}
+            <input
+              className="w-14 rounded border border-[var(--ir-border-strong)] bg-transparent px-1.5 py-0.5 text-right text-xs tabular-nums"
+              max={field.bounds.max}
+              min={field.bounds.min}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                onChange({
+                  ...override,
+                  [field.key]: Number.isNaN(parsed) ? null : parsed,
+                });
+              }}
+              type="number"
+              value={override[field.key] ?? field.fallback}
+            />
+            <span className="text-[10px] text-[var(--ir-text-tertiary)]">
+              ≤{field.bounds.max}
+            </span>
+          </label>
+        ))}
+
+        <Button
+          className="text-xs"
+          onClick={() => onChange({ maxSearches: null, maxFetches: null })}
+          size="sm"
+          variant="ghost"
+        >
+          {t("detail.researchBudgetReset")}
+        </Button>
+      </div>
+      <p className="text-[10px] text-[var(--ir-text-tertiary)]">
+        {t("detail.researchBudgetHint")}
+      </p>
+    </div>
+  );
+}
+
+const RUN_STATUS_KEY: Record<ResearchRunStatus, string> = {
+  done: "detail.researchStatusDone",
+  partial: "detail.researchStatusPartial",
+  failed: "detail.researchStatusFailed",
+  cancelling: "detail.researchStatusCancelling",
+  cancelled: "detail.researchStatusCancelled",
+  running: "detail.researchStatusRunning",
+};
+
 function RunSummary({ run }: { run: ResearchRun }) {
   const { t } = useLocale();
   const statusKey =
-    run.status === "done"
-      ? "detail.researchStatusDone"
-      : run.status === "partial"
-        ? "detail.researchStatusPartial"
-        : run.status === "failed"
-          ? "detail.researchStatusFailed"
-          : "detail.researchStatusRunning";
+    RUN_STATUS_KEY[run.status] ?? "detail.researchStatusRunning";
 
   return (
     <div className="space-y-1 rounded-lg border border-[var(--ir-border-default)] p-2 text-xs">

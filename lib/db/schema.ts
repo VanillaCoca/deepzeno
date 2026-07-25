@@ -537,17 +537,25 @@ export const researchRun = pgTable("research_run", {
   topicId: uuid("topic_id").references(() => topic.id, {
     onDelete: "set null",
   }),
-  originNodeId: text("origin_node_id")
-    .notNull()
-    .references(() => irNode.id),
+  // Nullable since sweep runs: a sweep extracts from a conversation and has no
+  // originating IR node to hang off. Research and patrol always set it.
+  originNodeId: text("origin_node_id").references(() => irNode.id),
   plan: jsonb("plan"),
   brief: text("brief"),
+  // 'running' | 'cancelling' | 'cancelled' | 'done' | 'partial' | 'failed'.
+  // A text column, so the two cancel states cost no migration.
   status: text("status").notNull().default("running"),
   error: text("error"),
   budget: jsonb("budget"),
+  // The in-flight checkpoint the activity bar reads: current phase, budget
+  // spent so far, running cost, and the checkpoint's own timestamp (which is
+  // what lets the UI tell a slow run from a dead one). See
+  // lib/research/run-progress-core.ts for the shape.
+  progress: jsonb("progress"),
   costEstimate: real("cost_estimate"),
   modelsUsed: jsonb("models_used"),
-  // 'research' (user-triggered L2) or 'patrol' (Watchtower L3 sentinel).
+  // 'research' (user-triggered L2), 'patrol' (Watchtower L3 sentinel), or
+  // 'sweep' (conversation extraction).
   runType: text("run_type").notNull().default("research"),
   watchId: uuid("watch_id").references(() => irWatch.id, {
     onDelete: "set null",

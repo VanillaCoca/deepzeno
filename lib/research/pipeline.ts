@@ -27,6 +27,9 @@ import {
   insertEvidence,
   updateResearchRun,
 } from "./queries";
+import { clampBudgetOverride } from "./run-progress-core";
+import type { RunReporter } from "./run-reporter";
+import { createRunReporter, RunCancelledError } from "./run-reporter";
 import {
   ResearchToolUnavailableError,
   resolveSearchProvider,
@@ -200,7 +203,8 @@ async function collectPhase(
   nodeId: string,
   budget: ReturnType<typeof resolveResearchBudget>,
   modelsUsed: ModelsUsedAccumulator,
-  preferredModelId: string | null
+  preferredModelId: string | null,
+  reporter: RunReporter | null
 ): Promise<{
   verifiedRows: VerifiedRow[];
   partial: boolean;
@@ -246,6 +250,16 @@ async function collectPhase(
     searchesUsed++;
     lastProvider = outcome.provider;
 
+    // One beat per search: this is both the progress the user sees and the
+    // cancel check, so collect is interruptible partway through rather than
+    // only at its boundary.
+    await reporter?.beat({
+      phase: "collect",
+      searchesUsed,
+      fetchesUsed,
+      evidence: verifiedRows.length,
+    });
+
     // Attribute search usage to a pseudo-key per provider
     addUsage(modelsUsed, `search:${outcome.provider}`, outcome.usage);
 
@@ -284,6 +298,13 @@ async function collectPhase(
     }
 
     fetchesUsed++;
+
+    await reporter?.beat({
+      phase: "collect",
+      searchesUsed,
+      fetchesUsed,
+      evidence: verifiedRows.length,
+    });
 
     let extraction: Awaited<ReturnType<typeof extractEvidenceItems>>;
     try {
@@ -545,12 +566,16 @@ export async function runResearchPipeline({
   userId,
   originNodeId,
   preferredModelId: preferredModelIdInput,
+  budgetOverride,
 }: {
   userId: string;
   originNodeId: string;
   // Research-agent model preference (project setting / watch override).
   // Undefined → the product default chain (DeepSeek when configured).
   preferredModelId?: string | null;
+  // Per-run budget the user set before starting. Already clamped by the route;
+  // clamped again here because this is also called from the patrol path.
+  budgetOverride?: { maxSearches?: number; maxFetches?: number };
 }): Promise<PipelineResult> {
   // ── 1. Load + gate ──────────────────────────────────────────────────────────
   const node = await getIRNodeForUser({ id: originNodeId, userId });
@@ -584,7 +609,13 @@ export async function runResearchPipeline({
       : preferredModelIdInput;
   const preferredModelId = normalizeResearchModelId(storedModelId);
 
-  const budget = resolveResearchBudget();
+  // The budget is written onto the run row, so what the bar divides by is what
+  // this run was actually given — not whatever the env default happens to be
+  // when someone looks at the row later.
+  const budget = {
+    ...resolveResearchBudget(),
+    ...clampBudgetOverride(budgetOverride ?? {}),
+  };
   const run = await createResearchRun({
     projectId: node.projectId,
     topicId: node.topicId,
@@ -594,9 +625,19 @@ export async function runResearchPipeline({
 
   const modelsUsed: ModelsUsedAccumulator = {};
 
+  // The run's progress channel. Every beat also reads the cancel flag, so the
+  // cost of being interruptible is the same round trip that draws the bar.
+  const reporter = createRunReporter({
+    runId: run.id,
+    budget,
+    costEstimate: () => computeCostEstimate(modelsUsed),
+  });
+
   // ── 2. Error wrapper ────────────────────────────────────────────────────────
   try {
     // ── 3. Plan phase ─────────────────────────────────────────────────────────
+    await reporter.beat({ phase: "plan" });
+
     const intents = await planPhase(
       {
         kind: node.kind,
@@ -615,6 +656,8 @@ export async function runResearchPipeline({
     await updateResearchRun({ id: run.id, plan: intents });
 
     // ── 4. Collect phase ──────────────────────────────────────────────────────
+    await reporter.beat({ phase: "collect", searchesUsed: 0, fetchesUsed: 0 });
+
     const originQuestion =
       node.title + (node.content ? `\n${node.content}` : "");
 
@@ -634,7 +677,8 @@ export async function runResearchPipeline({
       originNodeId,
       budget,
       modelsUsed,
-      preferredModelId
+      preferredModelId,
+      reporter
     );
 
     const partial = collectPartial;
@@ -678,6 +722,8 @@ export async function runResearchPipeline({
       };
     }
 
+    await reporter.beat({ phase: "judge", evidence: verifiedRows.length });
+
     const { brief, candidates } = await judgePhase(
       {
         kind: node.kind,
@@ -692,6 +738,14 @@ export async function runResearchPipeline({
     );
 
     // ── 6. Land phase ─────────────────────────────────────────────────────────
+    // `report`, not `beat`: the candidates are already paid for. Cancelling
+    // stops spending; it does not throw away what the run already bought.
+    await reporter.report({
+      phase: "land",
+      evidence: verifiedRows.length,
+      candidates: candidates.length,
+    });
+
     const { candidatesCreated, skippedDuplicates, candidatesFailed } =
       await landPhase(
         candidates,
@@ -767,6 +821,41 @@ export async function runResearchPipeline({
     const message = err instanceof Error ? err.message : String(err);
     const now = new Date().toISOString();
     const failedCostEstimate = computeCostEstimate(modelsUsed);
+
+    // A cancelled run is not a failed run. It settles with no error, keeps the
+    // cost it actually incurred, and returns rather than throwing — the user
+    // asked for this outcome, so the route owes them a result, not a 500.
+    if (err instanceof RunCancelledError) {
+      await updateResearchRun({
+        id: run.id,
+        status: "cancelled",
+        finishedAt: now,
+        modelsUsed,
+        costEstimate: failedCostEstimate,
+      });
+
+      await logIREvent({
+        projectId: node.projectId,
+        topicId: node.topicId,
+        nodeId: originNodeId,
+        event: "research_run_cancelled",
+        layer: "research",
+        metadata: { runId: run.id, costEstimate: failedCostEstimate },
+      });
+
+      return {
+        run: {
+          ...run,
+          status: "cancelled",
+          costEstimate: failedCostEstimate ?? null,
+          modelsUsed,
+          finishedAt: now,
+        },
+        evidenceCount: 0,
+        candidatesCreated: 0,
+        skippedDuplicates: 0,
+      };
+    }
 
     await updateResearchRun({
       id: run.id,

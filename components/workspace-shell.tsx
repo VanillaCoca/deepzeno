@@ -9,7 +9,7 @@ import { JudgmentInbox } from "@/components/ir/judgment-inbox";
 import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
 import { LoadingOverlay } from "@/components/loading-overlay";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { ChangeBar } from "@/components/workspace/change-bar";
+import { ActivityBar } from "@/components/workspace/activity-bar";
 import {
   WorkspaceHeader,
   type WorkspaceView,
@@ -175,10 +175,12 @@ export function WorkspaceShell({
                 onViewChange={applyView}
                 view={activeView}
               />
-              {/* Directly under the header, on the surface the user actually
-                  lands on: a change report the user has to go looking for is
-                  only useful to someone who already suspects a change. */}
-              <ChangeBar onGoTo={applyView} />
+              {/* One strip directly under the header, on the surface the user
+                  actually lands on. It shows work in flight while there is any,
+                  and falls back to the change report otherwise — a report the
+                  user has to go looking for is only useful to someone who
+                  already suspects a change. */}
+              <ActivityBar onGoTo={applyView} />
               <div className="min-h-0 flex-1 overflow-hidden">
                 {renderStage()}
               </div>

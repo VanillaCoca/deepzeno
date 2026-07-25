@@ -7,6 +7,7 @@ import {
   isLocale,
   type Locale,
 } from "@/lib/i18n/dictionaries";
+import { activityMessages } from "@/lib/i18n/messages/activity";
 import { chatMessages } from "@/lib/i18n/messages/chat";
 import { detailMessages } from "@/lib/i18n/messages/detail";
 import { dialogsMessages } from "@/lib/i18n/messages/dialogs";
@@ -27,6 +28,7 @@ export const LOCALE_STORAGE_KEY = "zeno-locale";
 const mergedDictionaries: Record<Locale, Record<string, string>> = {
   en: {
     ...dictionaries.en,
+    ...activityMessages.en,
     ...detailMessages.en,
     ...dialogsMessages.en,
     ...graphMessages.en,
@@ -41,6 +43,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
   },
   zh: {
     ...dictionaries.zh,
+    ...activityMessages.zh,
     ...detailMessages.zh,
     ...dialogsMessages.zh,
     ...graphMessages.zh,
@@ -55,6 +58,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
   },
   fr: {
     ...dictionaries.fr,
+    ...activityMessages.fr,
     ...detailMessages.fr,
     ...dialogsMessages.fr,
     ...graphMessages.fr,
