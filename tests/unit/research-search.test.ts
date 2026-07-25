@@ -9,6 +9,29 @@ import {
 } from "../../lib/research/search-provider.ts";
 
 describe("resolveSearchProvider", () => {
+  it("prefers tavily over every model-side provider", () => {
+    // Tavily wins on identical output for zero tokens, so a project holding
+    // every key should still spend nothing on search.
+    assert.equal(
+      resolveSearchProvider({
+        TAVILY_API_KEY: "k",
+        ANTHROPIC_API_KEY: "k",
+        OPENAI_API_KEY: "k",
+        AI_GATEWAY_API_KEY: "k",
+      }),
+      "tavily"
+    );
+    // But fixtures still outrank it, or offline evals would start billing.
+    assert.equal(
+      resolveSearchProvider({
+        ZENO_SEARCH_FIXTURES_DIR: "/fx",
+        TAVILY_API_KEY: "k",
+      }),
+      "fixtures"
+    );
+    assert.equal(resolveSearchProvider({ TAVILY_API_KEY: "" }), null);
+  });
+
   it("prefers anthropic, then openai, then gateway", () => {
     assert.equal(
       resolveSearchProvider({ ANTHROPIC_API_KEY: "k", OPENAI_API_KEY: "k" }),

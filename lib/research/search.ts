@@ -88,6 +88,88 @@ async function searchFixtures(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Tavily
+// ---------------------------------------------------------------------------
+
+const TAVILY_ENDPOINT = "https://api.tavily.com/search";
+const TAVILY_TIMEOUT_MS = 10_000;
+// One search costs one credit at basic depth, two at advanced. Advanced buys
+// deeper crawling of each result's body — which this pipeline does not want,
+// because it fetches and quote-verifies the pages itself (fetch-page.ts). We
+// are buying URLs, so we buy them at the cheap depth.
+const TAVILY_SEARCH_DEPTH = "basic";
+// The per-run budget allows 10 fetches across up to 6 searches, so a search
+// returning more than a handful of URLs is returning URLs that will never be
+// read.
+const TAVILY_MAX_RESULTS = 8;
+
+// A key that is missing, revoked, or out of credit fails identically for every
+// intent in the run. Letting the pipeline absorb those as six per-intent
+// failures would land a thin "partial" result that reads as "we looked and the
+// web was quiet" — Iron Law 2 in its most dangerous form, since the user acts
+// on a partial. These statuses fail the run out loud instead.
+const TAVILY_FATAL_STATUSES = new Set([401, 403, 429, 432, 433]);
+
+type TavilyResponse = {
+  results?: Array<{ url?: string; title?: string }>;
+};
+
+async function searchTavily(query: string): Promise<WebSearchOutcome> {
+  let response: Response;
+
+  try {
+    response = await fetch(TAVILY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.TAVILY_API_KEY}`,
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: TAVILY_SEARCH_DEPTH,
+        max_results: TAVILY_MAX_RESULTS,
+      }),
+      signal: AbortSignal.timeout(TAVILY_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Network-level: transient by assumption, so it stays a per-intent failure.
+    throw new Error(
+      `Tavily search failed: ${error instanceof Error ? error.message : "network error"}`
+    );
+  }
+
+  if (!response.ok) {
+    const detail = `Tavily search failed with HTTP ${response.status}.`;
+
+    if (TAVILY_FATAL_STATUSES.has(response.status)) {
+      throw new ResearchToolUnavailableError(
+        `${detail} The key is missing, rejected, or out of credit — check TAVILY_API_KEY.`
+      );
+    }
+
+    throw new Error(detail);
+  }
+
+  const payload = (await response.json()) as TavilyResponse;
+
+  return {
+    // Reuse the same deduper the model-side branches use so every provider
+    // hands the pipeline one shape.
+    results: dedupeSources(
+      (payload.results ?? []).map((item) => ({
+        sourceType: "url",
+        url: item.url,
+        title: item.title,
+      }))
+    ),
+    provider: "tavily",
+    // Genuinely zero. No language model is involved, and reporting a token
+    // count here would put a fabricated number into the run's cost estimate.
+    usage: { inputTokens: 0, outputTokens: 0 },
+  };
+}
+
 export async function searchWeb(query: string): Promise<WebSearchOutcome> {
   const provider = resolveSearchProvider();
 
@@ -101,6 +183,10 @@ export async function searchWeb(query: string): Promise<WebSearchOutcome> {
       throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
     }
     return await searchFixtures(query, dir);
+  }
+
+  if (provider === "tavily") {
+    return await searchTavily(query);
   }
 
   if (provider === "anthropic") {
