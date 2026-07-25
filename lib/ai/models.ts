@@ -287,8 +287,16 @@ const modelCatalog: ChatModelDefinition[] = [
     providerType: "openai-compatible",
     tier: "economy",
     contextWindowTokens: 64_000,
-    inputCostPerMTok: null,
-    outputCostPerMTok: null,
+    // deepseek-v4-flash on DeepSeek's first-party API, cache-miss input
+    // (checked 2026-07-25). Priced rather than left null because this is the
+    // default research model: computeCostEstimate skips null-priced entries and
+    // returns null when nothing priced was used, so an all-DeepSeek run
+    // reported no cost at all — and listRecentRunCosts drops non-positive
+    // costs, which then emptied the pre-run budget panel. The run knew its
+    // token counts the whole time. A stale price is a wrong estimate; no price
+    // is a run that claims to be free.
+    inputCostPerMTok: 0.14,
+    outputCostPerMTok: 0.28,
     envKeys: ["DEEPSEEK_API_KEY"],
     // "deepseek-chat" was retired by DeepSeek; the live API now answers every
     // request against it with "The supported API model names are
