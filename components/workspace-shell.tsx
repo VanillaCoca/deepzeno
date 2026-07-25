@@ -9,6 +9,7 @@ import { JudgmentInbox } from "@/components/ir/judgment-inbox";
 import { TruthGraphStage } from "@/components/ir/truth-graph-stage";
 import { LoadingOverlay } from "@/components/loading-overlay";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { ChangeBar } from "@/components/workspace/change-bar";
 import {
   WorkspaceHeader,
   type WorkspaceView,
@@ -174,20 +175,17 @@ export function WorkspaceShell({
                 onViewChange={applyView}
                 view={activeView}
               />
+              {/* Directly under the header, on the surface the user actually
+                  lands on: a change report the user has to go looking for is
+                  only useful to someone who already suspects a change. */}
+              <ChangeBar onGoTo={applyView} />
               <div className="min-h-0 flex-1 overflow-hidden">
                 {renderStage()}
               </div>
             </div>
           </div>
 
-          <IRDrawer
-            onClose={() => setDrawerOpen(false)}
-            onNavigateToTruth={() => {
-              applyView("truth-graph");
-              setDrawerOpen(false);
-            }}
-            open={drawerOpen}
-          />
+          <IRDrawer onClose={() => setDrawerOpen(false)} open={drawerOpen} />
         </IRProvider>
       </SidebarInset>
     </SidebarProvider>

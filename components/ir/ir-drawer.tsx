@@ -1,15 +1,14 @@
 "use client";
 
-import { ChevronRightIcon, MessageSquareIcon, XIcon } from "lucide-react";
+import { MessageSquareIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { IRDetailPane } from "@/components/ir/ir-detail";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
 import { kindPresentation } from "@/components/ir/kind-presentation";
-import { postJSON, useIRActions } from "@/components/ir/use-ir-actions";
+import { useIRActions } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
-import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IRNode } from "@/lib/ir/types";
 import { getIRKindKey } from "@/lib/ir/types";
 import { cn, fetcher } from "@/lib/utils";
@@ -86,165 +85,12 @@ function NodeButton({
   );
 }
 
-type ReEntrySnapshot = {
-  absence_seconds: number | null;
-  last_seen_at: string | null;
-  since: {
-    new_candidates: number;
-    superseded_truth: number;
-    unresolved_open_questions: number;
-    mcp_writes: number;
-  };
-};
-
-const RE_ENTRY_LIGHT_THRESHOLD_SECONDS = 30 * 60;
-const RE_ENTRY_FULL_THRESHOLD_SECONDS = 24 * 60 * 60;
-
-function getReEntryTotal(snapshot: ReEntrySnapshot) {
-  return Object.values(snapshot.since).reduce((sum, count) => sum + count, 0);
-}
-
-function getNeedsReviewCount(snapshot: ReEntrySnapshot) {
-  return (
-    snapshot.since.new_candidates + snapshot.since.unresolved_open_questions
-  );
-}
-
-function shouldShowReEntry(
-  snapshot: ReEntrySnapshot | null,
-  dismissed: boolean
-) {
-  if (dismissed || !snapshot || snapshot.absence_seconds === null) {
-    return false;
-  }
-
-  return (
-    snapshot.absence_seconds >= RE_ENTRY_LIGHT_THRESHOLD_SECONDS &&
-    getReEntryTotal(snapshot) > 0
-  );
-}
-
-function ReEntryBanner({
-  expanded,
-  onDismiss,
-  onGoTo,
-  onToggleExpanded,
-  snapshot,
-}: {
-  expanded: boolean;
-  onDismiss: () => void;
-  onGoTo: (zone: "ideas" | "candidates" | "truth") => void;
-  onToggleExpanded: () => void;
-  snapshot: ReEntrySnapshot;
-}) {
-  const total = getReEntryTotal(snapshot);
-  const needsReview = getNeedsReviewCount(snapshot);
-  const shouldUseFullCard =
-    expanded ||
-    (snapshot.absence_seconds ?? 0) >= RE_ENTRY_FULL_THRESHOLD_SECONDS;
-  const items = [
-    {
-      key: "new_candidates",
-      label: "New candidates",
-      value: snapshot.since.new_candidates,
-      detail: `${snapshot.since.new_candidates} need review`,
-      zone: "candidates" as const,
-    },
-    {
-      key: "superseded_truth",
-      label: "Superseded truth",
-      value: snapshot.since.superseded_truth,
-      detail: `${snapshot.since.superseded_truth} changed`,
-      zone: "truth" as const,
-    },
-    {
-      key: "unresolved_open_questions",
-      label: "Unresolved open questions",
-      value: snapshot.since.unresolved_open_questions,
-      detail: `${snapshot.since.unresolved_open_questions} need review`,
-      zone: "truth" as const,
-    },
-    {
-      key: "mcp_writes",
-      label: "MCP writes",
-      value: snapshot.since.mcp_writes,
-      detail: `${snapshot.since.mcp_writes} agent writes since last visit`,
-      zone: "truth" as const,
-    },
-  ].filter((item) => item.value > 0);
-
-  if (!shouldUseFullCard) {
-    return (
-      <button
-        className="flex w-full items-center justify-between gap-3 border-b border-[var(--ir-border-default)] px-3 py-2 text-left text-xs text-[var(--ir-text-secondary)] hover:bg-[var(--ir-bg-hover)]"
-        onClick={onToggleExpanded}
-        type="button"
-      >
-        <span>
-          Since last visit: {total} updates · {needsReview} need review
-        </span>
-        <ChevronRightIcon className="size-3.5 text-[var(--ir-text-tertiary)]" />
-      </button>
-    );
-  }
-
-  return (
-    <div className="border-b border-[var(--ir-border-default)] bg-[var(--ir-bg-elevated)] px-3 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-[var(--ir-text-primary)]">
-            Since last visit
-          </p>
-          <p className="mt-0.5 text-xs text-[var(--ir-text-tertiary)]">
-            {total} updates · {needsReview} need review
-          </p>
-        </div>
-        <Button
-          className="rounded border border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
-          onClick={onDismiss}
-          size="icon-sm"
-          variant="outline"
-        >
-          <XIcon className="size-3.5" />
-        </Button>
-      </div>
-      <div className="mt-3 divide-y divide-[var(--ir-border-default)] border-y border-[var(--ir-border-default)]">
-        {items.map((item) => (
-          <button
-            className="flex w-full items-center justify-between gap-3 px-1 py-2 text-left hover:bg-[var(--ir-bg-hover)]"
-            key={item.key}
-            onClick={() => onGoTo(item.zone)}
-            type="button"
-          >
-            <span className="text-sm text-[var(--ir-text-primary)]">
-              {item.label} ({item.value})
-            </span>
-            <span className="text-xs text-[var(--ir-text-tertiary)]">
-              {item.detail}
-            </span>
-          </button>
-        ))}
-      </div>
-      <Button
-        className="mt-3 w-full rounded border-[var(--ir-border-strong)] bg-transparent hover:bg-[var(--ir-bg-hover)]"
-        onClick={onDismiss}
-        size="sm"
-        variant="outline"
-      >
-        Mark all reviewed
-      </Button>
-    </div>
-  );
-}
-
 export function IRDrawer({
   open,
   onClose,
-  onNavigateToTruth,
 }: {
   open: boolean;
   onClose: () => void;
-  onNavigateToTruth?: () => void;
 }) {
   const {
     candidates,
@@ -255,12 +101,7 @@ export function IRDrawer({
     unassignedCandidates,
     unassignedIdeas,
   } = useIR();
-  const { activeProjectId } = useWorkspace();
   const [tab, setTab] = useState<"candidates" | "ideas">("candidates");
-  const [reEntrySnapshot, setReEntrySnapshot] =
-    useState<ReEntrySnapshot | null>(null);
-  const [reEntryDismissed, setReEntryDismissed] = useState(false);
-  const [reEntryExpanded, setReEntryExpanded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const { data: detail, mutate: mutateDetail } = useSWR<IRDetail>(
@@ -293,53 +134,6 @@ export function IRDrawer({
   );
   const activeList = tab === "candidates" ? candidatesTab : ideasTab;
 
-  useEffect(() => {
-    if (!activeProjectId) {
-      setReEntrySnapshot(null);
-      return;
-    }
-
-    let cancelled = false;
-    setReEntryDismissed(false);
-    setReEntryExpanded(false);
-
-    fetcher(
-      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/projects/${activeProjectId}/re-entry`
-    )
-      .then((payload: ReEntrySnapshot) => {
-        if (!cancelled) {
-          setReEntrySnapshot(payload);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to load re-entry snapshot", error);
-        if (!cancelled) {
-          setReEntrySnapshot(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProjectId]);
-
-  useEffect(() => {
-    if (!activeProjectId) {
-      return;
-    }
-
-    const url = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/projects/${activeProjectId}/re-entry/mark-seen`;
-
-    function markSeenOnExit() {
-      fetch(url, { keepalive: true, method: "POST" }).catch(() => undefined);
-    }
-
-    window.addEventListener("pagehide", markSeenOnExit);
-    return () => {
-      window.removeEventListener("pagehide", markSeenOnExit);
-    };
-  }, [activeProjectId]);
-
   // Outside-click / Escape closes the floating card (non-modal, like a popover).
   // The trigger pill is exempt so its own toggle handler isn't double-fired.
   useEffect(() => {
@@ -368,31 +162,6 @@ export function IRDrawer({
       document.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
-
-  async function markReEntrySeen() {
-    if (!activeProjectId) {
-      return;
-    }
-
-    setReEntryDismissed(true);
-
-    try {
-      // Fire-and-forget: no toast/isMutating gate (see useIRActions.runMutation for the gated path).
-      await postJSON(`/api/projects/${activeProjectId}/re-entry/mark-seen`);
-    } catch (error) {
-      console.error("Failed to mark re-entry reviewed", error);
-    }
-  }
-
-  function handleReEntryGoTo(zone: "ideas" | "candidates" | "truth") {
-    // Truth nodes live in the TruthGraphStage; switch the workspace to it
-    // (which also closes this card). Ideas/candidates just flip the tab.
-    if (zone === "truth") {
-      onNavigateToTruth?.();
-      return;
-    }
-    setTab(zone);
-  }
 
   if (!open) {
     return null;
@@ -449,17 +218,6 @@ export function IRDrawer({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {shouldShowReEntry(reEntrySnapshot, reEntryDismissed) &&
-        reEntrySnapshot ? (
-          <ReEntryBanner
-            expanded={reEntryExpanded}
-            onDismiss={markReEntrySeen}
-            onGoTo={handleReEntryGoTo}
-            onToggleExpanded={() => setReEntryExpanded(true)}
-            snapshot={reEntrySnapshot}
-          />
-        ) : null}
-
         <div className="py-1" data-testid={`ir-${tab}-zone`}>
           {activeList.length === 0 && !isLoading ? (
             <p className="px-3.5 py-6 text-center text-sm text-[var(--ir-text-tertiary)]">

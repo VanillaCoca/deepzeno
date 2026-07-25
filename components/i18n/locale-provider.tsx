@@ -15,6 +15,7 @@ import { headerMessages } from "@/lib/i18n/messages/header";
 import { inboxMessages } from "@/lib/i18n/messages/inbox";
 import { irMessages } from "@/lib/i18n/messages/ir";
 import { kickoffMessages } from "@/lib/i18n/messages/kickoff";
+import { reEntryMessages } from "@/lib/i18n/messages/re-entry";
 import { renameMessages } from "@/lib/i18n/messages/rename";
 import { watchtowerMessages } from "@/lib/i18n/messages/watchtower";
 
@@ -34,6 +35,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...inboxMessages.en,
     ...irMessages.en,
     ...kickoffMessages.en,
+    ...reEntryMessages.en,
     ...renameMessages.en,
     ...watchtowerMessages.en,
   },
@@ -47,6 +49,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...inboxMessages.zh,
     ...irMessages.zh,
     ...kickoffMessages.zh,
+    ...reEntryMessages.zh,
     ...renameMessages.zh,
     ...watchtowerMessages.zh,
   },
@@ -60,6 +63,7 @@ const mergedDictionaries: Record<Locale, Record<string, string>> = {
     ...inboxMessages.fr,
     ...irMessages.fr,
     ...kickoffMessages.fr,
+    ...reEntryMessages.fr,
     ...renameMessages.fr,
     ...watchtowerMessages.fr,
   },

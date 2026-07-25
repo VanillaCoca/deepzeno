@@ -3,6 +3,10 @@ import "server-only";
 import { ChatbotError } from "@/lib/errors";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getProjectByIdForUser } from "@/lib/workspace/queries";
+import {
+  rankReEntryItems,
+  type ReEntryItem,
+} from "@/lib/workspace/re-entry-core";
 
 type DatabaseRecord = Record<string, unknown>;
 
@@ -13,6 +17,12 @@ type DatabaseErrorLike = {
   hint?: string | null;
 };
 
+// How many titled examples to carry back per category. The bar only ever shows
+// the top one; the rest are there so the expanded card can name a few without a
+// second round trip, and so a category whose top item was filtered out client
+// side still has something to show.
+const ITEMS_PER_CATEGORY = 3;
+
 export type ProjectReEntrySnapshot = {
   absence_seconds: number | null;
   last_seen_at: string | null;
@@ -22,6 +32,12 @@ export type ProjectReEntrySnapshot = {
     unresolved_open_questions: number;
     mcp_writes: number;
   };
+  /**
+   * Consequence-ranked examples behind the counts. A count alone ("6 updates")
+   * does not tell the user whether to care; the title of the single most
+   * consequential change does.
+   */
+  items: ReEntryItem[];
 };
 
 function getClient(): any {
@@ -188,6 +204,175 @@ async function getMcpWriteCount(projectId: string, since: string) {
   }).length;
 }
 
+function firstString(row: DatabaseRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function mapItems({
+  category,
+  rows,
+  timeKeys,
+  titleKeys,
+}: {
+  category: ReEntryItem["category"];
+  rows: DatabaseRecord[];
+  timeKeys: string[];
+  titleKeys: string[];
+}): ReEntryItem[] {
+  const items: ReEntryItem[] = [];
+
+  for (const row of rows) {
+    const id = typeof row.id === "string" ? row.id : null;
+    const title = firstString(row, titleKeys);
+    const at = firstString(row, timeKeys);
+
+    // An untitled row cannot be a headline — it would render as an empty
+    // string, which reads as a bug. Drop it and let the counts carry it.
+    if (!(id && title && at)) {
+      continue;
+    }
+
+    items.push({ category, id, title, at });
+  }
+
+  return items;
+}
+
+/**
+ * A legacy candidate written by an external agent is not a second update on top
+ * of the candidate it created — it is the same row, seen from the angle the
+ * user most needs. Classify by source so one row lands in exactly one category.
+ */
+function mapLegacyCandidateItems(rows: DatabaseRecord[]): ReEntryItem[] {
+  const agentRows = rows.filter((row) => row.source === "mcp_agent");
+  const ownRows = rows.filter((row) => row.source !== "mcp_agent");
+
+  return [
+    ...mapItems({
+      category: "mcp_writes",
+      rows: agentRows,
+      timeKeys: ["created_at"],
+      titleKeys: ["proposed_title", "proposed_content"],
+    }),
+    ...mapItems({
+      category: "new_candidates",
+      rows: ownRows,
+      timeKeys: ["created_at"],
+      titleKeys: ["proposed_title", "proposed_content"],
+    }),
+  ];
+}
+
+async function listReEntryItems(projectId: string, lastSeenAt: string) {
+  const [
+    supersededIr,
+    supersededLegacy,
+    pendingIr,
+    pendingLegacy,
+    openQuestionsIr,
+    openQuestionsLegacy,
+  ] = await Promise.all([
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("ir_nodes")
+        .select("id, title, superseded_at")
+        .eq("project_id", projectId)
+        .eq("status", "superseded")
+        .gt("superseded_at", lastSeenAt)
+        .order("superseded_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY),
+      "Failed to list superseded IR truth"
+    ),
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("decisions")
+        .select("id, title, updated_at")
+        .eq("project_id", projectId)
+        .eq("status", "superseded")
+        .gt("updated_at", lastSeenAt)
+        .order("updated_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY),
+      "Failed to list superseded workspace truth"
+    ),
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("ir_nodes")
+        .select("id, title, created_at")
+        .eq("project_id", projectId)
+        .eq("status", "pending")
+        .gt("created_at", lastSeenAt)
+        .order("created_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY),
+      "Failed to list new IR candidates"
+    ),
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("candidate_decisions")
+        .select("id, proposed_title, proposed_content, source, created_at")
+        .eq("project_id", projectId)
+        .eq("status", "pending")
+        .gt("created_at", lastSeenAt)
+        .order("created_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY * 2),
+      "Failed to list new workspace candidates"
+    ),
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("ir_nodes")
+        .select("id, title, created_at")
+        .eq("project_id", projectId)
+        .eq("kind", "open_question")
+        .eq("status", "active")
+        .gt("created_at", lastSeenAt)
+        .order("created_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY),
+      "Failed to list unresolved IR open questions"
+    ),
+    listRows<DatabaseRecord>(
+      getClient()
+        .from("decisions")
+        .select("id, title, created_at")
+        .eq("project_id", projectId)
+        .eq("kind", "open_question")
+        .eq("status", "active")
+        .gt("created_at", lastSeenAt)
+        .order("created_at", { ascending: false })
+        .limit(ITEMS_PER_CATEGORY),
+      "Failed to list unresolved workspace open questions"
+    ),
+  ]);
+
+  return rankReEntryItems([
+    ...mapItems({
+      category: "superseded_truth",
+      rows: [...supersededIr, ...supersededLegacy],
+      timeKeys: ["superseded_at", "updated_at"],
+      titleKeys: ["title"],
+    }),
+    ...mapItems({
+      category: "new_candidates",
+      rows: pendingIr,
+      timeKeys: ["created_at"],
+      titleKeys: ["title"],
+    }),
+    ...mapLegacyCandidateItems(pendingLegacy),
+    ...mapItems({
+      category: "unresolved_open_questions",
+      rows: [...openQuestionsIr, ...openQuestionsLegacy],
+      timeKeys: ["created_at"],
+      titleKeys: ["title"],
+    }),
+  ]);
+}
+
 export async function getProjectReEntrySnapshot({
   userId,
   projectId,
@@ -217,6 +402,7 @@ export async function getProjectReEntrySnapshot({
         unresolved_open_questions: 0,
         mcp_writes: 0,
       },
+      items: [],
     };
   }
 
@@ -234,6 +420,7 @@ export async function getProjectReEntrySnapshot({
     irOpenQuestions,
     legacyOpenQuestions,
     mcpWrites,
+    items,
   ] = await Promise.all([
     countRows(
       getClient()
@@ -292,6 +479,7 @@ export async function getProjectReEntrySnapshot({
       "Failed to count unresolved workspace open questions"
     ),
     getMcpWriteCount(projectId, lastSeenAt),
+    listReEntryItems(projectId, lastSeenAt),
   ]);
 
   return {
@@ -303,6 +491,7 @@ export async function getProjectReEntrySnapshot({
       unresolved_open_questions: irOpenQuestions + legacyOpenQuestions,
       mcp_writes: mcpWrites,
     },
+    items,
   };
 }
 
