@@ -175,12 +175,27 @@ export function WorkspaceShell({
                 onViewChange={applyView}
                 view={activeView}
               />
-              {/* One strip directly under the header, on the surface the user
+              {/* One slot directly under the header, on the surface the user
                   actually lands on. It shows work in flight while there is any,
                   and falls back to the change report otherwise — a report the
                   user has to go looking for is only useful to someone who
-                  already suspects a change. */}
-              <ActivityBar onGoTo={applyView} />
+                  already suspects a change.
+
+                  It is a second row of the header's floating chrome, not a
+                  strip in the flow. In the flow it started at y=0 and rendered
+                  *behind* the header's islands, because the header is itself
+                  absolute; and the obvious repair — pushing it down with a
+                  `pt-14` — would have been worse, because the stage below then
+                  has to reserve a height that only exists while a run happens
+                  to be in flight. Floating keeps the transient thing transient:
+                  the stage's own `pt-16` is the only offset anyone downstream
+                  has to know about, whether or not this row is on screen.
+
+                  `z-10`, under the header's `z-20`: they do not overlap today,
+                  and if a long label ever makes them, the header should win. */}
+              <div className="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center px-3">
+                <ActivityBar onGoTo={applyView} />
+              </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 {renderStage()}
               </div>

@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { postJSON } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
+import { ISLAND_SURFACE } from "@/components/workspace/island";
 import type { WorkspaceView } from "@/components/workspace/workspace-header";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
-import { fetcher } from "@/lib/utils";
+import { cn, fetcher } from "@/lib/utils";
 import {
   countReEntryNeedsReview,
   RE_ENTRY_FULL_THRESHOLD_SECONDS,
@@ -179,10 +180,10 @@ export function ChangeBar({
   return (
     <section
       aria-label={t("reEntry.title")}
-      className="border-[var(--ir-border-default)] border-b bg-[var(--ir-bg-elevated)]"
+      className={cn(ISLAND_SURFACE, "flex max-w-3xl flex-col overflow-hidden")}
       data-testid="change-bar"
     >
-      <div className="flex items-center gap-3 px-4 py-2">
+      <div className="flex items-center gap-3 px-3 py-2">
         <button
           aria-expanded={showCard}
           aria-label={showCard ? t("reEntry.collapse") : t("reEntry.expand")}
@@ -228,7 +229,7 @@ export function ChangeBar({
       </div>
 
       {showCard ? (
-        <div className="px-4 pb-3">
+        <div className="max-h-[40vh] overflow-y-auto px-3 pb-3">
           <div className="divide-y divide-[var(--ir-border-default)] border-[var(--ir-border-default)] border-y">
             {rows.map((row) => (
               <button

@@ -11,6 +11,7 @@ import { useLocale } from "@/components/i18n/locale-provider";
 import { postJSON } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
 import { ChangeBar } from "@/components/workspace/change-bar";
+import { ISLAND_SURFACE } from "@/components/workspace/island";
 import type { WorkspaceView } from "@/components/workspace/workspace-header";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import {
@@ -22,7 +23,7 @@ import {
   type RunView,
   summarizeActivity,
 } from "@/lib/research/run-progress-core";
-import { fetcher } from "@/lib/utils";
+import { cn, fetcher } from "@/lib/utils";
 
 type ActivityRow = {
   id: string;
@@ -207,7 +208,18 @@ export function ActivityBar({
 }) {
   const { t } = useLocale();
   const { activeProjectId } = useWorkspace();
-  const [expanded, setExpanded] = useState(false);
+  // `null` means "follow the default", which for concurrent runs is open.
+  //
+  // This used to be a plain `useState(false)`, so the one situation the bar
+  // exists for — several runs burning money at once — was also the one it
+  // refused to show: the phase rails, the per-run cost and every Stop button
+  // were behind a disclosure triangle. A default is a claim about what the
+  // user wants to see, and "less, exactly when there is more happening" is the
+  // wrong claim. Collapsing stays available; it is now a choice rather than
+  // the starting position.
+  const [collapseOverride, setCollapseOverride] = useState<boolean | null>(
+    null
+  );
   const [cancelling, setCancelling] = useState<Record<string, boolean>>({});
 
   const { data, mutate } = useSWR<ActivityPayload>(
@@ -235,6 +247,15 @@ export function ActivityBar({
   // only while there is something to count. A ticking clock over a settled
   // project is a component telling the user it is busy when it is not.
   const now = useTick(hasActive ? 1000 : null);
+
+  // Forget the override once the burst it applied to is over. Collapsing means
+  // "not these runs", not "never show me runs again" — carrying the choice into
+  // an unrelated burst hours later would silently reinstate the bad default.
+  useEffect(() => {
+    if (!hasActive) {
+      setCollapseOverride(null);
+    }
+  }, [hasActive]);
 
   const summary = summarizeActivity({
     runs: rows.map((run) => ({
@@ -276,21 +297,21 @@ export function ActivityBar({
   }
 
   const multiple = summary.active.length > 1;
-  const showAll = expanded && multiple;
+  const showAll = multiple && !collapseOverride;
 
   return (
     <section
       aria-label={t("activity.title")}
-      className="border-[var(--ir-border-default)] border-b bg-[var(--ir-bg-elevated)]"
+      className={cn(ISLAND_SURFACE, "flex max-w-3xl flex-col overflow-hidden")}
       data-testid="activity-bar"
     >
-      <div className="flex items-center gap-3 px-4 py-2">
+      <div className="flex items-center gap-3 px-3 py-2">
         {multiple ? (
           <button
             aria-expanded={showAll}
             aria-label={showAll ? t("activity.collapse") : t("activity.expand")}
             className="-mx-1 flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left hover:bg-[var(--ir-bg-hover)]"
-            onClick={() => setExpanded((current) => !current)}
+            onClick={() => setCollapseOverride(showAll)}
             type="button"
           >
             {showAll ? (
@@ -325,8 +346,11 @@ export function ActivityBar({
         )}
       </div>
 
+      {/* Bounded, because "show everything by default" has to stay true even
+          when everything is eight runs deep: past ~40vh the island would be
+          covering the stage it is reporting on. */}
       {showAll ? (
-        <div className="divide-y divide-[var(--ir-border-default)] border-[var(--ir-border-default)] border-t px-4">
+        <div className="max-h-[40vh] divide-y divide-[var(--ir-border-default)] overflow-y-auto border-[var(--ir-border-default)] border-t px-3">
           {summary.active.map((view) => (
             <div className="py-2" key={view.id}>
               <RunLine

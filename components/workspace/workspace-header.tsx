@@ -14,8 +14,8 @@ import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useLocale } from "@/components/i18n/locale-provider";
-import { useInbox } from "@/components/ir/judgment-inbox";
 import { useIR } from "@/components/ir/ir-provider";
+import { useInbox } from "@/components/ir/judgment-inbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
+import { ISLAND } from "@/components/workspace/island";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { cn } from "@/lib/utils";
 
@@ -46,9 +47,6 @@ const VIEW_TABS: {
   { value: "truth-graph", Icon: NetworkIcon, labelKey: "view.truthGraph" },
   { value: "inbox", Icon: InboxIcon, labelKey: "view.inbox" },
 ];
-
-const ISLAND =
-  "pointer-events-auto inline-flex h-9 items-center gap-1 rounded-xl border border-[var(--ir-border-default)] bg-[color-mix(in_srgb,var(--ir-bg-panel)_72%,transparent)] px-1.5 backdrop-blur-md";
 
 export function WorkspaceHeader({
   view,
