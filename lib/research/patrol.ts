@@ -10,6 +10,7 @@ import "server-only";
 
 import { z } from "zod";
 import { generateObjectResilient } from "@/lib/ai/resilient-generate";
+import { stripInlineMarkers } from "@/lib/ir/marker-syntax";
 import {
   createIRNodeForUser,
   getIRNodeForUser,
@@ -461,10 +462,16 @@ export async function runPatrolForWatch({
 
     await insertEvidence(toPersist);
 
+    // Stripped, not rejected. The title being templated here is one that is
+    // already stored, so it predates the guard at the extraction sites and may
+    // still be marker text. Left alone it would multiply: one polluted node
+    // seeds a polluted alert on every patrol that fires against it. Dropping
+    // the alert instead would throw away a real signal to punish an old typo.
+    const subject = stripInlineMarkers(node.title);
     const alertTitle =
       signal.kind === "quote_vanished"
-        ? `${node.title} — 原始依据页面已变化,该前提是否仍成立?`
-        : `${node.title} — 发现相反信号,该前提是否仍成立?`;
+        ? `${subject} — 原始依据页面已变化,该前提是否仍成立?`
+        : `${subject} — 发现相反信号,该前提是否仍成立?`;
 
     const alert = await createIRNodeForUser({
       userId: ownerId,

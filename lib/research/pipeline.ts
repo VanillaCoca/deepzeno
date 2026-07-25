@@ -7,6 +7,10 @@ import { generateObjectResilient } from "@/lib/ai/resilient-generate";
 import { assembleContext } from "@/lib/context-assembly";
 import { ChatbotError } from "@/lib/errors";
 import {
+  sanitizeExtractedTitle,
+  stripInlineMarkers,
+} from "@/lib/ir/marker-syntax";
+import {
   createIRNodeForUser,
   findDuplicateIRCandidate,
   getIRNodeForUser,
@@ -528,12 +532,26 @@ async function landPhase(
       continue;
     }
 
+    // A title is the node's identity, so it has to be settled before the dedup
+    // lookup: comparing raw marker text against stored prose would miss every
+    // duplicate it was supposed to catch.
+    const title = sanitizeExtractedTitle(candidate.title);
+
+    if (!title) {
+      candidatesFailed += 1;
+      console.warn("Research candidate title was marker syntax", {
+        runId,
+        title: candidate.title,
+      });
+      continue;
+    }
+
     // Dedup check
     const duplicate = await findDuplicateIRCandidate({
       projectId,
       kind,
       subtype,
-      title: candidate.title,
+      title,
     });
 
     if (duplicate) {
@@ -550,9 +568,13 @@ async function landPhase(
         topicId,
         kind,
         subtype,
-        title: candidate.title,
-        content: candidate.content ?? null,
-        rationale: candidate.rationale ?? null,
+        title,
+        content: candidate.content
+          ? stripInlineMarkers(candidate.content)
+          : null,
+        rationale: candidate.rationale
+          ? stripInlineMarkers(candidate.rationale)
+          : null,
         sourceLayer: "research",
         createdBy: "ai",
         initialStatus: statusForConfidence(candidate.confidence),
@@ -564,7 +586,7 @@ async function landPhase(
       candidatesFailed += 1;
       console.warn("Research candidate creation failed", {
         runId,
-        title: candidate.title,
+        title,
         error:
           creationError instanceof Error
             ? creationError.message

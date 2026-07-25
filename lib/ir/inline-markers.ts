@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { ChatMessage } from "@/lib/types";
+// The grammar itself lives in `marker-syntax` so that the code which *creates*
+// nodes from markers and the code which *refuses* to let markers become node
+// titles agree, by construction, on where a marker ends.
+import { findMarkerEnd, splitEscaped } from "./marker-syntax";
 import {
   createIRNodeForUser,
   findDuplicateIRCandidate,
@@ -36,71 +40,6 @@ type ParsedMarker = {
 };
 
 const NODE_ID_RE = /^[A-Z]\d+$/;
-
-function isEscaped(value: string, index: number) {
-  let slashCount = 0;
-  let cursor = index - 1;
-
-  while (cursor >= 0 && value[cursor] === "\\") {
-    slashCount += 1;
-    cursor -= 1;
-  }
-
-  return slashCount % 2 === 1;
-}
-
-function findMarkerEnd(value: string, startIndex: number) {
-  let cursor = startIndex;
-
-  while (cursor < value.length - 1) {
-    if (
-      value[cursor] === "]" &&
-      value[cursor + 1] === "]" &&
-      !isEscaped(value, cursor)
-    ) {
-      return cursor;
-    }
-
-    cursor += 1;
-  }
-
-  return -1;
-}
-
-function unescapeMarkerField(value: string) {
-  return value
-    .replaceAll("\\|", "|")
-    .replaceAll("\\]\\]", "]]")
-    .replaceAll("\\\\", "\\")
-    .trim();
-}
-
-function splitEscaped(value: string) {
-  const parts: string[] = [];
-  let current = "";
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    const next = value[index + 1];
-
-    if (char === "\\" && next) {
-      current += char + next;
-      index += 1;
-      continue;
-    }
-
-    if (char === "|") {
-      parts.push(current);
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  parts.push(current);
-  return parts.map(unescapeMarkerField);
-}
 
 function normalizeKindHeader(header: string) {
   const [kindValue, subtypeValue] = header.split(":");

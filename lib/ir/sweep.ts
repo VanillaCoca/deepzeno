@@ -6,6 +6,10 @@ import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { resolveGovernorConfig } from "@/lib/extraction-governor";
 import {
+  sanitizeExtractedTitle,
+  stripInlineMarkers,
+} from "@/lib/ir/marker-syntax";
+import {
   countIRNodesByStatus,
   createIRNodeForUser,
   findDuplicateIRCandidate,
@@ -117,7 +121,14 @@ function serializeMessages(messages: WorkspaceMessageRecord[]) {
   return messages
     .map((message, index) => {
       const turnNumber = index + 1;
-      const content = message.content.trim() || "(no text content)";
+      // Strip markers before the transcript reaches the extractor. A model
+      // shown `[[ir:goal|…]]` in its context will imitate it — the syntax reads
+      // as "this is how a judgment is written here" — and then hand the
+      // imitation back in a title field. Removing it upstream is cheaper than
+      // catching it downstream, and it costs nothing: the title inside the
+      // marker survives, so the extractor still sees the claim, just as prose.
+      const content =
+        stripInlineMarkers(message.content).trim() || "(no text content)";
 
       return `<turn index="${turnNumber}" id="${message.id}" role="${message.role}">\n${content}\n</turn>`;
     })
@@ -629,7 +640,12 @@ async function persistSweepItem({
     return "duplicate" as const;
   }
 
-  const title = item.title.trim();
+  const title = sanitizeExtractedTitle(item.title);
+
+  if (!title) {
+    return "skipped" as const;
+  }
+
   const normalizedTitle = normalizeIRTitle(title);
   const localDuplicate = contextNodes.find(
     (node) => normalizeIRTitle(node.title) === normalizedTitle
@@ -678,11 +694,17 @@ async function persistSweepItem({
     kind: normalized.kind,
     subtype: normalized.subtype,
     title,
-    content: item.content?.trim() || title,
+    // Stripped rather than rejected: these are the node's prose, not its
+    // identity. A marker in the body is worth unwrapping; it is not worth
+    // discarding the judgment over.
+    content: stripInlineMarkers(item.content ?? "").trim() || title,
     rationale: rationaleParts.join("\n"),
     sourceChatId: conversationId,
     sourceTurnId,
-    sourceTextSpan: item.source_text_span?.trim() || item.content || title,
+    sourceTextSpan:
+      stripInlineMarkers(
+        item.source_text_span?.trim() || item.content || ""
+      ).trim() || title,
     sourceLayer: "sweep",
     createdBy: "ai",
     initialStatus: tier === "high" ? "pending" : "idea",

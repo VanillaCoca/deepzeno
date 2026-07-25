@@ -3,6 +3,10 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import {
+  sanitizeExtractedTitle,
+  stripInlineMarkers,
+} from "@/lib/ir/marker-syntax";
+import {
   createIRNodeForUser,
   findDuplicateIRCandidate,
   getKickoffStateForProject,
@@ -107,11 +111,26 @@ export async function POST(request: Request) {
       createdTopics.push(topicRecord);
 
       for (const node of topicProposal.nodes) {
+        // Same guard as the other three extraction layers: a title is prose,
+        // never the `[[ir:…]]` wire syntax the model uses to hand us judgments.
+        // Kickoff runs behind a user confirmation, which is exactly why it is
+        // included — a title nobody could read is not made legitimate by
+        // someone clicking past it.
+        const title = sanitizeExtractedTitle(node.title);
+
+        if (!title) {
+          console.warn("Kickoff node title was marker syntax", {
+            projectId: body.project_id,
+            title: node.title,
+          });
+          continue;
+        }
+
         const duplicate = await findDuplicateIRCandidate({
           projectId: body.project_id,
           kind: node.kind,
           subtype: null,
-          title: node.title,
+          title,
         });
 
         if (duplicate) {
@@ -126,9 +145,9 @@ export async function POST(request: Request) {
           topicId: topicRecord.id,
           kind: node.kind,
           subtype: null,
-          title: node.title,
-          content: node.content,
-          rationale: node.rationale,
+          title,
+          content: node.content ? stripInlineMarkers(node.content) : null,
+          rationale: node.rationale ? stripInlineMarkers(node.rationale) : null,
           sourceLayer: "kickoff",
           createdBy: "ai",
           initialStatus,
