@@ -23,6 +23,7 @@ import { normalizeResearchModelId } from "./model-preference";
 import type { ResearchRun } from "./queries";
 import {
   createResearchRun,
+  getResearchRunStatus,
   insertEvidence,
   updateResearchRun,
 } from "./queries";
@@ -796,8 +797,27 @@ export async function runResearchPipeline({
     // into the IR event metadata and the run still reported "done". That is
     // how a broken id allocator dropped a research conclusion on 2026-07-25
     // while the UI showed a green run. Partial is what the user needs to see.
-    const finalStatus = partial || candidatesFailed > 0 ? "partial" : "done";
+    const workOutcome = partial || candidatesFailed > 0 ? "partial" : "done";
     const now = new Date().toISOString();
+
+    // Did the user press Stop while judge was running?
+    //
+    // Judge is one atomic model call and nothing after it costs money, so a
+    // late cancel cannot save anything and must not throw away candidates the
+    // user already paid for. But the run must still say what happened. Until
+    // now this write overwrote a pending `cancelling` with `partial`/`done`,
+    // which is indistinguishable from the Stop button being unwired: the user
+    // clicks, the status flickers, and the run settles green. Same silent
+    // shape as the id allocator — the system knew and did not say.
+    //
+    // So: keep the work (brief, candidates, cost), but settle under the status
+    // the user asked for. The event below carries both truths.
+    const pendingCancel = await getResearchRunStatus({ id: run.id }).catch(
+      () => null
+    );
+    const cancelArrivedLate =
+      pendingCancel === "cancelling" || pendingCancel === "cancelled";
+    const finalStatus = cancelArrivedLate ? "cancelled" : workOutcome;
 
     await updateResearchRun({
       id: run.id,
@@ -817,6 +837,10 @@ export async function runResearchPipeline({
       metadata: {
         runId: run.id,
         status: finalStatus,
+        // What the run produced, independent of whether it was cancelled —
+        // otherwise a late cancel would erase the partial/done signal.
+        workOutcome,
+        cancelArrivedLate,
         evidenceCount: verifiedRows.length,
         candidatesCreated,
         skippedDuplicates,
