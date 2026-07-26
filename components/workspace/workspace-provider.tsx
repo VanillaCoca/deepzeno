@@ -39,7 +39,14 @@ type InjectedSandboxContext = {
   consumeOnNextSend: boolean;
 };
 
-type WorkspaceViewName = "conversation" | "truth-graph";
+/**
+ * The stage a workspace can show. Defined here rather than in the header
+ * because the provider is what every surface already depends on, and a deep
+ * component asking for a view switch (`requestView`) must be able to name the
+ * same set the header renders. It was duplicated before, which is why the
+ * inbox was reachable from the tab strip but not from `requestView`.
+ */
+export type WorkspaceViewName = "conversation" | "truth-graph" | "inbox";
 
 type ViewRequest = { view: WorkspaceViewName; nonce: number };
 

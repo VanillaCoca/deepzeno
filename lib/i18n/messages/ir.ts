@@ -1,6 +1,6 @@
-// IR node vocabulary shown in the Ideas/Candidates list and detail surfaces.
-// Keyed by getIRKindKey(kind, subtype) so the type label tracks the language
-// switcher (previously the labels were hard-coded English).
+// IR node vocabulary shown in the idea pool and the detail surfaces, plus the
+// drawer's own chrome. Kind labels are keyed by getIRKindKey(kind, subtype) so
+// they track the language switcher (they used to be hard-coded English).
 type IRMessages = Record<"en" | "zh" | "fr", Record<string, string>>;
 
 export const irMessages: IRMessages = {
@@ -17,6 +17,12 @@ export const irMessages: IRMessages = {
     "ir.kind.unclassified": "Unclassified",
     "ir.kind.plan": "Plan",
     "ir.from.conversation": "From conversation",
+    "ir.drawer.title": "Idea pool",
+    "ir.drawer.close": "Close",
+    "ir.drawer.empty": "No ideas yet.",
+    "ir.drawer.emptyHint":
+      "Sweeps and research drop their low-confidence findings here.",
+    "ir.drawer.toInbox": "Candidates await your ruling in the inbox",
   },
   zh: {
     "ir.kind.goal": "目标",
@@ -31,6 +37,11 @@ export const irMessages: IRMessages = {
     "ir.kind.unclassified": "未分类",
     "ir.kind.plan": "计划",
     "ir.from.conversation": "来自对话",
+    "ir.drawer.title": "想法池",
+    "ir.drawer.close": "关闭",
+    "ir.drawer.empty": "还没有想法。",
+    "ir.drawer.emptyHint": "梳理和调研产生的低置信发现会落在这里。",
+    "ir.drawer.toInbox": "候选在裁决收件箱里等你",
   },
   fr: {
     "ir.kind.goal": "Objectif",
@@ -45,5 +56,11 @@ export const irMessages: IRMessages = {
     "ir.kind.unclassified": "Non classé",
     "ir.kind.plan": "Plan",
     "ir.from.conversation": "De la conversation",
+    "ir.drawer.title": "Réservoir d'idées",
+    "ir.drawer.close": "Fermer",
+    "ir.drawer.empty": "Aucune idée pour l'instant.",
+    "ir.drawer.emptyHint":
+      "Les balayages et les recherches déposent ici leurs trouvailles peu sûres.",
+    "ir.drawer.toInbox": "Les candidats attendent votre décision dans la file",
   },
 };

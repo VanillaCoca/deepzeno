@@ -29,10 +29,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ISLAND } from "@/components/workspace/island";
-import { useWorkspace } from "@/components/workspace/workspace-provider";
+import {
+  useWorkspace,
+  type WorkspaceViewName,
+} from "@/components/workspace/workspace-provider";
 import { cn } from "@/lib/utils";
 
-export type WorkspaceView = "conversation" | "truth-graph" | "inbox";
+/**
+ * Re-exported under the name the stage components already import. The union
+ * itself lives in the workspace provider so that `requestView` and this tab
+ * strip can never drift apart — they did, and the inbox was unreachable from
+ * anything but a click up here.
+ */
+export type WorkspaceView = WorkspaceViewName;
 
 const VIEW_TABS: {
   value: WorkspaceView;
@@ -59,7 +68,7 @@ export function WorkspaceHeader({
 }) {
   const { toggleSidebar } = useSidebar();
   const { t } = useLocale();
-  const { ideas, candidates } = useIR();
+  const { ideas } = useIR();
   const {
     activeTopic,
     activeProjectId,
@@ -218,6 +227,11 @@ export function WorkspaceHeader({
         </div>
       </div>
 
+      {/* Ideas only. The candidate count used to sit beside it, which meant the
+          same pending rows were counted twice on one screen — once here, once
+          on the inbox tab — and the two numbers disagreed, because this one was
+          topic-scoped and the badge is project-scoped. The badge won: it counts
+          the rulings you owe. This one counts a pool that asks for nothing. */}
       <div className="absolute top-2.5 right-3">
         <button
           className={cn(ISLAND, "px-3 text-xs text-[var(--ir-text-secondary)]")}
@@ -228,11 +242,6 @@ export function WorkspaceHeader({
           {t("header.ideas")}&nbsp;
           <b className="font-medium text-[var(--ir-text-primary)]">
             {ideas.length}
-          </b>
-          <span className="mx-1.5 text-[var(--ir-text-tertiary)]">·</span>
-          {t("header.candidates")}&nbsp;
-          <b className="font-medium text-[var(--ir-text-primary)]">
-            {candidates.length}
           </b>
         </button>
       </div>

@@ -13,7 +13,6 @@ export const headerMessages: LocaleMessages = {
       "Wrap up this thread, then start a fresh idea in this topic",
     "header.workspaceView": "Workspace view",
     "header.ideas": "Ideas",
-    "header.candidates": "Candidates",
     "header.exploreDescription":
       "Start fresh on a new idea in this topic? ZENO will review the current discussion before clearing.",
     "header.cancel": "Cancel",
@@ -33,7 +32,6 @@ export const headerMessages: LocaleMessages = {
     "header.exploreHint": "收尾当前讨论，在这个主题里另起一个新想法",
     "header.workspaceView": "工作区视图",
     "header.ideas": "想法",
-    "header.candidates": "候选",
     "header.exploreDescription":
       "在该主题里另起一个新想法？ZENO 会在清空前先回顾当前讨论。",
     "header.cancel": "取消",
@@ -54,7 +52,6 @@ export const headerMessages: LocaleMessages = {
       "Clore ce fil, puis explorer une nouvelle idée dans ce sujet",
     "header.workspaceView": "Vue de l'espace de travail",
     "header.ideas": "Idées",
-    "header.candidates": "Candidats",
     "header.exploreDescription":
       "Repartir sur une nouvelle idée dans ce sujet ? ZENO passera en revue la discussion actuelle avant de l'effacer.",
     "header.cancel": "Annuler",

@@ -112,29 +112,33 @@ test.describe("Workspace IR panel flow", () => {
     expect(ideaResponse.ok()).toBeTruthy();
 
     await page.goto(`/chat/new?projectId=${projectId}&topicId=${topicId}`);
-    // Ideas/Candidates now live in a slide-over drawer opened from the toolbar pill.
+    // The drawer is the idea pool now — one number, and it is not a queue.
     const drawerTrigger = page.getByTestId("ir-drawer-trigger");
     await expect(drawerTrigger).toBeVisible();
-    await expect(drawerTrigger).toContainText("Ideas (1)");
-    await expect(drawerTrigger).toContainText("Candidates (1)");
+    await expect(drawerTrigger).toContainText(/Ideas\s*1/);
     await expect(
       page.getByText("Bilingual sweep accuracy needs a separate eval set")
     ).toHaveCount(0);
     await drawerTrigger.click();
-    await expect(page.getByTestId("ir-drawer")).toBeVisible();
-    await page
-      .getByTestId("ir-drawer")
-      .getByRole("button", { name: /Ideas \(1\)/ })
-      .click();
+
+    const drawer = page.getByTestId("ir-drawer");
+    await expect(drawer).toBeVisible();
     await expect(page.getByTestId("ir-ideas-zone")).toContainText(
       "Bilingual sweep accuracy needs a separate eval set"
     );
-    await expect(page.getByTestId("ir-candidates-zone")).toContainText(
-      "V1 uses Supabase IR tables"
-    );
+    // The candidate is NOT here. One ruling surface, and this is not it.
+    await expect(drawer).not.toContainText("V1 uses Supabase IR tables");
     await expect(page.getByTestId("candidate-pool")).toHaveCount(0);
 
-    await page.getByText("V1 uses Supabase IR tables").click();
+    // The signpost is the drawer's only answer about candidates: a direction,
+    // never a count.
+    await drawer
+      .getByRole("button", { name: /Candidates await your ruling/ })
+      .click();
+
+    const inbox = page.getByTestId("judgment-inbox");
+    await expect(inbox).toBeVisible();
+    await inbox.getByText("V1 uses Supabase IR tables").first().click();
     await expect(page.getByTestId("ir-detail-pane")).toContainText(
       "Issue #5 defines ir_nodes"
     );
