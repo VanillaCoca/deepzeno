@@ -21,7 +21,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ProviderKeysDialog } from "@/components/billing/provider-keys-dialog";
+import { useProviderKeys } from "@/components/billing/provider-keys-provider";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { ProjectSearchDialog } from "@/components/project-search-dialog";
 import { QuickNotesDialog } from "@/components/quick-notes-dialog";
@@ -81,10 +81,11 @@ function SidebarAccountMenu({
   userEmail: string | null;
 }) {
   const [mounted, setMounted] = useState(false);
-  // Held here rather than inside the menu: selecting a DropdownMenuItem closes
-  // the menu, which would unmount a Dialog nested inside it before it could
-  // open. The dialog is a sibling of the menu for that reason.
-  const [keysOpen, setKeysOpen] = useState(false);
+  // Owned by ProviderKeysProvider at the root, not by this menu — a refusal
+  // raised in the chat has to reach the same dialog without an account menu in
+  // its path. (It also settles the older problem: selecting a DropdownMenuItem
+  // closes the menu, which would unmount a Dialog nested inside it.)
+  const providerKeys = useProviderKeys();
   const { resolvedTheme, setTheme } = useTheme();
   const { locale, setLocale, t } = useLocale();
 
@@ -96,8 +97,6 @@ function SidebarAccountMenu({
   const initial = (name.trim()[0] ?? "?").toUpperCase();
 
   return (
-    <>
-    <ProviderKeysDialog onOpenChange={setKeysOpen} open={keysOpen} />
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -157,7 +156,7 @@ function SidebarAccountMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setKeysOpen(true)}>
+        <DropdownMenuItem onSelect={() => providerKeys?.openProviderKeys()}>
           <WalletIcon />
           {t("account.usage")}
         </DropdownMenuItem>
@@ -172,7 +171,6 @@ function SidebarAccountMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    </>
   );
 }
 

@@ -17,6 +17,8 @@ import {
 } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
+import { toastBillingRefusal } from "@/components/billing/billing-refusal";
+import { useProviderKeys } from "@/components/billing/provider-keys-provider";
 import { useDataStream } from "@/components/chat/data-stream-provider";
 import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import { toast } from "@/components/chat/toast";
@@ -27,7 +29,6 @@ import { useWorkspace } from "@/components/workspace/workspace-provider";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import type { Vote } from "@/lib/db/schema";
-import { ChatbotError } from "@/lib/errors";
 import { isIRListKeyForScope } from "@/lib/ir/client-keys";
 import type { ChatMessage } from "@/lib/types";
 import { fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
@@ -87,6 +88,14 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     qualityRef.current = quality;
   }, [quality]);
+
+  // Read through a ref for the same reason as the two above: `onError` is
+  // handed to useChat once and outlives this render.
+  const providerKeys = useProviderKeys();
+  const providerKeysRef = useRef(providerKeys);
+  useEffect(() => {
+    providerKeysRef.current = providerKeys;
+  }, [providerKeys]);
 
   const fallbackChatIdRef = useRef(generateUUID());
   const chatId = currentConversationId ?? fallbackChatIdRef.current;
@@ -319,14 +328,25 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     onError: (error) => {
       if (error.message?.includes("AI Gateway requires a valid credit card")) {
         setShowCreditCardAlert(true);
-      } else if (error instanceof ChatbotError) {
-        toast({ type: "error", description: error.message });
-      } else {
-        toast({
-          type: "error",
-          description: error.message || "Oops, an error occurred!",
-        });
+        return;
       }
+
+      // A refusal for money is the one failure in this product the user can
+      // clear themselves in thirty seconds — and the one the whole cost model
+      // depends on them clearing. It gets a toast that stays up and carries
+      // the button; see toastBillingRefusal for why both.
+      if (
+        toastBillingRefusal(error, providerKeysRef.current?.openProviderKeys)
+      ) {
+        return;
+      }
+
+      // Everything else: a ChatbotError already carries a written sentence,
+      // and anything else falls back to one.
+      toast({
+        type: "error",
+        description: error.message || "Oops, an error occurred!",
+      });
     },
   });
 

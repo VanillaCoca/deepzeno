@@ -3,7 +3,7 @@
 import { LogOutIcon, WalletIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ProviderKeysDialog } from "@/components/billing/provider-keys-dialog";
+import { useProviderKeys } from "@/components/billing/provider-keys-provider";
 import { useLocale } from "@/components/i18n/locale-provider";
 import {
   DropdownMenu,
@@ -25,9 +25,12 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
   const router = useRouter();
   const { t } = useLocale();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  // Sibling of the menu, not a child: selecting the item closes the dropdown,
-  // which would unmount a nested dialog before it rendered.
-  const [keysOpen, setKeysOpen] = useState(false);
+  // The dialog is owned by ProviderKeysProvider at the root, not held here.
+  // Two reasons, and only the first was ever about this menu: selecting a
+  // DropdownMenuItem closes the dropdown, which would unmount a dialog nested
+  // inside it; and a refusal fired from the chat needs to open the same dialog
+  // without going through an account menu at all.
+  const providerKeys = useProviderKeys();
 
   const email = userEmail ?? "Authenticated user";
   const name = email.includes("@") ? email.split("@")[0] : email;
@@ -52,8 +55,6 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
   }
 
   return (
-    <>
-    <ProviderKeysDialog onOpenChange={setKeysOpen} open={keysOpen} />
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -70,7 +71,7 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
           {email}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setKeysOpen(true)}>
+        <DropdownMenuItem onSelect={() => providerKeys?.openProviderKeys()}>
           <WalletIcon />
           {t("account.usage")}
         </DropdownMenuItem>
@@ -85,6 +86,5 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    </>
   );
 }

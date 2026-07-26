@@ -13,6 +13,8 @@ import {
 import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { toastBillingRefusal } from "@/components/billing/billing-refusal";
+import { useProviderKeys } from "@/components/billing/provider-keys-provider";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { useIR } from "@/components/ir/ir-provider";
 import { useInbox } from "@/components/ir/judgment-inbox";
@@ -82,6 +84,7 @@ export function WorkspaceHeader({
     isActiveConversationEmpty,
   } = useWorkspace();
   const { data: inboxData } = useInbox(activeProjectId);
+  const providerKeys = useProviderKeys();
   const inboxCount = inboxData?.items?.length ?? 0;
   const [exploreOpen, setExploreOpen] = useState(false);
   const [isExploring, setIsExploring] = useState(false);
@@ -132,11 +135,16 @@ export function WorkspaceHeader({
       // throws the server's message (see postWorkspaceUpdate). Keep the dialog
       // open so the user can retry.
       console.error("Explore new idea failed", error);
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : t("header.exploreFailed")
-      );
+      // The 402 gets the same treatment as in the chat: it is the one failure
+      // on this path with a fix the user owns, and the sentence alone sends
+      // them looking for a door the product could just open.
+      if (!toastBillingRefusal(error, providerKeys?.openProviderKeys)) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : t("header.exploreFailed")
+        );
+      }
     } finally {
       setIsExploring(false);
     }

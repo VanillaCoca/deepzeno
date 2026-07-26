@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Averia_Serif_Libre, Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Toaster } from "sonner";
+import { ProviderKeysProvider } from "@/components/billing/provider-keys-provider";
 import { LocaleProvider } from "@/components/i18n/locale-provider";
 import { QualityProvider } from "@/components/quality/quality-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -82,7 +83,12 @@ function Providers({
                 "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
             }}
           />
-          {children}
+          {/* At the root rather than in the workspace layout, because the two
+              trees that need it do not share one: the project home renders
+              under this layout directly, the workspace under (chat). It costs
+              nothing where it is unused — the dialog is not mounted until
+              something opens it. */}
+          <ProviderKeysProvider>{children}</ProviderKeysProvider>
         </TooltipProvider>
       </QualityProvider>
     </LocaleProvider>
