@@ -8,7 +8,10 @@ import {
   isPatrolCadence,
   PATROL_CADENCES,
 } from "@/lib/research/agent-settings";
+import { resolvePatrolBudget } from "@/lib/research/patrol-core";
+import { summarizePatrolQueue } from "@/lib/research/patrol-queue-core";
 import {
+  countPatrolQueue,
   createWatch,
   findWatchByNodeId,
   getProjectAgentSettings,
@@ -47,11 +50,28 @@ export async function GET(request: Request) {
     await assertProject(projectId, session.user.id);
 
     try {
-      const [watches, settings] = await Promise.all([
+      const budget = resolvePatrolBudget();
+      const [watches, settings, queue] = await Promise.all([
         listWatchesByProject(projectId),
         getProjectAgentSettings(projectId),
+        countPatrolQueue(),
       ]);
-      return Response.json({ watches, settings, not_migrated: false });
+      const health = summarizePatrolQueue({
+        activeWatches: queue.active,
+        dueNow: queue.due,
+        dailyCapacity: budget.maxWatchesPerSweep * budget.sweepsPerDay,
+      });
+      return Response.json({
+        watches,
+        settings,
+        // Only the derived cycle length crosses the boundary. The counts behind
+        // it are a census of every project's watches, which is not this
+        // project's business — but the wait it causes very much is, because
+        // there is one cron and this project's watches queue behind all of
+        // them. Null means the queue is keeping up and the cadence is real.
+        queue: { realized_cycle_days: health.realizedCycleDays },
+        not_migrated: false,
+      });
     } catch (error) {
       if (error instanceof IRNotReadyError) {
         // Pre-migration database — the UI still renders, with patrols
@@ -59,6 +79,7 @@ export async function GET(request: Request) {
         return Response.json({
           watches: [],
           settings: DEFAULT_AGENT_SETTINGS,
+          queue: { realized_cycle_days: null },
           not_migrated: true,
         });
       }

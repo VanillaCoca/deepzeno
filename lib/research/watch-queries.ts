@@ -279,6 +279,48 @@ export async function listDueWatches(limit: number): Promise<IRWatch[]> {
   return (rows ?? []).map(mapWatch);
 }
 
+// Queue depth across every project — the denominator the daily cron is up
+// against. Global on purpose: there is one cron, so a project's watches wait
+// behind everyone else's, and a per-project count would understate the wait by
+// exactly the amount that makes it look fine.
+//
+// Two head counts, no rows. Errors propagate rather than collapsing to zero:
+// an unreadable queue must not be reported as an empty one, which is the
+// failure mode this whole measurement exists to prevent.
+export async function countPatrolQueue(): Promise<{
+  active: number;
+  due: number;
+}> {
+  const db = getClient();
+  const [active, due] = await Promise.all([
+    db
+      .from("ir_watches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active"),
+    db
+      .from("ir_watches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .lte("next_due_at", new Date().toISOString()),
+  ]);
+
+  for (const result of [active, due]) {
+    if (result.error) {
+      if (isMissingTableError(result.error)) {
+        throw new IRNotReadyError(
+          "Watchtower schema has not been migrated yet."
+        );
+      }
+      throw new ChatbotError(
+        "bad_request:database",
+        "Failed to measure the patrol queue"
+      );
+    }
+  }
+
+  return { active: active.count ?? 0, due: due.count ?? 0 };
+}
+
 // Weekly alert cap input: watchtower-sourced nodes created in this project
 // over the trailing 7 days.
 export async function countRecentWatchtowerAlerts(

@@ -18,7 +18,20 @@ import {
 const draftSchema = z.object({
   kind: irKindSchema,
   subtype: irSubtypeSchema.nullable().optional(),
-  title: z.string().trim().min(1).max(200),
+  // Marker syntax is rejected, not stripped. The extraction layers sanitize
+  // because there is no one to tell — a run cannot stop to ask. Here there is
+  // a caller, so silently rewriting what they sent would hide the mutation
+  // (see sanitizeExtractedTitle's own note on why it does not live in the
+  // writer). A stored title is not just display text: it is serialized back
+  // into model context, so `[[ir:…]]` inside one is protocol injection.
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((value) => !(value.includes("[[") || value.includes("]]")), {
+      message: "title must not contain IR marker syntax",
+    }),
   content: z.string().nullable().optional(),
   rationale: z.string().nullable().optional(),
   project_id: z.string().uuid(),

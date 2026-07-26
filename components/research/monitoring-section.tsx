@@ -21,6 +21,10 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import type { IRNode } from "@/lib/ir/types";
 import type { PatrolCadence } from "@/lib/research/agent-settings";
+import {
+  isCadenceHonored,
+  realizedIntervalDays,
+} from "@/lib/research/patrol-queue-core";
 import type { ExplorationDirection } from "@/lib/research/watch-types";
 import { fetcher } from "@/lib/utils";
 
@@ -35,6 +39,9 @@ type WatchPayload = {
     lastPatrolAt: string | null;
     nextDirections: ExplorationDirection[] | null;
   }>;
+  // Null while the queue keeps up; a number of days once it cannot, meaning the
+  // cadence below is a request and this is the delivery.
+  queue?: { realized_cycle_days: number | null };
   not_migrated?: boolean;
 };
 
@@ -61,6 +68,7 @@ export function MonitoringSection({
   const [isPatrolling, setIsPatrolling] = useState(false);
 
   const watch = data?.watches.find((item) => item.nodeId === node.id) ?? null;
+  const realizedCycleDays = data?.queue?.realized_cycle_days ?? null;
   const eligible =
     node.kind === "hypothesis" ||
     node.kind === "constraint" ||
@@ -206,6 +214,22 @@ export function MonitoringSection({
               </Button>
             </div>
           </div>
+          {/* The cadence select above is a request, not a guarantee — one daily
+              cron serves every watch in the system, so past a certain queue
+              depth "daily" silently becomes "monthly". Shown only when the
+              queue actually cannot keep up, because a warning that is always
+              on is read as decoration. */}
+          {watch.status === "active" &&
+          !isCadenceHonored(watch.cadence, realizedCycleDays) ? (
+            <p
+              className="text-[12px] text-[var(--ir-warning-fg)] leading-[1.5]"
+              data-testid="wt-cadence-gap"
+            >
+              {t("wt.cadenceGap", {
+                days: `${realizedIntervalDays(watch.cadence, realizedCycleDays)}`,
+              })}
+            </p>
+          ) : null}
           <p className="text-[12px] text-[var(--ir-text-tertiary)] leading-[1.5]">
             {t("wt.reason", { reason: watch.reason })}
           </p>

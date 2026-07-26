@@ -1,4 +1,5 @@
 import { resolvePatrolBudget } from "@/lib/research/patrol-core";
+import { summarizePatrolQueue } from "@/lib/research/patrol-queue-core";
 
 // Daily Watchtower sweep (vercel.json crons). Processes due watches oldest
 // first within one invocation; anything left over is first in line next
@@ -13,7 +14,9 @@ export async function GET(request: Request) {
   }
 
   // Lazy imports keep the auth failure path free of DB/module init.
-  const { listDueWatches } = await import("@/lib/research/watch-queries");
+  const { countPatrolQueue, listDueWatches } = await import(
+    "@/lib/research/watch-queries"
+  );
   const { runPatrolForWatch } = await import("@/lib/research/patrol");
 
   const budget = resolvePatrolBudget();
@@ -31,6 +34,20 @@ export async function GET(request: Request) {
     );
   }
 
+  // Measured before the sweep runs, so it describes the backlog this
+  // invocation is facing rather than the dent it just made. Best-effort: a
+  // failure to count must not stop patrols, and an uncounted queue is reported
+  // as unknown, never as healthy.
+  const queue = await countPatrolQueue()
+    .then((counts) =>
+      summarizePatrolQueue({
+        activeWatches: counts.active,
+        dueNow: counts.due,
+        dailyCapacity: budget.maxWatchesPerSweep * budget.sweepsPerDay,
+      })
+    )
+    .catch(() => null);
+
   const results: Array<{ watchId: string; status: string }> = [];
   for (const watch of due) {
     // Sequential on purpose: patrols share the model/search budget and a
@@ -39,8 +56,18 @@ export async function GET(request: Request) {
     results.push({ watchId: result.watchId, status: result.status });
   }
 
+  // `due` is capped at maxWatchesPerSweep, so it says nothing about how much
+  // work was waiting — it is the same number every day once the queue is
+  // saturated. `queue` is what actually distinguishes "keeping up" from
+  // "thirty days behind", and without it the sweep log looks identical in both
+  // cases.
   console.info(
-    JSON.stringify({ type: "watchtower_sweep", due: due.length, results })
+    JSON.stringify({
+      type: "watchtower_sweep",
+      due: due.length,
+      queue,
+      results,
+    })
   );
-  return Response.json({ processed: due.length, results });
+  return Response.json({ processed: due.length, queue, results });
 }

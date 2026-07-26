@@ -209,6 +209,7 @@ describe("resolvePatrolBudget", () => {
       alertCooldownDays: 7,
       weeklyAlertCap: 3,
       maxWatchesPerSweep: 8,
+      sweepsPerDay: 1,
     });
     assert.equal(
       resolvePatrolBudget({ ZENO_PATROL_MAX_SEARCHES: "5" }).maxSearches,

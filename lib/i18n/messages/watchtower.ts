@@ -14,6 +14,9 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.cadenceDaily": "Daily",
     "wt.cadenceEvery3Days": "Every 3 days",
     "wt.cadenceWeekly": "Weekly",
+    // Shown only when the queue provably cannot honor the cadence above.
+    "wt.cadenceGap":
+      "One patrol queue serves every watch — this one is actually reached about every {days} days.",
     "wt.researchModel": "Research model",
     "wt.researchModelDefault": "Default ({name})",
     "wt.patrolNow": "Patrol now",
@@ -58,6 +61,7 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.cadenceDaily": "每天",
     "wt.cadenceEvery3Days": "每 3 天",
     "wt.cadenceWeekly": "每周",
+    "wt.cadenceGap": "全站共用一条巡检队列,这条实际约每 {days} 天才轮到一次。",
     "wt.researchModel": "调研模型",
     "wt.researchModelDefault": "默认({name})",
     "wt.patrolNow": "立即巡检",
@@ -99,6 +103,8 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.cadenceDaily": "Quotidienne",
     "wt.cadenceEvery3Days": "Tous les 3 jours",
     "wt.cadenceWeekly": "Hebdomadaire",
+    "wt.cadenceGap":
+      "Une seule file de patrouille dessert toutes les surveillances — celle-ci n'est atteinte qu'environ tous les {days} jours.",
     "wt.researchModel": "Modèle de recherche",
     "wt.researchModelDefault": "Par défaut ({name})",
     "wt.patrolNow": "Patrouiller maintenant",

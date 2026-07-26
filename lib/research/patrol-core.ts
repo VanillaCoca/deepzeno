@@ -19,6 +19,14 @@ export type PatrolBudget = {
   alertCooldownDays: number;
   weeklyAlertCap: number;
   maxWatchesPerSweep: number;
+  // How many times a day the sweep actually fires. Not a limit like the rest
+  // of this object — a fact about the deployment, and the one that turns a
+  // per-sweep cap into a throughput. Vercel Hobby allows one daily cron, and
+  // vercel.json declares exactly one, so 1. It lives here because
+  // maxWatchesPerSweep is meaningless on its own: 8 per sweep is 8 a day or
+  // 96 a day depending entirely on this number, and nothing in the system
+  // could state which until now.
+  sweepsPerDay: number;
 };
 
 function intFromEnv(
@@ -40,6 +48,7 @@ export function resolvePatrolBudget(
     alertCooldownDays: intFromEnv(env, "ZENO_PATROL_ALERT_COOLDOWN_DAYS", 7),
     weeklyAlertCap: intFromEnv(env, "ZENO_PATROL_WEEKLY_ALERT_CAP", 3),
     maxWatchesPerSweep: intFromEnv(env, "ZENO_PATROL_MAX_WATCHES_PER_SWEEP", 8),
+    sweepsPerDay: intFromEnv(env, "ZENO_PATROL_SWEEPS_PER_DAY", 1),
   };
 }
 
@@ -49,7 +58,9 @@ export function resolvePatrolBudget(
 
 const DAY_MS = 24 * 3600 * 1000;
 
-const CADENCE_DAYS: Record<PatrolCadence, number> = {
+// Exported because a cadence is a promise, and patrol-queue-core has to be
+// able to weigh it against what the queue can actually deliver.
+export const CADENCE_DAYS: Record<PatrolCadence, number> = {
   daily: 1,
   every_3_days: 3,
   weekly: 7,
