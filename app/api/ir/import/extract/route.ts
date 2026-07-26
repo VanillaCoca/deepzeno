@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
+import { getDefaultModelId } from "@/lib/ai/models";
+import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import {
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import {
@@ -38,6 +46,12 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
+    // Gated above the import session, not around the extraction call: an
+    // `import_session_started` event with no extraction after it is a session
+    // that reads as abandoned by the user rather than refused by the product.
+    const funding = await loadUserFunding(session.user.id);
+    requireFunding(funding, getDefaultModelId(process.env));
+
     const importSessionId = generateUUID();
 
     await logIREvent({
@@ -51,7 +65,26 @@ export async function POST(request: Request) {
       },
     });
 
-    const extraction = await extractImportCandidates(body.source_document);
+    const modelsUsed: ModelsUsedAccumulator = {};
+    const extraction = await withUserFunding(funding, () =>
+      extractImportCandidates(body.source_document, modelsUsed)
+    ).finally(() =>
+      // Settled on both arms: the 60k-character prompt is paid for the moment
+      // it is sent, and the failure mode here is a malformed answer — the one
+      // outcome a "bill only what succeeded" rule would hand back for free.
+      settleUsage({
+        funding,
+        modelsUsed,
+        kind: "import",
+        projectId: body.project_id,
+      }).catch((error) => {
+        console.error("Failed to settle import extraction usage", {
+          projectId: body.project_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+    );
+
     const validated = validateExtractedImportCandidates({
       candidates: extraction.candidates,
       sourceDocument: body.source_document,

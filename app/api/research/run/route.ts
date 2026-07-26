@@ -103,9 +103,13 @@ export async function GET(request: Request) {
  * Start a run. Accept-and-detach, not request-and-wait.
  *
  * Everything that can be the caller's fault — no session, a node that is not
- * theirs or is not a question, no search provider, a budget out of bounds — is
- * decided before this returns, so the caller still gets a real 4xx/503 for a
- * real mistake. What it does not do is hold the connection open for the four
+ * theirs or is not a question, no search provider, a budget out of bounds, an
+ * exhausted allowance — is decided before this returns, so the caller still
+ * gets a real 4xx/402/503 for a real mistake. That the allowance check lives on
+ * this side of the handoff is the whole reason it is worth anything: past this
+ * line the only way to refuse a run is to fail it, and a user reads a failed
+ * run as the product breaking rather than as a limit they can lift in Settings.
+ * What it does not do is hold the connection open for the four
  * minutes of work that follows. That was never a service to anyone: the
  * activity bar already polls the run row, so a caller blocked on the response
  * was watching a spinner while the same progress was being written where it

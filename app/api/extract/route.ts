@@ -1,7 +1,16 @@
 import { generateText } from "ai";
 import { z } from "zod";
+import { auth } from "@/app/(auth)/auth";
 import { getDefaultModelId } from "@/lib/ai/models";
 import { getLanguageModel } from "@/lib/ai/providers";
+import { addUsage, type ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import {
+  fundingForModel,
+  loadUserFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
+import { ChatbotError } from "@/lib/errors";
 import type { IRType } from "@/lib/ir-types";
 import type { ExtractionResult } from "@/lib/types/extraction";
 
@@ -294,7 +303,10 @@ function normalizeExtractionResult(
   };
 }
 
-async function extractWithModel(text: string): Promise<ExtractionResult> {
+async function extractWithModel(
+  text: string,
+  modelsUsed: ModelsUsedAccumulator
+): Promise<ExtractionResult> {
   const modelId = getDefaultModelId(process.env);
   const result = await generateText({
     model: getLanguageModel(modelId),
@@ -305,12 +317,44 @@ async function extractWithModel(text: string): Promise<ExtractionResult> {
     temperature: 0,
     timeout: MODEL_TIMEOUT_MS,
   });
+
+  // Before the parse, and unconditionally: `maxRetries: 0` means a malformed
+  // answer is the whole purchase, and the fallback below hides that from every
+  // other signal in this route.
+  addUsage(modelsUsed, modelId, result.usage);
+
   const parsed = extractionResultSchema.parse(parseJsonObject(result.text));
 
   return normalizeExtractionResult(parsed, text);
 }
 
+/**
+ * Turn notes into a project's first draft of memory.
+ *
+ * This route had no `auth()` at all until now, which made it the cheapest way
+ * in the product to spend the operator's money: 50,000 characters to the
+ * default model, from anyone who knew the URL, in a loop, forever. It was not
+ * an oversight about billing so much as about the shape of the thing — the
+ * route was written as a stateless text utility, and a stateless text utility
+ * that calls a paid model is a donation endpoint. The session is what turns
+ * the spend into somebody's spend; the allowance check is only possible once
+ * there is a somebody.
+ *
+ * An exhausted allowance degrades to the heuristic rather than refusing.
+ * Project creation is the first thing a user ever does here, `heuristicExtract`
+ * is a real non-model path that already ships as the no-provider fallback, and
+ * everything this returns is a review draft the user edits before any of it
+ * becomes truth. Blocking the door to protect a few cents of extraction would
+ * be the wrong trade. What would be wrong in the other direction is degrading
+ * in silence, so the response says which extractor answered.
+ */
 export async function POST(request: Request) {
+  const session = await auth();
+
+  if (!session?.user) {
+    return new ChatbotError("unauthorized:chat").toResponse();
+  }
+
   const body = await request.json().catch(() => null);
   const input = extractRequestSchema.safeParse(body);
 
@@ -318,13 +362,49 @@ export async function POST(request: Request) {
     return Response.json({ error: "Text is required" }, { status: 400 });
   }
 
+  const funding = await loadUserFunding(session.user.id);
+  const denied =
+    !funding.unmetered &&
+    fundingForModel(funding, getDefaultModelId(process.env)).source ===
+      "denied";
+
+  if (denied) {
+    return Response.json({
+      ...heuristicExtract(input.data.text),
+      extractor: "heuristic",
+      allowance_exhausted: true,
+    });
+  }
+
+  const modelsUsed: ModelsUsedAccumulator = {};
+
   try {
-    return Response.json(await extractWithModel(input.data.text));
+    const result = await withUserFunding(funding, () =>
+      extractWithModel(input.data.text, modelsUsed)
+    );
+
+    return Response.json({ ...result, extractor: "model" });
   } catch (error) {
     console.warn("Model-backed project extraction failed, using fallback", {
       error: error instanceof Error ? error.message : String(error),
     });
 
-    return Response.json(heuristicExtract(input.data.text));
+    return Response.json({
+      ...heuristicExtract(input.data.text),
+      extractor: "heuristic",
+    });
+  } finally {
+    // In `finally` so the fallback path pays too: a call that came back
+    // unparsable bought exactly as many tokens as one that came back clean.
+    await settleUsage({ funding, modelsUsed, kind: "import" }).catch(
+      (settleError) => {
+        console.error("Failed to settle project extraction usage", {
+          error:
+            settleError instanceof Error
+              ? settleError.message
+              : String(settleError),
+        });
+      }
+    );
   }
 }

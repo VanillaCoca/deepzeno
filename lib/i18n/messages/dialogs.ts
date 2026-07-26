@@ -28,6 +28,8 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.search.button": "Search",
     "dialog.search.rankedByRelevance": "Ranked by relevance",
     "dialog.search.keywordMatches": "Keyword matches",
+    "dialog.search.keywordMatchesAllowance":
+      "Keyword matches — semantic ranking is off because this month's free usage is used up. Connect your own API key in Settings to turn it back on.",
     "dialog.search.prompt": "Type a query and press Enter.",
     "dialog.search.noMatches": "No matches found.",
     "dialog.search.failedToast": "Search failed.",
@@ -69,6 +71,8 @@ export const dialogsMessages: LocaleMessages = {
       "Confirm {checked} in {topics} topics →",
     "dialog.createProject.extractFailed":
       "Couldn't extract — try again or start blank.",
+    "dialog.createProject.extractAllowanceExhausted":
+      "This month's free usage is used up, so this draft came from the basic extractor. Connect your own API key in Settings for full extraction.",
 
     // Project card
     "dialog.projectCard.deletedToast": "Project deleted.",
@@ -195,6 +199,8 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.search.button": "搜索",
     "dialog.search.rankedByRelevance": "按相关度排序",
     "dialog.search.keywordMatches": "关键词匹配",
+    "dialog.search.keywordMatchesAllowance":
+      "关键词匹配 —— 本月免费额度已用完，语义排序已关闭。可在设置中接入你自己的 API Key 恢复。",
     "dialog.search.prompt": "输入查询并按回车。",
     "dialog.search.noMatches": "未找到匹配项。",
     "dialog.search.failedToast": "搜索失败。",
@@ -233,6 +239,8 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.createProject.confirmSummary":
       "确认 {topics} 个主题中的 {checked} 项 →",
     "dialog.createProject.extractFailed": "提取失败 —— 请重试或从空白开始。",
+    "dialog.createProject.extractAllowanceExhausted":
+      "本月免费额度已用完，这份草稿来自基础提取器。可在设置中接入你自己的 API Key 以获得完整提取。",
 
     // Project card
     "dialog.projectCard.deletedToast": "项目已删除。",
@@ -357,6 +365,8 @@ export const dialogsMessages: LocaleMessages = {
     "dialog.search.button": "Rechercher",
     "dialog.search.rankedByRelevance": "Classé par pertinence",
     "dialog.search.keywordMatches": "Correspondances de mots-clés",
+    "dialog.search.keywordMatchesAllowance":
+      "Correspondances de mots-clés — le classement sémantique est désactivé car le quota gratuit du mois est épuisé. Connectez votre propre clé API dans les Paramètres pour le réactiver.",
     "dialog.search.prompt": "Saisissez une requête et appuyez sur Entrée.",
     "dialog.search.noMatches": "Aucune correspondance trouvée.",
     "dialog.search.failedToast": "La recherche a échoué.",
@@ -400,6 +410,8 @@ export const dialogsMessages: LocaleMessages = {
       "Confirmer {checked} dans {topics} sujets →",
     "dialog.createProject.extractFailed":
       "Extraction impossible — réessayez ou commencez à blanc.",
+    "dialog.createProject.extractAllowanceExhausted":
+      "Le quota gratuit du mois est épuisé : ce brouillon provient de l'extracteur basique. Connectez votre propre clé API dans les Paramètres pour une extraction complète.",
 
     // Project card
     "dialog.projectCard.deletedToast": "Projet supprimé.",

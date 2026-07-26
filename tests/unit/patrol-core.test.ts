@@ -208,7 +208,8 @@ describe("resolvePatrolBudget", () => {
       maxFetches: 3,
       alertCooldownDays: 7,
       weeklyAlertCap: 3,
-      maxWatchesPerSweep: 8,
+      maxWatchesPerSweep: 24,
+      sweepConcurrency: 4,
       sweepsPerDay: 1,
     });
     assert.equal(
@@ -218,6 +219,19 @@ describe("resolvePatrolBudget", () => {
     assert.equal(
       resolvePatrolBudget({ ZENO_PATROL_MAX_SEARCHES: "junk" }).maxSearches,
       2
+    );
+    // The concurrency knob is the one an operator reaches for under a
+    // rate-limit incident, which is exactly when a silently-ignored typo would
+    // cost the most.
+    assert.equal(
+      resolvePatrolBudget({ ZENO_PATROL_SWEEP_CONCURRENCY: "2" })
+        .sweepConcurrency,
+      2
+    );
+    assert.equal(
+      resolvePatrolBudget({ ZENO_PATROL_SWEEP_CONCURRENCY: "0" })
+        .sweepConcurrency,
+      4
     );
   });
 });

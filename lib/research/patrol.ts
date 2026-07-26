@@ -10,6 +10,15 @@ import "server-only";
 
 import { z } from "zod";
 import { generateObjectResilient } from "@/lib/ai/resilient-generate";
+import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import { addUsage, computeCostEstimate } from "@/lib/billing/cost-core";
+import {
+  type UserFunding,
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { stripInlineMarkers } from "@/lib/ir/marker-syntax";
 import {
   createIRNodeForUser,
@@ -18,7 +27,10 @@ import {
 } from "@/lib/ir/queries";
 import { extractEvidenceItems } from "./extract";
 import { fetchPageText } from "./fetch-page";
-import { normalizeResearchModelId } from "./model-preference";
+import {
+  DEFAULT_RESEARCH_MODEL_ID,
+  normalizeResearchModelId,
+} from "./model-preference";
 import {
   computeNextDueAt,
   evaluatePatrolSignal,
@@ -91,11 +103,13 @@ async function resolveIntents({
   nodeTitle,
   preferredModelId,
   maxSearches,
+  modelsUsed,
 }: {
   watch: IRWatch;
   nodeTitle: string;
   preferredModelId: string | null;
   maxSearches: number;
+  modelsUsed: ModelsUsedAccumulator;
 }): Promise<ExplorationDirection[]> {
   // A previous patrol's proposed directions take precedence: they were
   // written specifically as "what to try NEXT" for this watch.
@@ -127,6 +141,11 @@ async function resolveIntents({
     schema: patrolIntentSchema,
     preferredModelId,
   });
+  // Bill the model that actually answered, not the one that was asked for:
+  // `generateObjectResilient` silently falls back on a tripped breaker, and
+  // attributing the spend to the requested model would hide the degradation
+  // in exactly the number used to ration.
+  addUsage(modelsUsed, result.modelId, result.usage);
   return result.object.intents.slice(0, maxSearches);
 }
 
@@ -148,11 +167,13 @@ async function generateNextDirections({
   priorDirections,
   signalKind,
   preferredModelId,
+  modelsUsed,
 }: {
   nodeTitle: string;
   priorDirections: ExplorationDirection[];
   signalKind: string | null;
   preferredModelId: string | null;
+  modelsUsed: ModelsUsedAccumulator;
 }): Promise<ExplorationDirection[] | undefined> {
   try {
     const prior = priorDirections
@@ -166,17 +187,58 @@ async function generateNextDirections({
       schema: nextDirectionsSchema,
       preferredModelId,
     });
+    addUsage(modelsUsed, result.modelId, result.usage);
     return result.object.directions.slice(0, 4);
   } catch {
+    // Tokens spent on a call that then failed to parse are still spent, but
+    // the resilient wrapper does not hand back usage on the throw path, so
+    // there is nothing to record. Undercounting here is bounded by one call.
     return undefined;
   }
 }
 
+/**
+ * Public entry point for both callers (the daily cron sweep and "patrol now").
+ *
+ * The try/catch is the contract, not defensive habit. The sweep runs patrols in
+ * parallel lanes over one `Promise.all`, where a single rejected promise takes
+ * every other lane in flight down with it — one unreadable watch row would cost
+ * the whole day's sweep for every tenant. Enforcing it here rather than at the
+ * call site is deliberate: "patrol now" would otherwise be the caller that
+ * forgets, and the guarantee belongs to the function that promises a
+ * `PatrolResult`, not to whoever happens to call it.
+ */
 export async function runPatrolForWatch({
   watchId,
 }: {
   watchId: string;
 }): Promise<PatrolResult> {
+  try {
+    return await fundAndRunPatrol(watchId);
+  } catch (error) {
+    // Everything that can reach here — watch lookup, owner lookup, key
+    // decryption — happens before a run row exists, so there is no row to
+    // record it on. Returning it as a failed result at least lands it in the
+    // sweep log beside the patrols that did run, instead of vanishing.
+    return {
+      watchId,
+      status: "failed",
+      runId: null,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Answers "whose money is this" before any of it is spent.
+ *
+ * A patrol runs with no request in flight, so nothing else in the process would
+ * install the owner's keys — without this every patrol in the system would
+ * quietly bill the operator, on the one cost that recurs forever without anyone
+ * pressing anything. Wrapping the cron loop instead would have left "patrol
+ * now" unfunded, which is the same bug with a smaller blast radius.
+ */
+async function fundAndRunPatrol(watchId: string): Promise<PatrolResult> {
   const watch = await getWatchById(watchId);
   if (!watch) {
     return {
@@ -187,22 +249,85 @@ export async function runPatrolForWatch({
     };
   }
 
+  const ownerId = await getProjectOwnerId(watch.projectId);
+  if (!ownerId) {
+    await rescheduleWatch(watch);
+    return {
+      watchId,
+      status: "failed",
+      runId: null,
+      detail: "project owner missing",
+    };
+  }
+
+  const funding = await loadUserFunding(ownerId);
+
+  // Hoisted above `withUserFunding` so the ledger write below sees whatever
+  // was spent, including on the paths that throw. A patrol that dies halfway
+  // has still spent money; charging only the patrols that succeed is an
+  // allowance with a hole in it shaped exactly like the failure-prone path.
+  const modelsUsed: ModelsUsedAccumulator = {};
+
+  const result = await withUserFunding(funding, () =>
+    executePatrol({ watch, ownerId, funding, modelsUsed })
+  );
+
+  await settleUsage({
+    funding,
+    modelsUsed,
+    kind: "patrol",
+    projectId: watch.projectId,
+    runId: result.runId,
+  }).catch((error) => {
+    // The run row already carries the same cost figures, so a failed ledger
+    // write loses the allowance accounting, not the record. Loud, because
+    // silently under-charging is how a free tier becomes an unbounded one.
+    console.error("Failed to settle patrol usage", {
+      watchId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+
+  return result;
+}
+
+// Reschedule regardless of outcome — a failing patrol must not wedge the
+// queue. Module-level because the owner-missing path above needs it before the
+// engine has been entered.
+function rescheduleWatch(
+  watch: IRWatch,
+  patch: Partial<Parameters<typeof updateWatch>[0]> = {},
+  now: Date = new Date()
+) {
+  return updateWatch({
+    id: watch.id,
+    lastPatrolAt: now.toISOString(),
+    nextDueAt: computeNextDueAt(watch.cadence, now).toISOString(),
+    ...patch,
+  }).catch(() => {
+    // Best-effort; the due-list ordering self-heals.
+  });
+}
+
+async function executePatrol({
+  watch,
+  ownerId,
+  funding,
+  modelsUsed,
+}: {
+  watch: IRWatch;
+  ownerId: string;
+  funding: UserFunding;
+  modelsUsed: ModelsUsedAccumulator;
+}): Promise<PatrolResult> {
+  const watchId = watch.id;
   const now = new Date();
   const budget = resolvePatrolBudget();
 
-  // Whatever happens below, the watch gets rescheduled — a failing patrol
-  // must not wedge the queue.
   const reschedule = async (
     patch: Partial<Parameters<typeof updateWatch>[0]>
   ) => {
-    await updateWatch({
-      id: watch.id,
-      lastPatrolAt: now.toISOString(),
-      nextDueAt: computeNextDueAt(watch.cadence, now).toISOString(),
-      ...patch,
-    }).catch(() => {
-      // Rescheduling is best-effort; the due-list ordering self-heals.
-    });
+    await rescheduleWatch(watch, patch, now);
   };
 
   // Hoisted out of the try so the catch below can settle the run row. Without
@@ -212,18 +337,26 @@ export async function runPatrolForWatch({
   let runId: string | null = null;
   let reporter: RunReporter | null = null;
 
-  try {
-    const ownerId = await getProjectOwnerId(watch.projectId);
-    if (!ownerId) {
-      await reschedule({});
-      return {
-        watchId,
-        status: "failed",
-        runId: null,
-        detail: "project owner missing",
-      };
-    }
+  // Every terminal path settles the row with the same two cost fields.
+  // Routing them through one helper is what stops "the run that failed" from
+  // being the one run whose spend goes unrecorded — an allowance that only
+  // counts successful patrols is an allowance with a hole in it, and the hole
+  // is exactly the retry-heavy path.
+  const settleRun = (
+    id: string,
+    patch: Omit<
+      Parameters<typeof updateResearchRun>[0],
+      "id" | "modelsUsed" | "costEstimate"
+    >
+  ) =>
+    updateResearchRun({
+      id,
+      modelsUsed,
+      costEstimate: computeCostEstimate(modelsUsed),
+      ...patch,
+    });
 
+  try {
     const node = await getIRNodeForUser({ id: watch.nodeId, userId: ownerId });
     if (!node) {
       await reschedule({});
@@ -246,12 +379,22 @@ export async function runPatrolForWatch({
       watchId: watch.id,
     });
     runId = run.id;
-    // Patrol does not accumulate token usage, so it has no running cost to
-    // report. Null, not zero — a patrol is not free, it is unmeasured.
+
+    // Checked after the run row exists, not before, and that ordering is the
+    // point. A patrol refused for lack of funds happens inside a cron with
+    // nobody watching; if it returned early the only trace would be a line in
+    // a log the user cannot read, and the watch would look like it had simply
+    // found nothing — the most expensive silence in the product, because the
+    // user reads it as reassurance. Throwing here lands it on the run row as a
+    // failure with the allowance sentence attached, in the same place every
+    // other run outcome appears. The cost is one row per skipped patrol,
+    // bounded by the sweep cap and only while the allowance is exhausted.
+    requireFunding(funding, preferredModelId ?? DEFAULT_RESEARCH_MODEL_ID);
+
     reporter = createRunReporter({
       runId: run.id,
       budget,
-      costEstimate: () => null,
+      costEstimate: () => computeCostEstimate(modelsUsed),
     });
     await reporter.beat({ phase: "plan" });
 
@@ -266,6 +409,7 @@ export async function runPatrolForWatch({
       nodeTitle: node.title,
       preferredModelId,
       maxSearches: budget.maxSearches,
+      modelsUsed,
     });
 
     // Persist the plan BEFORE searching: a patrol that dies mid-run still
@@ -336,6 +480,7 @@ export async function runPatrolForWatch({
           url,
           pageText: page.text,
         });
+        addUsage(modelsUsed, extraction.modelId, extraction.usage);
         for (const item of extraction.items) {
           if (verifyQuote(item.quote, page.text)) {
             freshItems.push({ ...item, url, title: urls.get(url) ?? null });
@@ -373,12 +518,12 @@ export async function runPatrolForWatch({
       priorDirections: intents,
       signalKind: signal.signal ? signal.kind : null,
       preferredModelId,
+      modelsUsed,
     });
     const directionsPatch = nextDirections ? { nextDirections } : {};
 
     if (!signal.signal) {
-      await updateResearchRun({
-        id: run.id,
+      await settleRun(run.id, {
         status: "done",
         finishedAt: new Date().toISOString(),
       });
@@ -407,8 +552,7 @@ export async function runPatrolForWatch({
     });
 
     if (!admit) {
-      await updateResearchRun({
-        id: run.id,
+      await settleRun(run.id, {
         status: "done",
         finishedAt: new Date().toISOString(),
       });
@@ -496,8 +640,7 @@ export async function runPatrolForWatch({
       ],
     });
 
-    await updateResearchRun({
-      id: run.id,
+    await settleRun(run.id, {
       status: "done",
       brief: `Patrol signal (${signal.kind}): ${signal.detail ?? ""}`.slice(
         0,
@@ -541,8 +684,7 @@ export async function runPatrolForWatch({
     // patrol that threw stayed on screen as work in flight that no longer
     // existed — a progress bar's worst failure mode.
     if (runId) {
-      await updateResearchRun({
-        id: runId,
+      await settleRun(runId, {
         status: cancelled ? "cancelled" : "failed",
         error: cancelled ? null : message,
         finishedAt: new Date().toISOString(),

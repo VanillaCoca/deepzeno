@@ -4,6 +4,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
+import { addUsage, type ModelsUsedAccumulator } from "@/lib/billing/cost-core";
 import { ChatbotError } from "@/lib/errors";
 import { logIREvent } from "@/lib/ir/queries";
 import {
@@ -60,8 +61,20 @@ function serializeIntake(messages: WorkspaceMessageRecord[]) {
 
 export async function runKickoffSynthesis({
   projectId,
+  modelsUsed,
 }: {
   projectId: string;
+  /**
+   * Out-parameter, written once the model answers. The caller settles it.
+   *
+   * Reported rather than settled here for the same reason `runIRSweep` does it
+   * this way: this function does not know whose keys it is running under, and
+   * inventing a second source of truth about that inside the synthesis would
+   * be how the two drift. The single most expensive call in the product was
+   * throwing `result.usage` away entirely before this existed — one frontier
+   * generation per project, billed to nobody.
+   */
+  modelsUsed?: ModelsUsedAccumulator;
 }): Promise<{ proposal: KickoffProposal; model: string }> {
   const topics = await listTopicsByProjectId(projectId);
   const generalTopic = topics.find((topic) => topic.isGeneral);
@@ -100,6 +113,10 @@ export async function runKickoffSynthesis({
     prompt: `<intake_exchange>\n${serializeIntake(messages)}\n</intake_exchange>`,
     schema: kickoffResponseSchema,
   });
+
+  if (modelsUsed) {
+    addUsage(modelsUsed, modelId, result.usage);
+  }
 
   const proposal = normalizeKickoffProposal(result.object);
   const nodesProposed = proposal.topics.reduce(

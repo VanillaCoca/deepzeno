@@ -1,7 +1,15 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
+import { getTitleModelId } from "@/lib/ai/models";
 import { getTitleModel } from "@/lib/ai/providers";
+import { addUsage, type ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import {
+  fundingForModel,
+  loadUserFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import { listIRNodesForUser } from "@/lib/ir/queries";
@@ -42,7 +50,8 @@ async function loadCandidates(userId: string, projectId: string) {
 // (callers fall back to a keyword match so search never hard-fails).
 async function rankWithModel(
   query: string,
-  candidates: IRNode[]
+  candidates: IRNode[],
+  modelsUsed: ModelsUsedAccumulator
 ): Promise<string[] | null> {
   const catalog = candidates
     .map((node, index) => {
@@ -67,11 +76,17 @@ Catalog:
 ${catalog}`;
 
   try {
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: getTitleModel(),
       prompt,
       temperature: 0,
     });
+
+    // Recorded before the parse, not after. An unparsable answer still cost
+    // 250 catalog rows' worth of input tokens, and the branch that throws them
+    // away is exactly the branch a "we only bill what worked" rule would
+    // silently exempt.
+    addUsage(modelsUsed, getTitleModelId(process.env), usage);
 
     const match = text.match(/\[[\d\s,]*\]/);
     if (!match) {
@@ -113,7 +128,43 @@ export async function POST(request: Request) {
       return Response.json({ mode: "semantic", results: [] });
     }
 
-    const rankedIds = await rankWithModel(input.query, candidates);
+    // The one billable path in the product that degrades instead of refusing.
+    //
+    // Everywhere else an exhausted allowance throws, because there is no
+    // cheaper honest version of a research run or a sweep — half a run is not
+    // a run. Search is different: a deterministic keyword match over the same
+    // rows already exists here as the model-unavailable fallback, and it
+    // answers the user's actual question less well rather than not at all.
+    // Refusing would be choosing "no search" over "worse search" purely to be
+    // consistent with the other routes.
+    //
+    // What it must not do is degrade quietly. `mode: "keyword"` alone reads as
+    // a property of the query; `allowance_exhausted` is what lets the dialog
+    // say the ranking was switched off and where the switch is.
+    const funding = await loadUserFunding(session.user.id);
+    const titleModelId = getTitleModelId(process.env);
+    const denied =
+      !funding.unmetered &&
+      fundingForModel(funding, titleModelId).source === "denied";
+
+    const modelsUsed: ModelsUsedAccumulator = {};
+    const rankedIds = denied
+      ? null
+      : await withUserFunding(funding, () =>
+          rankWithModel(input.query, candidates, modelsUsed)
+        ).finally(() =>
+          settleUsage({
+            funding,
+            modelsUsed,
+            kind: "search",
+            projectId: input.projectId,
+          }).catch((error) => {
+            console.error("Failed to settle search usage", {
+              projectId: input.projectId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          })
+        );
 
     if (rankedIds) {
       const byId = new Map(candidates.map((node) => [node.id, node]));
@@ -138,6 +189,7 @@ export async function POST(request: Request) {
     return Response.json({
       mode: "keyword",
       results: lists.flat().slice(0, MAX_RESULTS),
+      allowance_exhausted: denied,
     });
   } catch (error) {
     return irErrorToResponse(error, "IR search failed");

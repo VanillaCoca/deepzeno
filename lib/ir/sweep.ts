@@ -4,6 +4,10 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
+import {
+  addUsage,
+  type ModelsUsedAccumulator,
+} from "@/lib/billing/cost-core";
 import { resolveGovernorConfig } from "@/lib/extraction-governor";
 import {
   sanitizeExtractedTitle,
@@ -529,7 +533,7 @@ async function extractChunk({
     );
     const object = parseSweepResponseText(result.text);
 
-    return { modelId, object };
+    return { modelId, object, usage: result.usage };
   } catch (error) {
     console.warn("IR sweep model extraction failed, using fallback", {
       modelId,
@@ -539,6 +543,11 @@ async function extractChunk({
     return {
       modelId: "heuristic-fallback",
       object: heuristicExtract(chunk.messages),
+      // The heuristic path runs no model, so zero here is the truth rather
+      // than a missing measurement. The soft-timeout path is the one case we
+      // cannot account for: the request may still complete at the provider
+      // after we stopped waiting for it.
+      usage: { inputTokens: 0, outputTokens: 0 },
     };
   }
 }
@@ -758,12 +767,17 @@ export async function runIRSweep({
   projectId,
   conversationId,
   modelSoftTimeoutMs = DEFAULT_MODEL_SOFT_TIMEOUT_MS,
+  modelsUsed,
 }: {
   sweepId: string;
   userId: string;
   projectId: string;
   conversationId: string;
   modelSoftTimeoutMs?: number;
+  // Out-parameter, written per chunk. The sweep runs in `after()` on the chat
+  // route, so its spend belongs to a turn that has already been answered —
+  // the caller settles it, this function only reports.
+  modelsUsed?: ModelsUsedAccumulator;
 }): Promise<IRSweepResult> {
   const startedAt = Date.now();
   const allMessages =
@@ -837,6 +851,9 @@ export async function runIRSweep({
         modelSoftTimeoutMs,
       });
       lastModel = extraction.modelId;
+      if (modelsUsed) {
+        addUsage(modelsUsed, extraction.modelId, extraction.usage);
+      }
 
       for (const item of extraction.object.high_confidence) {
         // Governor (principle 2a): once this run has filled its pending

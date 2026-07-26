@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
+import { selectModelForTask } from "@/lib/ai/model-policy";
+import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import {
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import { getKickoffStateForProject } from "@/lib/ir/queries";
@@ -38,11 +46,41 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
-    const { proposal, model } = await runKickoffSynthesis({
-      projectId: body.project_id,
-    });
+    // The most expensive single call in the product: one frontier-tier
+    // generation over the whole intake transcript, and until now it was billed
+    // to nobody. Gated against the model it will actually reach for, because
+    // "kickoff_synthesis" is tier-routed and the answer changes with the
+    // deployment's model set — a user with an Anthropic key of their own is
+    // funded here even at zero allowance.
+    const funding = await loadUserFunding(session.user.id);
+    requireFunding(funding, selectModelForTask("kickoff_synthesis"));
 
-    return Response.json({ proposal, model });
+    const modelsUsed: ModelsUsedAccumulator = {};
+
+    try {
+      const { proposal, model } = await withUserFunding(funding, () =>
+        runKickoffSynthesis({ projectId: body.project_id, modelsUsed })
+      );
+
+      return Response.json({ proposal, model });
+    } finally {
+      // In `finally` rather than after the success path: a synthesis whose
+      // response failed to parse has still bought every token it sent. The
+      // pre-model guards inside `runKickoffSynthesis` throw with an empty
+      // accumulator, and `recordUsage` skips rows of zeroes, so nothing is
+      // written for those.
+      await settleUsage({
+        funding,
+        modelsUsed,
+        kind: "kickoff",
+        projectId: body.project_id,
+      }).catch((error) => {
+        console.error("Failed to settle kickoff usage", {
+          projectId: body.project_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
   } catch (error) {
     return irErrorToResponse(error, "Kickoff synthesis failed");
   }

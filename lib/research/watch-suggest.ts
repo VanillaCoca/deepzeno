@@ -7,13 +7,16 @@ import "server-only";
 // (unique node_id), best-effort everywhere — a failed suggestion must never
 // break its caller.
 
+import { logIREvent } from "@/lib/ir/queries";
 import type { IRKind } from "@/lib/ir/types";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isWatchWorthy } from "./patrol-core";
+import { admitNewWatch } from "./watch-admission";
 import {
   createWatch,
   findWatchByNodeId,
   getProjectAgentSettings,
+  getProjectOwnerId,
 } from "./watch-queries";
 
 type SuggestibleNode = {
@@ -95,6 +98,37 @@ export async function suggestWatchForNode(
     }
     if (evidenceBacked) {
       reasonParts.push("已有网络证据需要保鲜");
+    }
+
+    // Quota check goes last, after the node has already proven itself worth
+    // watching. Checking it first would be cheaper and wrong: it would spend
+    // the user's slot budget on the question "is anyone over quota" rather
+    // than "was this node worth a slot", and the event below would fire for
+    // every unremarkable node the sweep walks past.
+    const ownerId = await getProjectOwnerId(node.projectId);
+    if (!ownerId) {
+      return false;
+    }
+    const admission = await admitNewWatch(ownerId);
+    if (!admission.admitted) {
+      // Iron Law 2. Nobody is present to be told no, so the refusal is
+      // written down instead — otherwise a node Zeno judged worth watching and
+      // a node it dismissed leave exactly the same trace, and the standing
+      // quota becomes invisible at the only moment it changed an outcome.
+      // The user-facing half of this is the counter on the watch panel, which
+      // explains every past and future refusal at once.
+      await logIREvent({
+        projectId: node.projectId,
+        nodeId: node.id,
+        event: "watch_quota_exceeded",
+        layer: "watchtower",
+        metadata: {
+          activeWatches: admission.activeWatches,
+          quota: admission.quota,
+          reason: admission.reason,
+        },
+      });
+      return false;
     }
 
     await createWatch({

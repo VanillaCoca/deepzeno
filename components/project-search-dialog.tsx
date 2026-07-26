@@ -30,6 +30,10 @@ export function ProjectSearchDialog({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<IRNode[] | null>(null);
   const [mode, setMode] = useState<"semantic" | "keyword" | null>(null);
+  // Kept apart from `mode` because they answer different questions. "keyword"
+  // is what the user got; this is why they got it — and only one of the two
+  // reasons for keyword mode is something the user can act on.
+  const [allowanceExhausted, setAllowanceExhausted] = useState(false);
   const [searching, setSearching] = useState(false);
 
   async function runSearch() {
@@ -54,14 +58,17 @@ export function ProjectSearchDialog({
       const data = (await response.json()) as {
         mode: "semantic" | "keyword";
         results: IRNode[];
+        allowance_exhausted?: boolean;
       };
       setResults(data.results ?? []);
       setMode(data.mode ?? null);
+      setAllowanceExhausted(Boolean(data.allowance_exhausted));
     } catch (error) {
       console.error(error);
       toast.error(t("dialog.search.failedToast"));
       setResults([]);
       setMode(null);
+      setAllowanceExhausted(false);
     } finally {
       setSearching(false);
     }
@@ -107,11 +114,19 @@ export function ProjectSearchDialog({
             </Button>
           </div>
 
-          {results && results.length > 0 && mode ? (
+          {/* Shown even with zero results when the ranker was switched off:
+              "no matches" from a keyword scan means something different from
+              "no matches" from a semantic one, and a user who does not know
+              which they got cannot tell whether to rephrase. */}
+          {mode && (results?.length || allowanceExhausted) ? (
             <p className="px-1 text-[11px] text-muted-foreground">
               {mode === "semantic"
                 ? t("dialog.search.rankedByRelevance")
-                : t("dialog.search.keywordMatches")}
+                : t(
+                    allowanceExhausted
+                      ? "dialog.search.keywordMatchesAllowance"
+                      : "dialog.search.keywordMatches"
+                  )}
             </p>
           ) : null}
 

@@ -42,6 +42,12 @@ type WatchPayload = {
   // Null while the queue keeps up; a number of days once it cannot, meaning the
   // cadence below is a request and this is the delivery.
   queue?: { realized_cycle_days: number | null };
+  // How many standing watches this user has, against the cap. Null before the
+  // billing tables exist. Rendered whether or not the cap is reached: Zeno
+  // also stops proposing watches on its own at this number, and that happens
+  // inside a background pipeline with no way to report it. The counter is the
+  // only place the user can learn it before it costs them a finding.
+  quota?: { active: number; limit: number; admitted: boolean } | null;
   not_migrated?: boolean;
 };
 
@@ -69,6 +75,8 @@ export function MonitoringSection({
 
   const watch = data?.watches.find((item) => item.nodeId === node.id) ?? null;
   const realizedCycleDays = data?.queue?.realized_cycle_days ?? null;
+  const quota = data?.quota ?? null;
+  const quotaFull = quota ? !quota.admitted : false;
   const eligible =
     node.kind === "hypothesis" ||
     node.kind === "constraint" ||
@@ -87,11 +95,20 @@ export function MonitoringSection({
         body: JSON.stringify({ node_id: node.id }),
       });
       if (!response.ok) {
+        // The 402 body carries the actual numbers in `cause`; a bare status
+        // code would tell the user their click failed without telling them the
+        // one thing they can act on.
+        const body = (await response
+          .json()
+          .catch(() => null)) as { message?: string; cause?: string } | null;
         const message =
           response.status === 503
             ? t("wt.notMigrated")
-            : t("wt.patrolFailed", { detail: `${response.status}` });
+            : (body?.cause ??
+              body?.message ??
+              t("wt.patrolFailed", { detail: `${response.status}` }));
         toast({ type: "error", description: message });
+        await mutate();
         return;
       }
       await mutate();
@@ -263,16 +280,35 @@ export function MonitoringSection({
           </div>
         </div>
       ) : (
-        <Button
-          data-testid="monitoring-watch-this"
-          disabled={isBusy || data?.not_migrated === true}
-          onClick={createWatch}
-          size="sm"
-          variant="outline"
-        >
-          <RadarIcon className="size-3.5" />
-          {t("wt.watchThis")}
-        </Button>
+        <div className="space-y-1.5">
+          <Button
+            data-testid="monitoring-watch-this"
+            disabled={
+              isBusy || data?.not_migrated === true || quotaFull
+            }
+            onClick={createWatch}
+            size="sm"
+            variant="outline"
+          >
+            <RadarIcon className="size-3.5" />
+            {t("wt.watchThis")}
+          </Button>
+          {quota ? (
+            <p
+              className={
+                quotaFull
+                  ? "text-[12px] text-[var(--ir-warning-fg)] leading-[1.5]"
+                  : "text-[12px] text-[var(--ir-text-tertiary)] leading-[1.5]"
+              }
+              data-testid="wt-quota"
+            >
+              {t(quotaFull ? "wt.quotaFull" : "wt.quotaUsed", {
+                active: `${quota.active}`,
+                limit: `${quota.limit}`,
+              })}
+            </p>
+          ) : null}
+        </div>
       )}
       {data?.not_migrated ? (
         <p className="text-[12px] text-[var(--ir-text-tertiary)]">

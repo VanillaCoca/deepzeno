@@ -19,12 +19,26 @@ export type PatrolBudget = {
   alertCooldownDays: number;
   weeklyAlertCap: number;
   maxWatchesPerSweep: number;
+  /**
+   * How many patrols one sweep runs at a time.
+   *
+   * A patrol is almost entirely waiting — two searches, three page fetches,
+   * a handful of model calls — so running them one after another spent a
+   * 300-second invocation mostly idle and capped the whole product's standing
+   * capacity at 8 watches a day. Raising it costs nothing per patrol; it only
+   * changes how much of the invocation is used.
+   *
+   * Not unbounded, for the ordinary reason: every lane holds open sockets to
+   * the same few search and model endpoints, and enough of them turns one
+   * deployment into a rate-limit problem for every tenant at once.
+   */
+  sweepConcurrency: number;
   // How many times a day the sweep actually fires. Not a limit like the rest
   // of this object — a fact about the deployment, and the one that turns a
   // per-sweep cap into a throughput. Vercel Hobby allows one daily cron, and
   // vercel.json declares exactly one, so 1. It lives here because
-  // maxWatchesPerSweep is meaningless on its own: 8 per sweep is 8 a day or
-  // 96 a day depending entirely on this number, and nothing in the system
+  // maxWatchesPerSweep is meaningless on its own: 24 per sweep is 24 a day or
+  // 288 a day depending entirely on this number, and nothing in the system
   // could state which until now.
   sweepsPerDay: number;
 };
@@ -47,7 +61,17 @@ export function resolvePatrolBudget(
     maxFetches: intFromEnv(env, "ZENO_PATROL_MAX_FETCHES", 3),
     alertCooldownDays: intFromEnv(env, "ZENO_PATROL_ALERT_COOLDOWN_DAYS", 7),
     weeklyAlertCap: intFromEnv(env, "ZENO_PATROL_WEEKLY_ALERT_CAP", 3),
-    maxWatchesPerSweep: intFromEnv(env, "ZENO_PATROL_MAX_WATCHES_PER_SWEEP", 8),
+    // 24, not 8. The old number was not a budget decision — it was what a
+    // serial loop could finish inside 300 seconds. With four lanes the same
+    // invocation reaches roughly three times as many watches for the same
+    // money per watch, and the thing that now bounds standing cost is the
+    // per-user watch quota, which is checked where a human can hear it.
+    maxWatchesPerSweep: intFromEnv(
+      env,
+      "ZENO_PATROL_MAX_WATCHES_PER_SWEEP",
+      24
+    ),
+    sweepConcurrency: intFromEnv(env, "ZENO_PATROL_SWEEP_CONCURRENCY", 4),
     sweepsPerDay: intFromEnv(env, "ZENO_PATROL_SWEEPS_PER_DAY", 1),
   };
 }

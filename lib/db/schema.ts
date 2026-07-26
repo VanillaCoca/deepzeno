@@ -8,6 +8,7 @@ import {
   integer,
   json,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   real,
@@ -604,3 +605,68 @@ export const evidence = pgTable("evidence", {
     .defaultNow(),
 });
 export type EvidenceRow = InferSelectModel<typeof evidence>;
+
+// Append-only spend record (supabase/migrations/20260724000001_billing.sql).
+// project_id/run_id are nullable and `set null` on delete: a spend record that
+// vanishes when its project does is not a ledger.
+export const usageLedger = pgTable("usage_ledger", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  // auth.users id, intentionally without an FK.
+  userId: uuid("user_id").notNull(),
+  projectId: uuid("project_id").references(() => project.id, {
+    onDelete: "set null",
+  }),
+  runId: uuid("run_id").references(() => researchRun.id, {
+    onDelete: "set null",
+  }),
+  // 'chat' | 'research' | 'patrol' | 'sweep' | 'kickoff'.
+  kind: text("kind").notNull(),
+  // 'platform' | 'byok'. A denied call spends nothing and writes no row.
+  fundingSource: text("funding_source").notNull(),
+  // 'YYYY-MM' UTC, from billingPeriodKey().
+  billingPeriod: text("billing_period").notNull(),
+  modelsUsed: jsonb("models_used").notNull().default({}),
+  inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+  outputTokens: bigint("output_tokens", { mode: "number" })
+    .notNull()
+    .default(0),
+  // numeric, so drizzle/PostgREST hand these back as strings — parse before
+  // arithmetic. That friction is deliberate: this column exists to be summed
+  // and float4 loses cents across thousands of sub-cent rows.
+  meteredUsd: numeric("metered_usd", { precision: 12, scale: 6 })
+    .notNull()
+    .default("0"),
+  // Null means "unknown", never zero.
+  estimateUsd: numeric("estimate_usd", { precision: 12, scale: 6 }),
+  isEstimated: boolean("is_estimated").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export type UsageLedgerRow = InferSelectModel<typeof usageLedger>;
+
+// BYOK vault. `ciphertext` is AES-256-GCM under ZENO_BYOK_SECRET and must
+// never leave the server; the settings UI reads provider/keyHint/status only.
+export const providerKey = pgTable("provider_keys", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  // Model providers plus 'tavily': search fees are the cost cost-core.ts
+  // cannot meter, which makes them the cost most worth handing over.
+  provider: text("provider").notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  // Last four characters of the plaintext key.
+  keyHint: text("key_hint").notNull(),
+  label: text("label"),
+  // 'active' | 'invalid'. 'invalid' exists so a dead key is announced rather
+  // than silently falling back to platform funding.
+  status: text("status").notNull().default("active"),
+  lastError: text("last_error"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export type ProviderKeyRow = InferSelectModel<typeof providerKey>;

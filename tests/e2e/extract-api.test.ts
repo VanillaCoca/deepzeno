@@ -1,4 +1,10 @@
 import { expect, test } from "@playwright/test";
+import {
+  createConfirmedTestUser,
+  deleteTestUser,
+  hasSupabaseE2EConfig,
+  signInThroughLoginPage,
+} from "../helpers";
 
 function collectExtractionText(payload: {
   projectName?: unknown;
@@ -60,7 +66,43 @@ function expectValidExtraction(payload: {
 }
 
 test.describe("Project extraction API", () => {
-  test("returns input-sensitive structured extraction", async ({ request }) => {
+  // The route spends model money, so it now demands a session. That makes the
+  // whole suite conditional on Supabase e2e config for the same reason
+  // api.test.ts is: without it there is nobody to be.
+  // biome-ignore lint/suspicious/noSkippedTests: conditional e2e requires Supabase auth.
+  test.skip(
+    !hasSupabaseE2EConfig,
+    "Supabase auth must be configured for project extraction e2e."
+  );
+
+  let user: Awaited<ReturnType<typeof createConfirmedTestUser>> | null = null;
+
+  test.beforeEach(async ({ page }) => {
+    user = await createConfirmedTestUser();
+    await signInThroughLoginPage(page, user);
+  });
+
+  test.afterEach(async () => {
+    if (user) {
+      await deleteTestUser(user.id);
+      user = null;
+    }
+  });
+
+  test("refuses anonymous extraction", async ({ request }) => {
+    // Deliberately the bare `request` fixture, which carries no session
+    // cookie. This is the regression that matters most in this file: the route
+    // shipped for months with no `auth()` at all, which made 50,000 characters
+    // of model input available to anyone who knew the URL.
+    const response = await request.post("/api/extract", {
+      data: { text: "Project: Anonymous. Goal: should never be extracted." },
+    });
+
+    expect(response.status()).toBe(401);
+  });
+
+  test("returns input-sensitive structured extraction", async ({ page }) => {
+    const request = page.request;
     const pantryResponse = await request.post("/api/extract", {
       data: {
         text: "Project: Pantry Scanner. Goal: build a pantry barcode scanner for volunteers. Constraint: do not accept payments in V1. Open question: choose the barcode data source.",
@@ -91,8 +133,8 @@ test.describe("Project extraction API", () => {
     );
   });
 
-  test("rejects empty extraction input", async ({ request }) => {
-    const response = await request.post("/api/extract", {
+  test("rejects empty extraction input", async ({ page }) => {
+    const response = await page.request.post("/api/extract", {
       data: {
         text: "   ",
       },

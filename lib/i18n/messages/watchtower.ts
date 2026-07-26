@@ -28,6 +28,10 @@ export const watchtowerMessages: LocaleMessages = {
       "Watchtower tables are not migrated yet — apply the latest Supabase migration to enable patrols.",
     "wt.monitoringTitle": "Monitoring",
     "wt.watchThis": "Watch this",
+    // The cap is on standing jobs, so it is stated as a count, not a price.
+    "wt.quotaUsed": "{active}/{limit} watches active",
+    "wt.quotaFull":
+      "{active}/{limit} watches active — the limit. Pause one, or connect your own API key in Settings to raise it.",
     "wt.watching": "Watching",
     "wt.paused": "Paused",
     "wt.resume": "Resume",
@@ -73,6 +77,9 @@ export const watchtowerMessages: LocaleMessages = {
       "Watchtower 数据表尚未迁移——在 Supabase 执行最新 migration 后即可启用巡检。",
     "wt.monitoringTitle": "主动监测",
     "wt.watchThis": "关注此前提",
+    "wt.quotaUsed": "已关注 {active}/{limit}",
+    "wt.quotaFull":
+      "已关注 {active}/{limit}，已达上限。暂停一个，或在设置里接入你自己的 API 密钥来提高上限。",
     "wt.watching": "监测中",
     "wt.paused": "已暂停",
     "wt.resume": "恢复",
@@ -116,6 +123,9 @@ export const watchtowerMessages: LocaleMessages = {
       "Les tables Watchtower ne sont pas migrées — appliquez la dernière migration Supabase pour activer les patrouilles.",
     "wt.monitoringTitle": "Surveillance",
     "wt.watchThis": "Surveiller",
+    "wt.quotaUsed": "{active}/{limit} surveillances actives",
+    "wt.quotaFull":
+      "{active}/{limit} surveillances actives — limite atteinte. Mettez-en une en pause, ou connectez votre propre clé API dans les Réglages pour l'augmenter.",
     "wt.watching": "Surveillé",
     "wt.paused": "En pause",
     "wt.resume": "Reprendre",

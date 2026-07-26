@@ -321,6 +321,41 @@ export async function countPatrolQueue(): Promise<{
   return { active: active.count ?? 0, due: due.count ?? 0 };
 }
 
+// Active watches across every project one user owns — the denominator the
+// standing-cost quota is checked against.
+//
+// `ir_watches` has no user_id: a watch belongs to a node, which belongs to a
+// project, which belongs to a user. Rather than fetch the user's project ids
+// and pass them back as a filter (two round trips, and a wrong answer the
+// moment a user has more than 1000 projects), this walks the declared
+// `project_id -> projects.id` foreign key as an inner embed and lets Postgres
+// do the join. `head: true` means no rows cross the wire; only the count does.
+export async function countActiveWatchesForUser(
+  userId: string
+): Promise<number> {
+  const db = getClient();
+  const { count, error } = await db
+    .from("ir_watches")
+    .select("id, projects!inner(user_id)", { count: "exact", head: true })
+    .eq("projects.user_id", userId)
+    .eq("status", "active");
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      throw new IRNotReadyError("Watchtower schema has not been migrated yet.");
+    }
+    // Propagates rather than returning 0. A quota that reads an unreadable
+    // count as "none in use" admits every watch — it fails open on exactly the
+    // cost it exists to bound, and does it without saying anything.
+    throw new ChatbotError(
+      "bad_request:database",
+      "Failed to count active watches"
+    );
+  }
+
+  return count ?? 0;
+}
+
 // Weekly alert cap input: watchtower-sourced nodes created in this project
 // over the trailing 7 days.
 export async function countRecentWatchtowerAlerts(

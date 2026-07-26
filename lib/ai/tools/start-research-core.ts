@@ -83,6 +83,19 @@ export type StartResearchDeclineReason =
   | "node_busy"
   /** No web search provider is configured in this deployment. */
   | "search_unavailable"
+  /**
+   * The user's free allowance for the month is spent and they have no key of
+   * their own for the model this run would use.
+   *
+   * Split out of `start_failed` because the two are opposite instructions to
+   * the model. `start_failed` means something broke and the user can only try
+   * again; this means nothing broke, the limit worked, and there is a specific
+   * thing the user can do about it in the next thirty seconds. Collapsing them
+   * would turn every exhausted allowance into "research didn't start, sorry" —
+   * the silent miss Iron Law 2 exists to forbid, delivered by the one component
+   * in the product that was talking to the user at the time.
+   */
+  | "allowance_exhausted"
   /** Everything checked out and the launch itself failed. */
   | "start_failed";
 

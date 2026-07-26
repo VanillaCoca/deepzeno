@@ -10,8 +10,7 @@ import {
 import { checkBotId } from "botid/server";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
-import { auth, type UserType } from "@/app/(auth)/auth";
-import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { auth } from "@/app/(auth)/auth";
 import { routeAutoModel } from "@/lib/ai/model-policy";
 import {
   getActiveModels,
@@ -21,6 +20,17 @@ import {
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createStartResearchTool } from "@/lib/ai/tools/start-research";
+import {
+  addUsage,
+  type ModelsUsedAccumulator,
+} from "@/lib/billing/cost-core";
+import {
+  AllowanceExhaustedError,
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { isProductionEnvironment } from "@/lib/constants";
 import { prepareCompactedContext } from "@/lib/context/compaction";
 import { assembleContext } from "@/lib/context-assembly";
@@ -28,7 +38,6 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
-  getMessageCountByUserId,
   getMessagesByChatId,
   saveChat,
   saveMessages,
@@ -164,18 +173,10 @@ export async function POST(request: Request) {
       return new ChatbotError("unauthorized:chat").toResponse();
     }
 
+    // IP rate limiting stays: it defends the endpoint against abuse, which is a
+    // different problem from "who pays". The per-user message-count quota that
+    // used to sit here is gone — see the funding gate further down for why.
     await checkIpRateLimit(ipAddress(request));
-
-    const userType: UserType = session.user.type;
-
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 1,
-    });
-
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerHour) {
-      return new ChatbotError("rate_limit:chat").toResponse();
-    }
 
     const isToolApprovalFlow = Boolean(messages);
 
@@ -223,6 +224,39 @@ export async function POST(request: Request) {
     }
 
     const chatModel = resolvedModel.id;
+
+    // Funding admission.
+    //
+    // This replaces a quota of ten messages per hour. That quota rationed the
+    // wrong unit: ten DeepSeek turns cost a fraction of a cent and ten frontier
+    // turns on a long context cost more than a dollar, so the same number meant
+    // two things three orders of magnitude apart. It also cut off the users
+    // costing nothing at exactly the same point as the users costing the most.
+    // The allowance is denominated in the thing the operator actually pays.
+    //
+    // Checked against `chatModel` specifically, because funding is per
+    // provider: a user who connected a DeepSeek key can keep running DeepSeek
+    // long after the platform allowance is gone.
+    const funding = await loadUserFunding(session.user.id);
+
+    try {
+      requireFunding(funding, chatModel);
+    } catch (fundingError) {
+      if (fundingError instanceof AllowanceExhaustedError) {
+        return new ChatbotError(
+          "payment_required:allowance",
+          fundingError.message
+        ).toResponse();
+      }
+      throw fundingError;
+    }
+
+    // Everything this turn spends, keyed by model id, settled once at the end.
+    // One accumulator rather than one ledger row per call: the question anyone
+    // actually asks is "what did this turn cost me", not "what did the
+    // compaction step of this turn cost me".
+    const modelsUsed: ModelsUsedAccumulator = {};
+
     const shouldInjectWorkspaceContext = !workspaceSelection.topic.isGeneral;
 
     const chat = await getChatById({ id });
@@ -247,7 +281,16 @@ export async function POST(request: Request) {
       // answer stream — that was the "first message of a new conversation always
       // errors" bug. We catch at creation (not just at await) to avoid an
       // unhandled rejection if the title fails before the stream consumes it.
-      titlePromise = generateTitleFromUserMessage({ message }).catch(
+      //
+      // Wrapped in the funding context like every other model call in this
+      // turn, so a user with their own key has their title generated on it.
+      // Deliberately NOT metered: it is one call on the title model with a
+      // single message as input, and `actions.ts` is a "use server" module —
+      // passing a mutable accumulator across that boundary would work today by
+      // accident and break the moment it is ever called as a real action.
+      titlePromise = withUserFunding(funding, () =>
+        generateTitleFromUserMessage({ message })
+      ).catch(
         (titleError) => {
           console.error(
             "Title generation failed; using a fallback title",
@@ -391,14 +434,17 @@ export async function POST(request: Request) {
     let conversationSummaryBlock = "";
     let payloadUiMessages = uiMessages;
     if (!isToolApprovalFlow) {
-      const compaction = await prepareCompactedContext({
-        conversationId,
-        historyMessages: messagesFromDb,
-        currentMessage: message as ChatMessage | undefined,
-        baseSystemText,
-        modelId: chatModel,
-        provider: resolvedModel.provider,
-      });
+      const compaction = await withUserFunding(funding, () =>
+        prepareCompactedContext({
+          conversationId,
+          historyMessages: messagesFromDb,
+          currentMessage: message as ChatMessage | undefined,
+          baseSystemText,
+          modelId: chatModel,
+          provider: resolvedModel.provider,
+          modelsUsed,
+        })
+      );
       conversationSummaryBlock = compaction.summaryBlock;
       payloadUiMessages = uiMessages.filter((uiMessage) =>
         compaction.keepMessageIds.has(uiMessage.id)
@@ -438,41 +484,69 @@ export async function POST(request: Request) {
 
     const stream = createUIMessageStream({
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
-      execute: async ({ writer: dataStream }) => {
-        const result = streamText({
-          model: getLanguageModel(chatModel),
-          system: fullSystemText,
-          messages: modelMessages,
-          tools,
-          stopWhen: stepCountIs(5),
-          providerOptions: {
-            ...(resolvedModel.gatewayOrder && {
-              gateway: { order: resolvedModel.gatewayOrder },
-            }),
-            ...(resolvedModel.reasoningEffort && {
-              openai: { reasoningEffort: resolvedModel.reasoningEffort },
-            }),
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
-          },
-        });
+      // `withUserFunding` has to wrap the whole body, not just the
+      // `streamText` call: the model is resolved lazily and the tool steps run
+      // inside the stream, so the context must still be installed when those
+      // continuations execute.
+      execute: ({ writer: dataStream }) =>
+        withUserFunding(funding, async () => {
+          const result = streamText({
+            model: getLanguageModel(chatModel),
+            system: fullSystemText,
+            messages: modelMessages,
+            tools,
+            stopWhen: stepCountIs(5),
+            providerOptions: {
+              ...(resolvedModel.gatewayOrder && {
+                gateway: { order: resolvedModel.gatewayOrder },
+              }),
+              ...(resolvedModel.reasoningEffort && {
+                openai: { reasoningEffort: resolvedModel.reasoningEffort },
+              }),
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: "stream-text",
+            },
+            // Settled here rather than in the outer `onFinish` because this is
+            // the only callback that sees the token counts, and because the
+            // SDK awaits it — an unawaited ledger write would be frozen when
+            // the serverless invocation returns.
+            //
+            // `totalUsage` covers every step, not just the last: with
+            // `stopWhen: stepCountIs(5)` a tool-using turn makes several model
+            // calls and the earlier ones cost the most (they carry the whole
+            // context). Charging only the final step would undercount the
+            // expensive turns by roughly the factor that makes them expensive.
+            //
+            // Keyed by `chatModel`, our own id, not `response.modelId` — the
+            // price table is indexed by the former, and a provider that
+            // reports a dated snapshot name would silently become unpriced.
+            onFinish: async ({ totalUsage }) => {
+              addUsage(modelsUsed, chatModel, totalUsage);
+              await settleUsage({
+                funding,
+                modelsUsed,
+                kind: "chat",
+                projectId,
+              });
+            },
+          });
 
-        dataStream.write({ type: "data-model", data: chatModel });
+          dataStream.write({ type: "data-model", data: chatModel });
 
-        dataStream.merge(
-          result.toUIMessageStream({ sendReasoning: isReasoningModel })
-        );
+          dataStream.merge(
+            result.toUIMessageStream({ sendReasoning: isReasoningModel })
+          );
 
-        if (titlePromise) {
-          const title = await titlePromise;
-          if (title) {
-            dataStream.write({ type: "data-chat-title", data: title });
-            updateChatTitleById({ chatId: id, title });
+          if (titlePromise) {
+            const title = await titlePromise;
+            if (title) {
+              dataStream.write({ type: "data-chat-title", data: title });
+              updateChatTitleById({ chatId: id, title });
+            }
           }
-        }
-      },
+        }),
       generateId: generateUUID,
       onFinish: async ({ messages: finishedMessages }) => {
         const inlineMarkerResult = shouldInjectWorkspaceContext
@@ -553,14 +627,39 @@ export async function POST(request: Request) {
         const lastAssistantMessage = assistantMessages.at(-1);
 
         if (shouldInjectWorkspaceContext && lastAssistantMessage) {
-          after(() => {
-            runIRSweep({
-              sweepId: generateId(),
-              userId: session.user.id,
-              conversationId,
-              projectId,
-            }).catch(console.error);
-          });
+          after(() =>
+            // Re-entered explicitly rather than relying on inheritance:
+            // `after()` defers the callback to a different async context, so
+            // the ambient funding would be gone by the time it runs and a BYOK
+            // user's extraction would quietly land on the platform key.
+            //
+            // Its spend gets its own ledger row (`kind: "sweep"`) instead of
+            // joining the turn's: by the time this runs the chat row is
+            // already written, and a second row is cheaper and more honest
+            // than making the turn wait to be settled until the sweep is done.
+            withUserFunding(funding, async () => {
+              const sweepModelsUsed: ModelsUsedAccumulator = {};
+              try {
+                await runIRSweep({
+                  sweepId: generateId(),
+                  userId: session.user.id,
+                  conversationId,
+                  projectId,
+                  modelsUsed: sweepModelsUsed,
+                });
+              } catch (sweepError) {
+                console.error(sweepError);
+              }
+              // Settled even when the sweep threw: the tokens it burned before
+              // failing were still bought.
+              await settleUsage({
+                funding,
+                modelsUsed: sweepModelsUsed,
+                kind: "sweep",
+                projectId,
+              });
+            })
+          );
         }
       },
       onError: (error) => {

@@ -2,9 +2,17 @@ import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createGateway } from "@ai-sdk/gateway";
 import { customProvider, gateway } from "ai";
 import { isTestEnvironment } from "../constants";
+import { byokKeyForProvider } from "./billing-context";
+import { byokProviderForModelId } from "./byok-routing";
 import { getModelById, getTitleModelId } from "./models";
+
+// Platform providers: the operator's own credentials, funding the free
+// allowance. A user who has connected their own key never touches these — see
+// `userKeyFor` below and lib/ai/billing-context.ts for why the switch is
+// ambient rather than a parameter.
 
 const anthropicProvider = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -95,6 +103,19 @@ export const myProvider = isTestEnvironment
     })()
   : null;
 
+// ---------------------------------------------------------------------------
+// Per-user routing
+// ---------------------------------------------------------------------------
+
+// Providers are rebuilt per call when a user key is in play. That looks
+// wasteful and is not: `createX` only closes over config — no socket, no
+// handshake — and it runs once per generate call, not once per token. Caching
+// them by key would mean holding decrypted user credentials in a module-level
+// map for the lifetime of the lambda, which is a strictly worse trade.
+function userKeyFor(modelId: string): string | null {
+  return byokKeyForProvider(byokProviderForModelId(modelId));
+}
+
 export function getLanguageModel(modelId: string) {
   if (isTestEnvironment && myProvider) {
     return myProvider.languageModel("chat-model");
@@ -108,11 +129,17 @@ export function getLanguageModel(modelId: string) {
     );
   }
 
+  const userKey = userKeyFor(model.id);
+
   switch (model.providerType) {
     case "anthropic":
-      return anthropicProvider.chat(model.providerModelId);
+      return (
+        userKey ? createAnthropic({ apiKey: userKey }) : anthropicProvider
+      ).chat(model.providerModelId);
     case "openai":
-      return openaiProvider.chat(model.providerModelId);
+      return (userKey ? createOpenAI({ apiKey: userKey }) : openaiProvider).chat(
+        model.providerModelId
+      );
     case "bedrock":
       if (!bedrockProvider) {
         throw new Error("Amazon Bedrock is not configured.");
@@ -121,6 +148,13 @@ export function getLanguageModel(modelId: string) {
       return bedrockProvider(model.providerModelId);
     case "openai-compatible":
       if (model.id.startsWith("dashscope:")) {
+        if (userKey && process.env.DASHSCOPE_BASE_URL) {
+          return createOpenAICompatible({
+            apiKey: userKey,
+            baseURL: process.env.DASHSCOPE_BASE_URL,
+            name: "dashscope",
+          }).chatModel(model.providerModelId);
+        }
         if (!dashscopeProvider) {
           throw new Error("DashScope is not configured.");
         }
@@ -129,6 +163,14 @@ export function getLanguageModel(modelId: string) {
       }
 
       if (model.id.startsWith("deepseek:")) {
+        if (userKey) {
+          return createOpenAICompatible({
+            apiKey: userKey,
+            baseURL:
+              process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com/v1",
+            name: "deepseek",
+          }).chatModel(model.providerModelId);
+        }
         if (!deepseekProvider) {
           throw new Error("DeepSeek is not configured.");
         }
@@ -147,6 +189,14 @@ export function getLanguageModel(modelId: string) {
       }
 
       if (model.id.startsWith("openrouter:")) {
+        if (userKey) {
+          return createOpenAICompatible({
+            apiKey: userKey,
+            baseURL:
+              process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+            name: "openrouter",
+          }).chatModel(model.providerModelId);
+        }
         if (!openrouterProvider) {
           throw new Error("OpenRouter is not configured.");
         }
@@ -156,6 +206,11 @@ export function getLanguageModel(modelId: string) {
 
       throw new Error("Unsupported OpenAI-compatible provider.");
     case "gateway":
+      if (userKey) {
+        return createGateway({ apiKey: userKey }).languageModel(
+          model.providerModelId
+        );
+      }
       return gateway.languageModel(model.providerModelId);
     default:
       throw new Error("Unsupported AI model provider.");

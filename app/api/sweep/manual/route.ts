@@ -1,6 +1,14 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
+import { selectModelForTask } from "@/lib/ai/model-policy";
+import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import {
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import { logIREvent } from "@/lib/ir/queries";
@@ -159,6 +167,22 @@ export async function POST(request: Request) {
       ).toResponse();
     }
 
+    // Whose money, decided before anything is written down.
+    //
+    // Asked about the model the sweep will actually reach for rather than a
+    // hard-coded default: `ir_extraction` resolves through `getDefaultModelId`
+    // today, but a user with a DeepSeek key and no allowance left is funded for
+    // a DeepSeek sweep and denied for an Anthropic one, and a duplicated
+    // constant here would answer the wrong question the day `TASK_TIER` gains
+    // an entry for it.
+    //
+    // Placed above `openSweepRun` for the same reason the research gate sits
+    // above `createResearchRun`: one line further down a run row exists, and
+    // from there the only way to refuse is a run that failed — which the user
+    // reads as the product breaking rather than as a limit they can lift.
+    const funding = await loadUserFunding(session.user.id);
+    requireFunding(funding, selectModelForTask("ir_extraction"));
+
     const sweepId = generateUUID();
     await logIREvent({
       projectId: body.project_id,
@@ -178,15 +202,24 @@ export async function POST(request: Request) {
       topicId: conversation.topicId,
     });
 
-    const sweepPromise = runIRSweep({
-      sweepId,
-      userId: session.user.id,
-      projectId: project.id,
-      conversationId: conversation.id,
-      modelSoftTimeoutMs: body.blocking
-        ? BLOCKING_MODEL_SOFT_TIMEOUT_MS
-        : QUEUED_MODEL_SOFT_TIMEOUT_MS,
-    });
+    const modelsUsed: ModelsUsedAccumulator = {};
+    // `withUserFunding` enters the funding scope synchronously and hands back
+    // the sweep's own promise, so the context survives every await inside it —
+    // unlike the chat route's sweep, which has to re-enter because `after()`
+    // moves the callback to a different async context. The `after(settled)`
+    // below only awaits a promise that is already inside the scope.
+    const sweepPromise = withUserFunding(funding, () =>
+      runIRSweep({
+        sweepId,
+        userId: session.user.id,
+        projectId: project.id,
+        conversationId: conversation.id,
+        modelSoftTimeoutMs: body.blocking
+          ? BLOCKING_MODEL_SOFT_TIMEOUT_MS
+          : QUEUED_MODEL_SOFT_TIMEOUT_MS,
+        modelsUsed,
+      })
+    );
 
     if (runId) {
       // Not awaited: the checkpoint only moves the rail off "pending", and the
@@ -196,9 +229,18 @@ export async function POST(request: Request) {
       // the bar is on screen it is nearly over, and the only way to interrupt
       // it runs through 950 lines of extraction logic for about a fifth of a
       // cent. Visibility is the whole win here.
-      void writeRunCheckpoint({
+      // `.catch` rather than `void`: a rejected checkpoint write is a lost
+      // progress bar, not a lost sweep, but an unhandled rejection in a
+      // serverless invocation is a process-level event that can take the
+      // sweep down with it.
+      writeRunCheckpoint({
         id: runId,
         progress: { phase: "extract", at: new Date().toISOString() },
+      }).catch((error) => {
+        console.error("Failed to checkpoint sweep run", {
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     }
 
@@ -207,13 +249,35 @@ export async function POST(request: Request) {
     // still running, and a row settled `failed` at that moment would be a lie
     // about work still in flight that may yet land candidates. This is also
     // the promise's only terminal rejection handler on the timeout path.
-    const settled = sweepPromise.then(
-      (result) => (runId ? closeSweepRun({ runId, result }) : undefined),
-      (error) => {
-        console.error("Manual IR sweep failed", error);
-        return runId ? closeSweepRun({ runId, error }) : undefined;
-      }
-    );
+    const settled = sweepPromise
+      .then(
+        (result) => (runId ? closeSweepRun({ runId, result }) : undefined),
+        (error) => {
+          console.error("Manual IR sweep failed", error);
+          return runId ? closeSweepRun({ runId, error }) : undefined;
+        }
+      )
+      // Chained onto both arms, not onto the success arm: a sweep that dies
+      // halfway through a conversation has still paid for every chunk it
+      // extracted, and billing only the sweeps that finish leaves a hole in the
+      // allowance shaped exactly like the failure-prone path.
+      .then(() =>
+        settleUsage({
+          funding,
+          modelsUsed,
+          kind: "sweep",
+          projectId: project.id,
+          runId,
+        }).catch((error) => {
+          // Loud: silently under-charging is how a free tier becomes an
+          // unbounded one. The run row still carries the sweep itself, so what
+          // is lost here is the accounting, not the record.
+          console.error("Failed to settle sweep usage", {
+            sweepId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+      );
 
     // `after()` is what makes the queued path real. On Vercel a promise the
     // response does not await is frozen the instant the invocation returns:

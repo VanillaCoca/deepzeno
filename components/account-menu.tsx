@@ -1,8 +1,9 @@
 "use client";
 
-import { LogOutIcon } from "lucide-react";
+import { LogOutIcon, WalletIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ProviderKeysDialog } from "@/components/billing/provider-keys-dialog";
 import { useLocale } from "@/components/i18n/locale-provider";
 import {
   DropdownMenu,
@@ -24,6 +25,9 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
   const router = useRouter();
   const { t } = useLocale();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  // Sibling of the menu, not a child: selecting the item closes the dropdown,
+  // which would unmount a nested dialog before it rendered.
+  const [keysOpen, setKeysOpen] = useState(false);
 
   const email = userEmail ?? "Authenticated user";
   const name = email.includes("@") ? email.split("@")[0] : email;
@@ -48,6 +52,8 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
   }
 
   return (
+    <>
+    <ProviderKeysDialog onOpenChange={setKeysOpen} open={keysOpen} />
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -64,6 +70,11 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
           {email}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setKeysOpen(true)}>
+          <WalletIcon />
+          {t("account.usage")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={isSigningOut}
           onSelect={() => handleSignOut()}
@@ -74,5 +85,6 @@ export function AccountMenu({ userEmail }: { userEmail: string | null }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   );
 }

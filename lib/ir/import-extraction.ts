@@ -3,6 +3,7 @@ import "server-only";
 import { generateText } from "ai";
 import { getActiveModels, getDefaultModelId } from "@/lib/ai/models";
 import { getLanguageModel } from "@/lib/ai/providers";
+import { addUsage, type ModelsUsedAccumulator } from "@/lib/billing/cost-core";
 import { isProductionEnvironment, isTestEnvironment } from "@/lib/constants";
 import { IMPORT_EXTRACTION_SYSTEM_PROMPT } from "./import-extraction-prompt";
 import type { ImportCandidate } from "./import-types";
@@ -137,7 +138,16 @@ function canUseMockAdapter() {
 }
 
 export async function extractImportCandidates(
-  documentText: string
+  documentText: string,
+  /**
+   * Out-parameter, written once the model answers. The caller settles it.
+   *
+   * Worth metering even though a user imports rarely: the ceiling here is a
+   * 60,000-character document in a single prompt, which is the largest input
+   * any one call in the product can carry — several sweeps' worth of tokens in
+   * one click, and it was landing on the operator's key unrecorded.
+   */
+  modelsUsed?: ModelsUsedAccumulator
 ): Promise<ImportExtractionResult> {
   if (documentText.length > MAX_IMPORT_DOCUMENT_CHARS) {
     throw new ImportExtractionUnavailableError(
@@ -171,6 +181,14 @@ export async function extractImportCandidates(
     temperature: 0,
     timeout: MODEL_TIMEOUT_MS,
   });
+
+  // Before the parse: a document the extractor answered badly cost exactly as
+  // much as one it answered well, and `maxRetries: 0` means this is the only
+  // shot either way.
+  if (modelsUsed) {
+    addUsage(modelsUsed, modelId, result.usage);
+  }
+
   const parsed = importExtractorResponseSchema.parse(
     parseStrictJsonObject(result.text)
   );

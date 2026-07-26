@@ -16,13 +16,13 @@
 -- invisible. Nothing logged to the user. Nothing failed loudly.
 --
 -- Why drop rather than widen: schema.ts declares both columns as plain `text`
--- and says so out loud -- "A text column, so the two cancel states cost no
+-- and says so out loud — "A text column, so the two cancel states cost no
 -- migration." That is the intended contract. The values are written from typed
 -- TypeScript constants (RUN_TYPES, RunStatus in lib/research/run-progress-core.ts)
 -- through exactly two functions in lib/research/queries.ts; there is no
 -- external writer for a database CHECK to defend against. So the constraint
 -- guards against a class of bug that cannot occur, while its own failure mode
--- -- a silent 23514 in production months after the code shipped -- is precisely
+-- — a silent 23514 in production months after the code shipped — is precisely
 -- the bug we just spent a session chasing. Re-adding a widened list would
 -- rebuild the same trap for the next run type.
 --

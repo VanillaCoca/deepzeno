@@ -10,6 +10,7 @@ import {
 } from "@/lib/research/agent-settings";
 import { resolvePatrolBudget } from "@/lib/research/patrol-core";
 import { summarizePatrolQueue } from "@/lib/research/patrol-queue-core";
+import { admitNewWatch, watchQuotaMessage } from "@/lib/research/watch-admission";
 import {
   countPatrolQueue,
   createWatch,
@@ -51,10 +52,11 @@ export async function GET(request: Request) {
 
     try {
       const budget = resolvePatrolBudget();
-      const [watches, settings, queue] = await Promise.all([
+      const [watches, settings, queue, admission] = await Promise.all([
         listWatchesByProject(projectId),
         getProjectAgentSettings(projectId),
         countPatrolQueue(),
+        admitNewWatch(session.user.id),
       ]);
       const health = summarizePatrolQueue({
         activeWatches: queue.active,
@@ -64,6 +66,17 @@ export async function GET(request: Request) {
       return Response.json({
         watches,
         settings,
+        // Sent on every load, not only on refusal. The quota's other half is
+        // enforced inside the research pipeline, where nobody is watching:
+        // Zeno stops proposing watches at the cap and there is no request to
+        // return an error to. A counter that is always visible explains those
+        // refusals before they happen, which is the only form of "not silent"
+        // available when the decision happens offline.
+        quota: {
+          active: admission.activeWatches,
+          limit: admission.quota,
+          admitted: admission.admitted,
+        },
         // Only the derived cycle length crosses the boundary. The counts behind
         // it are a census of every project's watches, which is not this
         // project's business — but the wait it causes very much is, because
@@ -80,6 +93,7 @@ export async function GET(request: Request) {
           watches: [],
           settings: DEFAULT_AGENT_SETTINGS,
           queue: { realized_cycle_days: null },
+          quota: null,
           not_migrated: true,
         });
       }
@@ -118,6 +132,17 @@ export async function POST(request: Request) {
     const existing = await findWatchByNodeId(node.id);
     if (existing) {
       return Response.json({ watch: existing }, { status: 200 });
+    }
+
+    // After the idempotency check on purpose: re-requesting a watch that
+    // already exists consumes no new slot, and refusing it at the cap would
+    // make a no-op look like a failure.
+    const admission = await admitNewWatch(session.user.id);
+    if (!admission.admitted) {
+      return new ChatbotError(
+        "payment_required:watch_quota",
+        watchQuotaMessage(admission)
+      ).toResponse();
     }
 
     const settings = await getProjectAgentSettings(node.projectId);

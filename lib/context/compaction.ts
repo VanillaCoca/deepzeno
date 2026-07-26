@@ -5,6 +5,10 @@ import { getContextWindowTokens } from "@/lib/ai/context-windows";
 import { selectModelForTask } from "@/lib/ai/model-policy";
 import { getLanguageModel } from "@/lib/ai/providers";
 import {
+  addUsage,
+  type ModelsUsedAccumulator,
+} from "@/lib/billing/cost-core";
+import {
   buildConversationSummaryBlock,
   planCompaction,
   SUMMARY_MAX_OUTPUT_TOKENS,
@@ -65,9 +69,16 @@ function buildSummaryUserPrompt({
 export async function summarizeConversationSegment({
   previousSummary,
   messages,
+  modelsUsed,
 }: {
   previousSummary?: string | null;
   messages: SummarizableTurn[];
+  // Optional out-parameter, same shape the research pipeline uses. Compaction
+  // is the one background call in a chat turn that can be genuinely expensive
+  // — folding 30k tokens of history costs real cents on a standard model —
+  // so it has to reach the ledger with the turn that triggered it, not be
+  // written off as overhead.
+  modelsUsed?: ModelsUsedAccumulator;
 }): Promise<string | null> {
   if (messages.length === 0) {
     return previousSummary?.trim() || null;
@@ -80,15 +91,21 @@ export async function summarizeConversationSegment({
     )
     .join("\n\n");
 
+  const modelId = selectModelForTask("compaction_summary");
+
   try {
     const result = await generateText({
-      model: getLanguageModel(selectModelForTask("compaction_summary")),
+      model: getLanguageModel(modelId),
       system: buildSummarySystemPrompt(),
       prompt: buildSummaryUserPrompt({ previousSummary, transcript }),
       maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
       temperature: 0,
       maxRetries: 1,
     });
+
+    if (modelsUsed) {
+      addUsage(modelsUsed, modelId, result.usage);
+    }
 
     const summary = result.text.trim();
     return summary || (previousSummary?.trim() ?? null);
@@ -135,6 +152,7 @@ export async function prepareCompactedContext({
   baseSystemText,
   modelId,
   provider,
+  modelsUsed,
 }: {
   conversationId: string;
   // Prior conversation history (chronological); excludes the current turn.
@@ -145,6 +163,9 @@ export async function prepareCompactedContext({
   baseSystemText: string;
   modelId?: string | null;
   provider?: string | null;
+  // Written to only when a summary call actually happens. Every early return
+  // below leaves it untouched, which is the correct record: no call, no spend.
+  modelsUsed?: ModelsUsedAccumulator;
 }): Promise<CompactedContext> {
   const keepAll = new Set(historyMessages.map((message) => message.id));
   if (currentMessage?.id) {
@@ -230,6 +251,7 @@ export async function prepareCompactedContext({
         role: message.role,
         text: extractPartsText(message.parts),
       })),
+      modelsUsed,
     });
 
     if (!newSummary) {

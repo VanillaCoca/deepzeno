@@ -1,9 +1,11 @@
 import "server-only";
 
+import { createGateway } from "@ai-sdk/gateway";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { gateway, generateText, type ToolSet } from "ai";
 
+import { byokKeyForProvider } from "@/lib/ai/billing-context";
 import {
   fixturesDir,
   resolveSearchProvider,
@@ -23,6 +25,43 @@ export {
 
 export class ResearchToolUnavailableError extends Error {
   statusCode = 503;
+}
+
+// ---------------------------------------------------------------------------
+// Whose keys this search runs on
+// ---------------------------------------------------------------------------
+
+/**
+ * `process.env` with the current user's own keys layered on top.
+ *
+ * Search is the cost that `cost-core.ts` cannot meter — Tavily bills credits,
+ * not tokens, so a search leg contributes nothing to the allowance no matter
+ * how many times it runs. That makes it the single most important cost to be
+ * able to hand over, and the reason 'tavily' is in the BYOK provider list
+ * alongside the model vendors.
+ *
+ * Layering onto the env (rather than passing a key down) also means
+ * `resolveSearchProvider` picks up a user's Tavily key even on a deployment
+ * where the operator has none — the user gets the cheap, direct provider
+ * instead of falling through to a model-side branch that costs tokens.
+ */
+function searchEnv(): Record<string, string | undefined> {
+  const tavily = byokKeyForProvider("tavily");
+  const anthropic = byokKeyForProvider("anthropic");
+  const openai = byokKeyForProvider("openai");
+  const gatewayKey = byokKeyForProvider("gateway");
+
+  if (!(tavily || anthropic || openai || gatewayKey)) {
+    return process.env;
+  }
+
+  return {
+    ...process.env,
+    ...(tavily ? { TAVILY_API_KEY: tavily } : {}),
+    ...(anthropic ? { ANTHROPIC_API_KEY: anthropic } : {}),
+    ...(openai ? { OPENAI_API_KEY: openai } : {}),
+    ...(gatewayKey ? { AI_GATEWAY_API_KEY: gatewayKey } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +154,10 @@ type TavilyResponse = {
   results?: Array<{ url?: string; title?: string }>;
 };
 
-async function searchTavily(query: string): Promise<WebSearchOutcome> {
+async function searchTavily(
+  query: string,
+  apiKey: string | undefined
+): Promise<WebSearchOutcome> {
   let response: Response;
 
   try {
@@ -123,7 +165,7 @@ async function searchTavily(query: string): Promise<WebSearchOutcome> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.TAVILY_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         query,
@@ -171,7 +213,8 @@ async function searchTavily(query: string): Promise<WebSearchOutcome> {
 }
 
 export async function searchWeb(query: string): Promise<WebSearchOutcome> {
-  const provider = resolveSearchProvider();
+  const env = searchEnv();
+  const provider = resolveSearchProvider(env);
 
   if (!provider) {
     throw new ResearchToolUnavailableError(SEARCH_PROVIDER_MISSING_MESSAGE);
@@ -186,12 +229,12 @@ export async function searchWeb(query: string): Promise<WebSearchOutcome> {
   }
 
   if (provider === "tavily") {
-    return await searchTavily(query);
+    return await searchTavily(query, env.TAVILY_API_KEY);
   }
 
   if (provider === "anthropic") {
     const anthropicProvider = createAnthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: env.ANTHROPIC_API_KEY,
     });
 
     const result = await generateText({
@@ -216,7 +259,7 @@ export async function searchWeb(query: string): Promise<WebSearchOutcome> {
     // The responses API (openaiProvider.responses()) is required for
     // openai.tools.webSearch — the chat completions API does not support it.
     const openaiProvider = createOpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: env.OPENAI_API_KEY,
     });
 
     const result = await generateText({
@@ -237,8 +280,12 @@ export async function searchWeb(query: string): Promise<WebSearchOutcome> {
   }
 
   // gateway-perplexity: sonar model returns sources natively, no tool needed.
+  const userGatewayKey = byokKeyForProvider("gateway");
   const result = await generateText({
-    model: gateway.languageModel("perplexity/sonar"),
+    model: (userGatewayKey
+      ? createGateway({ apiKey: userGatewayKey })
+      : gateway
+    ).languageModel("perplexity/sonar"),
     prompt: `${query}\nAnswer briefly; cite your sources.`,
   });
 

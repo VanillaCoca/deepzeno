@@ -83,6 +83,8 @@ const DECLINE_MESSAGES: Record<StartResearchDeclineReason, string> = {
   node_busy:
     "This question already has a research run in flight. Tell the user it is already running; the activity bar shows its progress.",
   search_unavailable: SEARCH_PROVIDER_MISSING_MESSAGE,
+  allowance_exhausted:
+    "This month's free research allowance is used up, so the run did not start. Tell the user this plainly and tell them the fix: they can connect their own provider API key in Settings and keep going at cost, or wait for next month. Do not present anything as researched.",
   start_failed:
     "The run could not be started. Tell the user plainly that research did not start; do not present anything as researched.",
 };
@@ -113,7 +115,10 @@ async function dispatchResearchRun({
   origin: string;
   cookie: string;
   nodeId: string;
-}): Promise<{ ok: true; runId: string | null } | { ok: false }> {
+}): Promise<
+  | { ok: true; runId: string | null }
+  | { ok: false; reason: StartResearchDeclineReason }
+> {
   const response = await fetch(
     new URL(`${BASE_PATH}/api/research/run`, origin),
     {
@@ -133,7 +138,14 @@ async function dispatchResearchRun({
       status: response.status,
       body: await response.text().catch(() => "<unreadable>"),
     });
-    return { ok: false };
+    // 402 is the one rejection that is not a malfunction, and the model has to
+    // be able to tell the user which of the two happened — everything else here
+    // is "it broke", this one is "you hit the limit, here is the lever".
+    return {
+      ok: false,
+      reason:
+        response.status === 402 ? "allowance_exhausted" : "start_failed",
+    };
   }
 
   const payload = (await response.json().catch(() => null)) as {
@@ -286,7 +298,7 @@ export function createStartResearchTool({
         });
 
         if (!dispatched.ok) {
-          return decline("start_failed");
+          return decline(dispatched.reason);
         }
 
         launched += 1;

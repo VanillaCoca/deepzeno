@@ -318,7 +318,18 @@ export function CreateProjectModal({ children }: { children: ReactNode }) {
         throw new Error("Couldn't extract — try again or start blank.");
       }
 
-      const result = (await response.json()) as ExtractionResult;
+      const result = (await response.json()) as ExtractionResult & {
+        allowance_exhausted?: boolean;
+      };
+
+      // The draft is still usable — it came from the heuristic extractor, not
+      // from nothing — so this warns rather than blocks. Saying nothing would
+      // leave the user comparing a keyword-level extraction against the one
+      // they got last time and concluding the product had gotten worse.
+      if (result.allowance_exhausted) {
+        toast.warning(t("dialog.createProject.extractAllowanceExhausted"));
+      }
+
       dispatch({ type: "extract_success", result, title: projectTitle });
     } catch (error) {
       if (controller.signal.aborted) {

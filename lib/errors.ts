@@ -4,6 +4,11 @@ export type ErrorType =
   | "forbidden"
   | "not_found"
   | "rate_limit"
+  // Distinct from rate_limit on purpose. A rate limit says "wait"; this says
+  // "the free part is used up, and there is something you can do about it
+  // right now". Collapsing them would send a user who can fix their problem in
+  // thirty seconds away to wait for a clock that will never help them.
+  | "payment_required"
   | "offline";
 
 export type Surface =
@@ -16,7 +21,14 @@ export type Surface =
   | "vote"
   | "document"
   | "suggestions"
-  | "activate_gateway";
+  | "activate_gateway"
+  | "allowance"
+  // Separate from `allowance` because the two limits fail for different
+  // reasons and are fixed by different actions. `allowance` is a dollar figure
+  // that resets next month and can be waited out; `watch_quota` is a count of
+  // standing jobs that never resets on its own — waiting changes nothing, and
+  // the user has to pause something or raise the cap.
+  | "watch_quota";
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
@@ -33,6 +45,8 @@ export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
   document: "response",
   suggestions: "response",
   activate_gateway: "response",
+  allowance: "response",
+  watch_quota: "response",
 };
 
 export class ChatbotError extends Error {
@@ -94,6 +108,18 @@ export function getMessageByErrorCode(errorCode: ErrorCode): string {
 
     case "rate_limit:chat":
       return "You've reached the message limit. Come back in 1 hour to continue chatting.";
+
+    // The dollar figure travels in `cause` (the server knows the configured
+    // allowance; this table is also compiled into the client bundle and must
+    // not hard-code it). The sentence has to stand on its own without it,
+    // because `cause` is not always rendered.
+    case "payment_required:allowance":
+      return "This month's free usage is used up. Connect your own API key in Settings to keep going — you'll pay your provider directly, at cost.";
+
+    // Same shape as the allowance message and for the same reason: the counts
+    // ride in `cause`, and the sentence has to survive without them.
+    case "payment_required:watch_quota":
+      return "You've reached the number of things ZENO can keep watching at once. Pause a watch, or connect your own API key in Settings to raise the limit.";
     case "not_found:chat":
       return "The requested chat was not found. Please check the chat ID and try again.";
     case "forbidden:chat":
@@ -129,6 +155,8 @@ function getStatusCodeByType(type: ErrorType) {
       return 404;
     case "rate_limit":
       return 429;
+    case "payment_required":
+      return 402;
     case "offline":
       return 503;
     default:

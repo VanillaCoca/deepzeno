@@ -33,7 +33,7 @@ import {
   useWorkspace,
   type WorkspaceViewName,
 } from "@/components/workspace/workspace-provider";
-import { cn } from "@/lib/utils";
+import { cn, fetchWithErrorHandlers } from "@/lib/utils";
 
 /**
  * Re-exported under the name the stage components already import. The union
@@ -95,15 +95,36 @@ export function WorkspaceHeader({
     }
     setIsExploring(true);
     try {
-      fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/sweep/manual`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: activeProjectId,
-          chat_session_id: currentConversationId,
-          blocking: false,
-        }),
-      }).catch(console.error);
+      // Awaited, and awaited *before* the conversation is cleared.
+      //
+      // This used to be fire-and-forget with `.catch(console.error)`, which was
+      // fine while the route could only fail by malfunctioning. It is not fine
+      // now that it can refuse: an exhausted allowance answers 402, and the old
+      // shape swallowed it into the console, wiped the conversation off the
+      // screen, and left the user believing their thinking had been extracted
+      // when nothing had been. Iron Law 2's silent miss, in the one place the
+      // user could least afford it.
+      //
+      // Awaiting costs one round trip and no more — the route is
+      // accept-and-detach, so it answers as soon as the run row exists and the
+      // sweep itself keeps going in its own tail.
+      // `fetchWithErrorHandlers` is what turns the 402 into a sentence: it
+      // reads the server's error code and rebuilds the user-facing message
+      // client-side, so the catch below toasts "connect your own API key in
+      // Settings" instead of a status number.
+      await fetchWithErrorHandlers(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/sweep/manual`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: activeProjectId,
+            chat_session_id: currentConversationId,
+            blocking: false,
+          }),
+        }
+      );
+
       await clearConversation();
       setExploreOpen(false);
     } catch (error) {

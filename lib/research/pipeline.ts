@@ -2,8 +2,16 @@ import "server-only";
 
 import { z } from "zod";
 
-import { findModelById } from "@/lib/ai/models";
 import { generateObjectResilient } from "@/lib/ai/resilient-generate";
+import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
+import { addUsage, computeCostEstimate } from "@/lib/billing/cost-core";
+import {
+  type UserFunding,
+  loadUserFunding,
+  requireFunding,
+  settleUsage,
+  withUserFunding,
+} from "@/lib/billing/funding";
 import { assembleContext } from "@/lib/context-assembly";
 import { ChatbotError } from "@/lib/errors";
 import {
@@ -23,7 +31,10 @@ import { getTopicByIdForUser } from "@/lib/workspace/queries";
 import { resolveResearchBudget } from "./budget";
 import { extractEvidenceItems } from "./extract";
 import { fetchPageText } from "./fetch-page";
-import { normalizeResearchModelId } from "./model-preference";
+import {
+  DEFAULT_RESEARCH_MODEL_ID,
+  normalizeResearchModelId,
+} from "./model-preference";
 import type { ResearchRun } from "./queries";
 import {
   createResearchRun,
@@ -49,59 +60,12 @@ import { suggestWatchForNode } from "./watch-suggest";
 // Types
 // ---------------------------------------------------------------------------
 
-type ModelsUsedAccumulator = Record<
-  string,
-  { inputTokens: number; outputTokens: number }
->;
-
 type PipelineResult = {
   run: ResearchRun;
   evidenceCount: number;
   candidatesCreated: number;
   skippedDuplicates: number;
 };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function addUsage(
-  acc: ModelsUsedAccumulator,
-  key: string,
-  usage: { inputTokens?: number | null; outputTokens?: number | null }
-) {
-  const existing = acc[key] ?? { inputTokens: 0, outputTokens: 0 };
-  acc[key] = {
-    inputTokens: existing.inputTokens + (usage.inputTokens ?? 0),
-    outputTokens: existing.outputTokens + (usage.outputTokens ?? 0),
-  };
-}
-
-// Compute a cost estimate from the accumulated models-used map.
-// Gateway/Perplexity serving fees are not token-priced so the estimate
-// undercounts that path — the "search:gateway-perplexity" key will be skipped.
-function computeCostEstimate(modelsUsed: ModelsUsedAccumulator): number | null {
-  let total = 0;
-  let knownCount = 0;
-
-  for (const [key, usage] of Object.entries(modelsUsed)) {
-    const definition = findModelById(key);
-    if (!definition) {
-      // e.g. "search:anthropic", "search:openai", "search:gateway-perplexity"
-      continue;
-    }
-    const inputCost = definition.inputCostPerMTok;
-    const outputCost = definition.outputCostPerMTok;
-    if (inputCost !== null && outputCost !== null) {
-      total +=
-        (usage.inputTokens * inputCost) / 1_000_000 +
-        (usage.outputTokens * outputCost) / 1_000_000;
-      knownCount++;
-    }
-  }
-
-  return knownCount > 0 ? total : null;
-}
 
 // ---------------------------------------------------------------------------
 // Phase 1 — Plan
@@ -612,6 +576,17 @@ export type PreparedResearchRun = {
   run: ResearchRun;
   budget: ReturnType<typeof resolveResearchBudget>;
   preferredModelId: string | null;
+  /**
+   * Whose money this run spends, resolved once.
+   *
+   * Carried on the prepared run rather than loaded again by the executing half
+   * because the two halves can be minutes and an invocation boundary apart, and
+   * loading it twice would decrypt the same keys twice to answer a question
+   * already answered. It also fixes the answer at the moment the user was told
+   * the run started: keys removed while a run is in flight do not retroactively
+   * change who was paying for the calls it already made.
+   */
+  funding: UserFunding;
 };
 
 /**
@@ -681,6 +656,21 @@ export async function prepareResearchRun({
     ...resolveResearchBudget(),
     ...clampBudgetOverride(budgetOverride ?? {}),
   };
+
+  // Who pays, decided here and not in the executing half — this function's
+  // whole contract is "everything that can still be reported as an error the
+  // caller caused". An exhausted allowance is exactly that, and it is the last
+  // such error: one line further down the run row exists, and from there a
+  // refusal can only be delivered as a run that failed, which the user reads as
+  // the product breaking rather than as a limit they can lift in Settings.
+  //
+  // Checked against the model the run will actually reach for. A user with a
+  // DeepSeek key and no allowance left is funded for this run and denied for
+  // one that would route to Anthropic, and asking about the wrong model gets
+  // both of those backwards.
+  const funding = await loadUserFunding(userId);
+  requireFunding(funding, preferredModelId ?? DEFAULT_RESEARCH_MODEL_ID);
+
   const run = await createResearchRun({
     projectId: node.projectId,
     topicId: node.topicId,
@@ -688,7 +678,7 @@ export async function prepareResearchRun({
     budget,
   });
 
-  return { userId, node, run, budget, preferredModelId };
+  return { userId, node, run, budget, preferredModelId, funding };
 }
 
 /**
@@ -699,16 +689,53 @@ export async function prepareResearchRun({
  * watch it in the activity bar while this executes somewhere else. Every exit
  * path from here writes a terminal status onto the row — that is the contract
  * the activity bar and the abandonment reaper are both built on.
+ *
+ * The funding wrapper is here rather than at the route for a reason that only
+ * shows up in production: this runs inside `after()`, which hands the callback
+ * to a different async context, so an AsyncLocalStorage scope entered around
+ * the `after()` call does not reach the pipeline. Entering it here means the
+ * context is established in the same frame that spends it, and it means every
+ * future caller of this function is funded without having to know that.
  */
-export async function executeResearchRun({
-  userId,
-  node,
-  run,
-  budget,
-  preferredModelId,
-}: PreparedResearchRun): Promise<PipelineResult> {
-  const originNodeId = node.id;
+export async function executeResearchRun(
+  prepared: PreparedResearchRun
+): Promise<PipelineResult> {
+  const { funding, run, node } = prepared;
+
+  // Above the try, so the ledger write in `finally` sees what was spent on the
+  // paths that throw as well. A run that dies mid-collect has still paid for
+  // every search and extraction it made; billing only the runs that finish is
+  // an allowance with a hole in it shaped exactly like the failure-prone path.
   const modelsUsed: ModelsUsedAccumulator = {};
+
+  try {
+    return await withUserFunding(funding, () =>
+      runResearchPipeline(prepared, modelsUsed)
+    );
+  } finally {
+    await settleUsage({
+      funding,
+      modelsUsed,
+      kind: "research",
+      projectId: node.projectId,
+      runId: run.id,
+    }).catch((error) => {
+      // The run row carries the same cost figures, so a failed ledger write
+      // loses the allowance accounting, not the record. Loud, because silently
+      // under-charging is how a free tier becomes an unbounded one.
+      console.error("Failed to settle research usage", {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+}
+
+async function runResearchPipeline(
+  { userId, node, run, budget, preferredModelId }: PreparedResearchRun,
+  modelsUsed: ModelsUsedAccumulator
+): Promise<PipelineResult> {
+  const originNodeId = node.id;
 
   // The run's progress channel. Every beat also reads the cancel flag, so the
   // cost of being interruptible is the same round trip that draws the bar.

@@ -37,6 +37,7 @@ const en: Dictionary = {
   "account.language": "Language",
   "account.lightMode": "Light mode",
   "account.darkMode": "Dark mode",
+  "account.usage": "Usage & API keys",
   "account.logOut": "Log out",
   "truth.emptyTitle": "No truths yet",
   "truth.emptyBody":
@@ -59,6 +60,7 @@ const zh: Dictionary = {
   "account.language": "语言",
   "account.lightMode": "浅色模式",
   "account.darkMode": "深色模式",
+  "account.usage": "用量与 API 密钥",
   "account.logOut": "退出登录",
   "truth.emptyTitle": "还没有真相节点",
   "truth.emptyBody":
@@ -81,6 +83,7 @@ const fr: Dictionary = {
   "account.language": "Langue",
   "account.lightMode": "Mode clair",
   "account.darkMode": "Mode sombre",
+  "account.usage": "Utilisation et clés API",
   "account.logOut": "Se déconnecter",
   "truth.emptyTitle": "Aucune vérité pour l'instant",
   "truth.emptyBody":

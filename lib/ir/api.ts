@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AllowanceExhaustedError } from "@/lib/billing/funding";
 import { ChatbotError } from "@/lib/errors";
 import {
   IRConflictError,
@@ -76,6 +77,18 @@ export function irErrorToResponse(error: unknown, fallbackMessage: string) {
       },
       { status: error.statusCode }
     );
+  }
+
+  // Mapped here rather than in each route because the fallback below would
+  // otherwise answer 400 "check your input and try again" — a sentence that is
+  // both wrong and unactionable for a user whose only problem is that the free
+  // allowance ran out. The 402 and its dollar figure are the difference between
+  // a dead end and a thirty-second fix in Settings.
+  if (error instanceof AllowanceExhaustedError) {
+    return new ChatbotError(
+      "payment_required:allowance",
+      error.message
+    ).toResponse();
   }
 
   if (error instanceof ChatbotError) {
