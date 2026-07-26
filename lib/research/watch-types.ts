@@ -44,6 +44,13 @@ export type IRWatch = {
   // Patrol-proposed directions for the next visit; null before the first
   // patrol writes them (or pre-migration).
   nextDirections: ExplorationDirection[] | null;
+  /**
+   * Consecutive patrols that found nothing. The client needs it because the
+   * interval it displays is derived from it — showing "daily" for a watch the
+   * system has deliberately slowed to weekly is the same lie the queue-gap
+   * warning exists to prevent, just with a different cause.
+   */
+  quietPatrols: number;
   lastPatrolAt: string | null;
   lastSignalAt: string | null;
   lastAlertAt: string | null;

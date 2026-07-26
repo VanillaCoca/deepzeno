@@ -103,6 +103,14 @@ describe("realizedIntervalDays", () => {
     assert.equal(realizedIntervalDays("daily", 5), 5);
     assert.equal(realizedIntervalDays("weekly", 30), 30);
   });
+
+  it("takes the longer of the earned backoff and the congestion, not the sum", () => {
+    // The two waits overlap — a watch backed off to 2 days that also sits in a
+    // queue cycling every 5 days is visited every 5 days, not every 7.
+    assert.equal(realizedIntervalDays("daily", null, 3), 2);
+    assert.equal(realizedIntervalDays("daily", 5, 3), 5);
+    assert.equal(realizedIntervalDays("daily", 1, 6), 4);
+  });
 });
 
 describe("isCadenceHonored", () => {
@@ -116,5 +124,14 @@ describe("isCadenceHonored", () => {
     assert.equal(isCadenceHonored("daily", 2), false);
     assert.equal(isCadenceHonored("weekly", 8), false);
     assert.equal(isCadenceHonored("daily", Number.POSITIVE_INFINITY), false);
+  });
+
+  it("measures the queue against the backed-off interval, not the cadence", () => {
+    // Without the counter this would warn "the queue cannot keep up" about a
+    // slowdown the system chose on purpose — two different causes collapsed
+    // into one sentence, and the only actionable one hidden.
+    assert.equal(isCadenceHonored("daily", 2, 3), true);
+    assert.equal(isCadenceHonored("daily", 3, 3), false);
+    assert.equal(isCadenceHonored("daily", 4, 6), true);
   });
 });

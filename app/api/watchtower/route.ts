@@ -7,10 +7,17 @@ import {
   DEFAULT_AGENT_SETTINGS,
   isPatrolCadence,
   PATROL_CADENCES,
+  type PatrolCadence,
 } from "@/lib/research/agent-settings";
-import { resolvePatrolBudget } from "@/lib/research/patrol-core";
+import {
+  computeNextDueAt,
+  resolvePatrolBudget,
+} from "@/lib/research/patrol-core";
 import { summarizePatrolQueue } from "@/lib/research/patrol-queue-core";
-import { admitNewWatch, watchQuotaMessage } from "@/lib/research/watch-admission";
+import {
+  admitNewWatch,
+  watchQuotaMessage,
+} from "@/lib/research/watch-admission";
 import {
   countPatrolQueue,
   createWatch,
@@ -160,6 +167,42 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * Picking a cadence clears the quiet-patrol backoff.
+ *
+ * The backoff is the system's inference from silence; the select is a human
+ * saying how often they want this looked at. An inference does not get to
+ * outrank the thing it was inferring about, and without this there would be no
+ * way at all to overrule it — re-picking the same value would appear to do
+ * nothing, which is worse than not offering the control.
+ *
+ * `next_due_at` has to move too. Resetting the counter while a 16-day wait is
+ * still on the clock means the user's action takes effect in sixteen days,
+ * which reads as "the button is broken". Recomputed from the last patrol, so
+ * a watch already overdue under the new cadence becomes due now rather than
+ * earning a fresh full interval. Left alone when there is no last patrol: such
+ * a watch is due immediately by default, and recomputing would push it away.
+ */
+function resetBackoff(
+  watch: { quietPatrols: number; lastPatrolAt: string | null },
+  cadence: PatrolCadence
+) {
+  if (watch.quietPatrols === 0) {
+    return {};
+  }
+  return {
+    quietPatrols: 0,
+    ...(watch.lastPatrolAt
+      ? {
+          nextDueAt: computeNextDueAt(
+            cadence,
+            new Date(watch.lastPatrolAt)
+          ).toISOString(),
+        }
+      : {}),
+  };
+}
+
 const patchSchema = z.object({
   // Watch updates
   watch_id: z.string().uuid().optional(),
@@ -191,11 +234,11 @@ export async function PATCH(request: Request) {
         ).toResponse();
       }
       await assertProject(watch.projectId, session.user.id);
+      const cadence =
+        body.cadence && isPatrolCadence(body.cadence) ? body.cadence : null;
       await updateWatch({
         id: watch.id,
-        ...(body.cadence && isPatrolCadence(body.cadence)
-          ? { cadence: body.cadence }
-          : {}),
+        ...(cadence ? { cadence, ...resetBackoff(watch, cadence) } : {}),
         ...(body.status ? { status: body.status } : {}),
         ...(body.model_id === undefined ? {} : { modelId: body.model_id }),
       });

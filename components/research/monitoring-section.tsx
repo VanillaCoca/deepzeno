@@ -21,6 +21,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import type { IRNode } from "@/lib/ir/types";
 import type { PatrolCadence } from "@/lib/research/agent-settings";
+import { isBackedOff, patrolIntervalDays } from "@/lib/research/patrol-core";
 import {
   isCadenceHonored,
   realizedIntervalDays,
@@ -38,6 +39,9 @@ type WatchPayload = {
     reason: string;
     lastPatrolAt: string | null;
     nextDirections: ExplorationDirection[] | null;
+    // Consecutive patrols that found nothing. Optional so a client running
+    // against a pre-migration server reads it as "no backoff" rather than NaN.
+    quietPatrols?: number;
   }>;
   // Null while the queue keeps up; a number of days once it cannot, meaning the
   // cadence below is a request and this is the delivery.
@@ -98,9 +102,10 @@ export function MonitoringSection({
         // The 402 body carries the actual numbers in `cause`; a bare status
         // code would tell the user their click failed without telling them the
         // one thing they can act on.
-        const body = (await response
-          .json()
-          .catch(() => null)) as { message?: string; cause?: string } | null;
+        const body = (await response.json().catch(() => null)) as {
+          message?: string;
+          cause?: string;
+        } | null;
         const message =
           response.status === 503
             ? t("wt.notMigrated")
@@ -231,19 +236,42 @@ export function MonitoringSection({
               </Button>
             </div>
           </div>
+          {/* Two different reasons the interval above may not be what happens,
+              kept apart on purpose. This one is a decision: the watch has
+              found nothing enough times that Zeno checks it less often, which
+              is reversible and worth explaining. The one below is a shortfall.
+              Merging them would produce a single sentence that is a warning
+              half the time and an explanation the other half — and the user
+              could not tell which, or whether anything they do would help. */}
+          {watch.status === "active" &&
+          isBackedOff(watch.cadence, watch.quietPatrols ?? 0) ? (
+            <p
+              className="text-[12px] text-[var(--ir-text-tertiary)] leading-[1.5]"
+              data-testid="wt-quiet-backoff"
+            >
+              {t("wt.quietBackoff", {
+                count: `${watch.quietPatrols ?? 0}`,
+                days: `${patrolIntervalDays(watch.cadence, watch.quietPatrols ?? 0)}`,
+              })}
+            </p>
+          ) : null}
           {/* The cadence select above is a request, not a guarantee — one daily
               cron serves every watch in the system, so past a certain queue
               depth "daily" silently becomes "monthly". Shown only when the
               queue actually cannot keep up, because a warning that is always
               on is read as decoration. */}
           {watch.status === "active" &&
-          !isCadenceHonored(watch.cadence, realizedCycleDays) ? (
+          !isCadenceHonored(
+            watch.cadence,
+            realizedCycleDays,
+            watch.quietPatrols ?? 0
+          ) ? (
             <p
               className="text-[12px] text-[var(--ir-warning-fg)] leading-[1.5]"
               data-testid="wt-cadence-gap"
             >
               {t("wt.cadenceGap", {
-                days: `${realizedIntervalDays(watch.cadence, realizedCycleDays)}`,
+                days: `${realizedIntervalDays(watch.cadence, realizedCycleDays, watch.quietPatrols ?? 0)}`,
               })}
             </p>
           ) : null}
@@ -283,9 +311,7 @@ export function MonitoringSection({
         <div className="space-y-1.5">
           <Button
             data-testid="monitoring-watch-this"
-            disabled={
-              isBusy || data?.not_migrated === true || quotaFull
-            }
+            disabled={isBusy || data?.not_migrated === true || quotaFull}
             onClick={createWatch}
             size="sm"
             variant="outline"

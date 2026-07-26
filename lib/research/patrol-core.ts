@@ -90,8 +90,98 @@ export const CADENCE_DAYS: Record<PatrolCadence, number> = {
   weekly: 7,
 };
 
-export function computeNextDueAt(cadence: PatrolCadence, from: Date): Date {
-  return new Date(from.getTime() + CADENCE_DAYS[cadence] * DAY_MS);
+/**
+ * Backoff for watches that keep finding nothing.
+ *
+ * The queue is a fixed number of patrols a day shared by every watch in the
+ * deployment, and `watch-suggest.ts` adds one for every evidence-backed node
+ * while nothing ever removes one. Supply is constant, demand is monotonic:
+ * that is why "daily" silently became "monthly", and raising concurrency only
+ * moved the crossing point.
+ *
+ * FIFO is the part worth attacking. A saturated queue spends its slots
+ * uniformly, so the watch on a claim that has not moved in three months
+ * displaces the watch on a claim that changes weekly — every day, forever.
+ * The scarce resource is not money, it is attention, and attention should go
+ * where the yield is. A run of quiet patrols is the only evidence the system
+ * has about yield, so it is what the interval is derived from.
+ *
+ * `step` — patrols per doubling. 1 would let a single quiet day halve a daily
+ * watch's rate, which is noise, not evidence; 3 makes each doubling cost a
+ * repeated observation.
+ *
+ * `maxDays` — the interval never exceeds this, however long the silence. A
+ * watch is never retired and never disabled: sum the visits over a year and
+ * backoff turns 365 patrols into roughly a dozen, which bounds the standing
+ * cost that Layer 2 of the cost model exists to bound, while still promising
+ * that something checks. Retiring quiet watches would bound it too, and would
+ * be a silent forfeiture of coverage — precisely what Iron Law 2 forbids.
+ */
+export const QUIET_BACKOFF = {
+  step: 3,
+  maxDays: 30,
+} as const;
+
+/**
+ * How long this watch has actually earned until its next visit, in days.
+ *
+ * Never shorter than the cadence: backoff only ever slows a watch down. A
+ * caller may pass a count from a pre-migration row (undefined → 0), which is
+ * the old behaviour exactly.
+ */
+export function patrolIntervalDays(
+  cadence: PatrolCadence,
+  quietPatrols = 0
+): number {
+  const base = CADENCE_DAYS[cadence];
+  const quiet = Number.isFinite(quietPatrols) ? Math.max(0, quietPatrols) : 0;
+  const doublings = Math.floor(quiet / QUIET_BACKOFF.step);
+  // Cap the exponent before the shift, not after: 2 ** 1024 is Infinity, and
+  // a watch that has been quiet for years must not produce NaN here.
+  const factor = 2 ** Math.min(doublings, 20);
+  return Math.min(base * factor, QUIET_BACKOFF.maxDays);
+}
+
+export function computeNextDueAt(
+  cadence: PatrolCadence,
+  from: Date,
+  quietPatrols = 0
+): Date {
+  return new Date(
+    from.getTime() + patrolIntervalDays(cadence, quietPatrols) * DAY_MS
+  );
+}
+
+/** True when this watch's own history, not the queue, has slowed it down. */
+export function isBackedOff(cadence: PatrolCadence, quietPatrols = 0): boolean {
+  return patrolIntervalDays(cadence, quietPatrols) > CADENCE_DAYS[cadence];
+}
+
+export type PatrolOutcome = "quiet" | "signal" | "failed";
+
+/**
+ * The counter's whole transition table, in one place so it can be tested
+ * without a database.
+ *
+ * `failed` returning the count unchanged is the load-bearing case. A patrol
+ * throws because a key died, a search provider 500'd, or a page timed out —
+ * none of which is evidence that the watched claim is stable. Counting those
+ * as quiet would let a broken provider back every watch in the system off to
+ * monthly, and the symptom would appear weeks later as "Zeno stopped
+ * noticing things", with nothing in the record connecting the two.
+ */
+export function nextQuietPatrols(
+  current: number,
+  outcome: PatrolOutcome
+): number {
+  const count = Number.isFinite(current) ? Math.max(0, current) : 0;
+  if (outcome === "signal") {
+    return 0;
+  }
+  if (outcome === "quiet") {
+    return count + 1;
+  }
+  return count;
 }
 
 // ---------------------------------------------------------------------------

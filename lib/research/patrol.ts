@@ -13,10 +13,10 @@ import { generateObjectResilient } from "@/lib/ai/resilient-generate";
 import type { ModelsUsedAccumulator } from "@/lib/billing/cost-core";
 import { addUsage, computeCostEstimate } from "@/lib/billing/cost-core";
 import {
-  type UserFunding,
   loadUserFunding,
   requireFunding,
   settleUsage,
+  type UserFunding,
   withUserFunding,
 } from "@/lib/billing/funding";
 import { stripInlineMarkers } from "@/lib/ir/marker-syntax";
@@ -34,6 +34,9 @@ import {
 import {
   computeNextDueAt,
   evaluatePatrolSignal,
+  nextQuietPatrols,
+  type PatrolOutcome,
+  patrolIntervalDays,
   resolvePatrolBudget,
   shouldAlert,
 } from "./patrol-core";
@@ -251,7 +254,7 @@ async function fundAndRunPatrol(watchId: string): Promise<PatrolResult> {
 
   const ownerId = await getProjectOwnerId(watch.projectId);
   if (!ownerId) {
-    await rescheduleWatch(watch);
+    await rescheduleWatch(watch, "failed");
     return {
       watchId,
       status: "failed",
@@ -294,15 +297,24 @@ async function fundAndRunPatrol(watchId: string): Promise<PatrolResult> {
 // Reschedule regardless of outcome — a failing patrol must not wedge the
 // queue. Module-level because the owner-missing path above needs it before the
 // engine has been entered.
+//
+// The outcome is a required argument rather than a default, because it is the
+// only thing that decides how long the next wait is, and a default would make
+// "I forgot to say" indistinguishable from "nothing happened" — which is the
+// difference between a watch that keeps its cadence and one that backs off to
+// monthly on a run of provider errors.
 function rescheduleWatch(
   watch: IRWatch,
+  outcome: PatrolOutcome,
   patch: Partial<Parameters<typeof updateWatch>[0]> = {},
   now: Date = new Date()
 ) {
+  const quietPatrols = nextQuietPatrols(watch.quietPatrols, outcome);
   return updateWatch({
     id: watch.id,
     lastPatrolAt: now.toISOString(),
-    nextDueAt: computeNextDueAt(watch.cadence, now).toISOString(),
+    quietPatrols,
+    nextDueAt: computeNextDueAt(watch.cadence, now, quietPatrols).toISOString(),
     ...patch,
   }).catch(() => {
     // Best-effort; the due-list ordering self-heals.
@@ -325,9 +337,10 @@ async function executePatrol({
   const budget = resolvePatrolBudget();
 
   const reschedule = async (
-    patch: Partial<Parameters<typeof updateWatch>[0]>
+    outcome: PatrolOutcome,
+    patch: Partial<Parameters<typeof updateWatch>[0]> = {}
   ) => {
-    await rescheduleWatch(watch, patch, now);
+    await rescheduleWatch(watch, outcome, patch, now);
   };
 
   // Hoisted out of the try so the catch below can settle the run row. Without
@@ -359,7 +372,7 @@ async function executePatrol({
   try {
     const node = await getIRNodeForUser({ id: watch.nodeId, userId: ownerId });
     if (!node) {
-      await reschedule({});
+      await reschedule("failed");
       return { watchId, status: "failed", runId: null, detail: "node missing" };
     }
 
@@ -527,14 +540,24 @@ async function executePatrol({
         status: "done",
         finishedAt: new Date().toISOString(),
       });
-      await reschedule(directionsPatch);
+      await reschedule("quiet", directionsPatch);
+      const quietPatrols = nextQuietPatrols(watch.quietPatrols, "quiet");
       await logIREvent({
         projectId: watch.projectId,
         topicId: node.topicId,
         nodeId: watch.nodeId,
         event: "patrol_quiet",
         layer: "watchtower",
-        metadata: { runId: run.id, watchId: watch.id },
+        // The backoff travels with the event that causes it. A watch drifting
+        // from daily to monthly over three months is invisible in any single
+        // row; the only place the drift is legible is the event stream, and
+        // only if each step says where it landed.
+        metadata: {
+          runId: run.id,
+          watchId: watch.id,
+          quietPatrols,
+          intervalDays: patrolIntervalDays(watch.cadence, quietPatrols),
+        },
       }).catch(() => {
         // Observability must never fail the patrol.
       });
@@ -556,7 +579,7 @@ async function executePatrol({
         status: "done",
         finishedAt: new Date().toISOString(),
       });
-      await reschedule({
+      await reschedule("signal", {
         lastSignalAt: now.toISOString(),
         ...directionsPatch,
       });
@@ -648,7 +671,7 @@ async function executePatrol({
       ),
       finishedAt: new Date().toISOString(),
     });
-    await reschedule({
+    await reschedule("signal", {
       lastSignalAt: now.toISOString(),
       lastAlertAt: now.toISOString(),
       ...directionsPatch,
@@ -676,7 +699,7 @@ async function executePatrol({
       detail: signal.detail,
     };
   } catch (error) {
-    await reschedule({});
+    await reschedule("failed");
     const message = error instanceof Error ? error.message : String(error);
     const cancelled = error instanceof RunCancelledError;
 

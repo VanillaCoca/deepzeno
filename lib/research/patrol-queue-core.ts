@@ -16,7 +16,7 @@
 // exists so the gap is computable, and therefore sayable.
 
 import type { PatrolCadence } from "./agent-settings";
-import { CADENCE_DAYS } from "./patrol-core";
+import { patrolIntervalDays } from "./patrol-core";
 
 export type PatrolQueueHealth = {
   activeWatches: number;
@@ -82,11 +82,17 @@ export function summarizePatrolQueue({
 }
 
 /**
- * What a stated cadence actually buys, in days.
+ * What a watch actually buys, in days: the longer of what it has earned and
+ * what the queue can deliver.
  *
- * Never faster than the cadence (a queue with room to spare does not visit
- * early) and never faster than the queue allows. This is the number a user
- * should see next to the cadence they picked.
+ * Two independent things stretch the interval and they are not interchangeable.
+ * `quietPatrols` is this watch's own record — the system deliberately visiting
+ * a claim that never moves less often. `realizedCycleDays` is congestion —
+ * every watch waiting behind every other. One is a decision, the other is a
+ * shortfall, and only the second is a warning. They are combined here (a `max`,
+ * never a sum: the two waits overlap, they do not queue behind each other) and
+ * separated again by `isCadenceHonored`, which measures the queue against the
+ * interval this watch intended rather than against the raw cadence.
  *
  * Takes the cycle length rather than the whole health object so the client can
  * call it: the rest of PatrolQueueHealth is a census of every project's watches
@@ -94,17 +100,23 @@ export function summarizePatrolQueue({
  */
 export function realizedIntervalDays(
   cadence: PatrolCadence,
-  realizedCycleDays: number | null
+  realizedCycleDays: number | null,
+  quietPatrols = 0
 ): number {
-  return Math.max(CADENCE_DAYS[cadence], realizedCycleDays ?? 0);
+  return Math.max(
+    patrolIntervalDays(cadence, quietPatrols),
+    realizedCycleDays ?? 0
+  );
 }
 
-/** True when the queue can still keep the promise the cadence makes. */
+/** True when the queue can still keep the promise this watch is making. */
 export function isCadenceHonored(
   cadence: PatrolCadence,
-  realizedCycleDays: number | null
+  realizedCycleDays: number | null,
+  quietPatrols = 0
 ): boolean {
   return (
-    realizedIntervalDays(cadence, realizedCycleDays) <= CADENCE_DAYS[cadence]
+    realizedIntervalDays(cadence, realizedCycleDays, quietPatrols) <=
+    patrolIntervalDays(cadence, quietPatrols)
   );
 }

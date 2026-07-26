@@ -112,6 +112,13 @@ function mapWatch(row: Record<string, unknown>): IRWatch {
     nextDirections: isExplorationDirectionArray(row.next_directions)
       ? row.next_directions
       : null,
+    // Pre-migration rows have no column; 0 is exactly the old behaviour
+    // (no backoff), so the degraded read needs no special case downstream.
+    quietPatrols:
+      typeof row.quiet_patrols === "number" &&
+      Number.isFinite(row.quiet_patrols)
+        ? Math.max(0, Math.trunc(row.quiet_patrols))
+        : 0,
     lastPatrolAt: toNullableIso(row.last_patrol_at),
     lastSignalAt: toNullableIso(row.last_signal_at),
     lastAlertAt: toNullableIso(row.last_alert_at),
@@ -172,6 +179,7 @@ export async function updateWatch({
   lastAlertAt,
   nextDueAt,
   nextDirections,
+  quietPatrols,
 }: {
   id: string;
   cadence?: PatrolCadence;
@@ -182,6 +190,7 @@ export async function updateWatch({
   lastAlertAt?: string;
   nextDueAt?: string;
   nextDirections?: ExplorationDirection[] | null;
+  quietPatrols?: number;
 }): Promise<void> {
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -209,6 +218,9 @@ export async function updateWatch({
   }
   if (nextDirections !== undefined) {
     patch.next_directions = nextDirections;
+  }
+  if (quietPatrols !== undefined) {
+    patch.quiet_patrols = Math.max(0, Math.trunc(quietPatrols));
   }
 
   const db = getClient();

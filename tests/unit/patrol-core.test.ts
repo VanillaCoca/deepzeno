@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 import {
   computeNextDueAt,
   evaluatePatrolSignal,
+  isBackedOff,
   isWatchWorthy,
+  nextQuietPatrols,
+  patrolIntervalDays,
   resolvePatrolBudget,
   shouldAlert,
 } from "../../lib/research/patrol-core.ts";
@@ -23,6 +26,84 @@ describe("computeNextDueAt", () => {
       computeNextDueAt("weekly", from).toISOString(),
       "2026-07-25T00:00:00.000Z"
     );
+  });
+
+  it("pushes the next visit out once the watch has earned a backoff", () => {
+    const from = new Date("2026-07-18T00:00:00Z");
+    assert.equal(
+      computeNextDueAt("daily", from, 3).toISOString(),
+      "2026-07-20T00:00:00.000Z"
+    );
+  });
+});
+
+describe("patrolIntervalDays", () => {
+  it("is the plain cadence until the first full step of silence", () => {
+    // Below `step` there is one observation, and one observation is noise. A
+    // watch must not be slowed by a single quiet day.
+    for (const quiet of [0, 1, 2]) {
+      assert.equal(patrolIntervalDays("daily", quiet), 1);
+      assert.equal(patrolIntervalDays("weekly", quiet), 7);
+    }
+  });
+
+  it("doubles once per step of consecutive quiet patrols", () => {
+    assert.equal(patrolIntervalDays("daily", 3), 2);
+    assert.equal(patrolIntervalDays("daily", 5), 2);
+    assert.equal(patrolIntervalDays("daily", 6), 4);
+    assert.equal(patrolIntervalDays("daily", 9), 8);
+    assert.equal(patrolIntervalDays("every_3_days", 3), 6);
+  });
+
+  it("caps the interval instead of retiring the watch", () => {
+    // The cap is the whole reason a quiet watch can be kept forever: coverage
+    // is never silently dropped, it just gets cheap.
+    assert.equal(patrolIntervalDays("daily", 300), 30);
+    assert.equal(patrolIntervalDays("weekly", 6), 28);
+    assert.equal(patrolIntervalDays("weekly", 12), 30);
+  });
+
+  it("stays a real number for absurd counts and junk input", () => {
+    // A years-quiet watch must not turn into Infinity/NaN and poison
+    // next_due_at, which is the column the whole sweep orders by. Junk falls
+    // back to "no backoff" rather than to the cap: the failure that costs
+    // least is patrolling too often.
+    assert.equal(patrolIntervalDays("daily", 1e9), 30);
+    assert.equal(patrolIntervalDays("daily", Number.POSITIVE_INFINITY), 1);
+    assert.equal(patrolIntervalDays("daily", Number.NaN), 1);
+    assert.equal(patrolIntervalDays("daily", -5), 1);
+  });
+});
+
+describe("nextQuietPatrols", () => {
+  it("counts up on quiet and resets on any signal", () => {
+    assert.equal(nextQuietPatrols(0, "quiet"), 1);
+    assert.equal(nextQuietPatrols(7, "quiet"), 8);
+    assert.equal(nextQuietPatrols(7, "signal"), 0);
+    assert.equal(nextQuietPatrols(0, "signal"), 0);
+  });
+
+  it("leaves the count untouched when the patrol itself failed", () => {
+    // The load-bearing case: a dead API key is evidence about the product, not
+    // about the world. Counting it as quiet would let one outage back every
+    // watch in the deployment off to monthly.
+    assert.equal(nextQuietPatrols(4, "failed"), 4);
+    assert.equal(nextQuietPatrols(0, "failed"), 0);
+  });
+
+  it("repairs a corrupt stored count rather than propagating it", () => {
+    assert.equal(nextQuietPatrols(Number.NaN, "quiet"), 1);
+    assert.equal(nextQuietPatrols(-3, "quiet"), 1);
+  });
+});
+
+describe("isBackedOff", () => {
+  it("is true exactly when the derived interval exceeds the cadence", () => {
+    assert.equal(isBackedOff("daily", 0), false);
+    assert.equal(isBackedOff("daily", 2), false);
+    assert.equal(isBackedOff("daily", 3), true);
+    assert.equal(isBackedOff("weekly", 2), false);
+    assert.equal(isBackedOff("weekly", 3), true);
   });
 });
 

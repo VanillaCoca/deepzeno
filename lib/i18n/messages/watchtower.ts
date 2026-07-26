@@ -17,6 +17,11 @@ export const watchtowerMessages: LocaleMessages = {
     // Shown only when the queue provably cannot honor the cadence above.
     "wt.cadenceGap":
       "One patrol queue serves every watch — this one is actually reached about every {days} days.",
+    // A decision, not a failure — so it says what caused it and what undoes it.
+    // Naming both exits matters: the user can act on one of them today, and
+    // without the sentence the slowdown would only ever look like neglect.
+    "wt.quietBackoff":
+      "{count} patrols in a row found nothing, so Zeno now checks about every {days} days. Any finding — or re-picking a frequency above — restores it.",
     "wt.researchModel": "Research model",
     "wt.researchModelDefault": "Default ({name})",
     "wt.patrolNow": "Patrol now",
@@ -66,6 +71,8 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.cadenceEvery3Days": "每 3 天",
     "wt.cadenceWeekly": "每周",
     "wt.cadenceGap": "全站共用一条巡检队列,这条实际约每 {days} 天才轮到一次。",
+    "wt.quietBackoff":
+      "连续 {count} 次巡检没有发现,Zeno 已把节奏放慢到约每 {days} 天一次。一旦有发现,或在上面重新选一次频率,就会恢复。",
     "wt.researchModel": "调研模型",
     "wt.researchModelDefault": "默认({name})",
     "wt.patrolNow": "立即巡检",
@@ -112,6 +119,8 @@ export const watchtowerMessages: LocaleMessages = {
     "wt.cadenceWeekly": "Hebdomadaire",
     "wt.cadenceGap":
       "Une seule file de patrouille dessert toutes les surveillances — celle-ci n'est atteinte qu'environ tous les {days} jours.",
+    "wt.quietBackoff":
+      "{count} patrouilles d'affilée n'ont rien trouvé : Zeno vérifie désormais environ tous les {days} jours. Toute trouvaille — ou le fait de resélectionner une fréquence ci-dessus — rétablit le rythme.",
     "wt.researchModel": "Modèle de recherche",
     "wt.researchModelDefault": "Par défaut ({name})",
     "wt.patrolNow": "Patrouiller maintenant",

@@ -527,6 +527,10 @@ export const irWatch = pgTable("ir_watches", {
   // Patrol-proposed exploration directions for the next visit (nullable
   // jsonb array of { query, goal }); see 20260719000001 migration.
   nextDirections: jsonb("next_directions"),
+  // Consecutive patrols that found nothing. Drives the interval backoff in
+  // patrol-core; reset by any signal or by a human re-picking the cadence.
+  // `cadence` stays the promise, this stays the evidence about it.
+  quietPatrols: integer("quiet_patrols").notNull().default(0),
   lastPatrolAt: timestamp("last_patrol_at", { withTimezone: true }),
   lastSignalAt: timestamp("last_signal_at", { withTimezone: true }),
   lastAlertAt: timestamp("last_alert_at", { withTimezone: true }),
