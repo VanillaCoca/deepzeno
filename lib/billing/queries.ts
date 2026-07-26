@@ -169,60 +169,51 @@ export async function recordUsage({
 }
 
 /**
- * This user's platform-funded spend in the current billing period, USD.
+ * Spend charged to one funding source in the current billing period, USD.
  *
- * BYOK rows are summed in too. They are charged to the user's own key, so they
- * do not draw down the allowance — but `decideFunding` never looks at the
- * number for a key holder, and keeping the sum total-honest means the settings
- * page can show "you have spent $X this month" without a second query that
- * disagrees with this one.
+ * Summed in the database, not here. PostgREST caps a plain select at 1000
+ * rows, so an app-side sum stops counting at row 1000 with no error — which
+ * for the allowance means it silently stops enforcing, and for a heavy month
+ * of cheap calls (semantic search bills fractions of a cent) that ceiling is
+ * reachable well before $2. It also hauled a thousand rows across the wire on
+ * every billable call to add up one number.
+ *
+ * Throws on failure rather than returning 0. A spend query that fails open
+ * reads as "this user has spent nothing", which is an unlimited allowance
+ * granted at the exact moment the database is unhealthy.
  */
-export async function getMonthlySpendUsd(
+async function spendUsdForSource(
   userId: string,
-  now: Date = new Date()
+  source: LedgerFundingSource,
+  now: Date
 ): Promise<number> {
   const db = getClient();
   const value = await ensureResult<unknown>(
     db.rpc("usage_spend_usd", {
       target_user: userId,
       period: billingPeriodKey(now),
+      source,
     }),
-    "Failed to read monthly spend"
+    `Failed to read ${source} spend`
   );
+  // numeric(12,6) crosses PostgREST as a string; Number() handles both.
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Platform-funded spend only — what the free allowance actually meters. */
-export async function getPlatformSpendUsd(
+/**
+ * Platform-funded spend only — what the free allowance actually meters.
+ *
+ * The only source anything currently asks for; `spendUsdForSource` takes the
+ * parameter anyway because the filter belongs in the query, not in a second
+ * copy of it, and "what has my own key cost me" is one call away when the
+ * settings page wants it.
+ */
+export function getPlatformSpendUsd(
   userId: string,
   now: Date = new Date()
 ): Promise<number> {
-  const db = getClient();
-  const rows = await ensureResult<{ metered_usd: string | number }[]>(
-    db
-      .from("usage_ledger")
-      .select("metered_usd")
-      .eq("user_id", userId)
-      .eq("billing_period", billingPeriodKey(now))
-      .eq("funding_source", "platform")
-      .limit(1000),
-    "Failed to read platform spend"
-  );
-
-  // The 1000-row cap is PostgREST's, not a choice. It is survivable here only
-  // because a user who has generated 1000 platform-funded rows in one month
-  // has long since blown through a $2 allowance — the sum is already far past
-  // the threshold, so a truncated sum reaches the same decision. If the
-  // allowance ever grows past that reasoning, this needs its own RPC.
-  let total = 0;
-  for (const row of rows ?? []) {
-    const value = Number(row.metered_usd ?? 0);
-    if (Number.isFinite(value)) {
-      total += value;
-    }
-  }
-  return total;
+  return spendUsdForSource(userId, "platform", now);
 }
 
 // ---------------------------------------------------------------------------

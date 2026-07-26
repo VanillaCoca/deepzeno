@@ -5,6 +5,7 @@ import {
   billingPeriodRange,
   decideFunding,
   decideWatchAdmission,
+  partitionUsageByFunding,
   resolvePlanLimits,
 } from "@/lib/billing/plan-core";
 
@@ -205,5 +206,77 @@ describe("decideWatchAdmission", () => {
       }).admitted,
       true
     );
+  });
+});
+
+describe("partitionUsageByFunding", () => {
+  const usage = (inputTokens: number, outputTokens: number) => ({
+    inputTokens,
+    outputTokens,
+  });
+
+  it("splits one run's accumulator between the two payers", () => {
+    // The ordinary case, and the reason this function exists: a single
+    // research run plans on the user's DeepSeek key and synthesizes on the
+    // platform's Anthropic. One funding_source for the whole run would be a
+    // lie in one direction or the other.
+    const { platform, byok } = partitionUsageByFunding(
+      {
+        "deepseek-chat": usage(1000, 200),
+        "claude-sonnet": usage(4000, 900),
+      },
+      (key) => key.startsWith("deepseek")
+    );
+
+    assert.deepEqual(byok, { "deepseek-chat": usage(1000, 200) });
+    assert.deepEqual(platform, { "claude-sonnet": usage(4000, 900) });
+  });
+
+  it("leaves the unused side empty rather than zeroed", () => {
+    // recordUsage skips an accumulator that sums to zero, so an empty object
+    // means no ledger row. A `{model: 0/0}` placeholder would instead write a
+    // row of zeroes on every single-payer run — half the ledger, carrying no
+    // information, on the hot path.
+    const { platform, byok } = partitionUsageByFunding(
+      { "deepseek-chat": usage(10, 5) },
+      () => true
+    );
+
+    assert.deepEqual(platform, {});
+    assert.equal(Object.keys(byok).length, 1);
+  });
+
+  it("handles a run that spent nothing", () => {
+    const { platform, byok } = partitionUsageByFunding({}, () => true);
+    assert.deepEqual(platform, {});
+    assert.deepEqual(byok, {});
+  });
+
+  it("defaults an unrecognized model to the platform", () => {
+    // The fail-safe direction. Calling platform tokens `byok` would let real
+    // operator spend escape the allowance entirely and never be metered; the
+    // reverse over-charges an allowance the user can see and dispute. Between
+    // an error that is visible and one that is invisible, take the visible one.
+    const { platform, byok } = partitionUsageByFunding(
+      { "some-model-nobody-mapped": usage(7, 3) },
+      () => false
+    );
+
+    assert.deepEqual(platform, { "some-model-nobody-mapped": usage(7, 3) });
+    assert.deepEqual(byok, {});
+  });
+
+  it("does not mutate the accumulator it was handed", () => {
+    // Callers pass the live accumulator a run has been writing into, and
+    // settleUsage can be reached from more than one arm of a try/finally.
+    const original = {
+      "deepseek-chat": usage(1, 1),
+      "claude-sonnet": usage(2, 2),
+    };
+    const snapshot = structuredClone(original);
+
+    partitionUsageByFunding(original, (key) => key.startsWith("deepseek"));
+
+    assert.deepEqual(original, snapshot);
   });
 });
