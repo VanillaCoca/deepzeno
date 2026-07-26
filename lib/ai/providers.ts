@@ -1,13 +1,20 @@
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGateway } from "@ai-sdk/gateway";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createGateway } from "@ai-sdk/gateway";
-import { customProvider, gateway } from "ai";
+import {
+  customProvider,
+  gateway,
+  type LanguageModelMiddleware,
+  wrapLanguageModel,
+} from "ai";
+import { markProviderKeyInvalid } from "@/lib/billing/queries";
 import { isTestEnvironment } from "../constants";
-import { byokKeyForProvider } from "./billing-context";
-import { byokProviderForModelId } from "./byok-routing";
+import { byokKeyForProvider, getBillingContext } from "./billing-context";
+import { type ByokProviderId, byokProviderForModelId } from "./byok-routing";
 import { getModelById, getTitleModelId } from "./models";
+import { classifyProviderFailure } from "./provider-failure-core";
 
 // Platform providers: the operator's own credentials, funding the free
 // allowance. A user who has connected their own key never touches these — see
@@ -116,6 +123,124 @@ function userKeyFor(modelId: string): string | null {
   return byokKeyForProvider(byokProviderForModelId(modelId));
 }
 
+/**
+ * Whether this call will spend the *user's* money rather than the platform's.
+ *
+ * Exported for the resilience layer, which has to answer a question it could
+ * not ask before BYOK: when a call fails, is the failure the provider's or the
+ * caller's? Returns the boolean and never the key — nothing outside this
+ * module needs the credential itself.
+ */
+export function runsOnUserKey(modelId: string): boolean {
+  const model = getModelById(modelId, process.env);
+  return model ? userKeyFor(model.id) !== null : false;
+}
+
+/**
+ * Take a user's key out of rotation when the provider says it cannot fund
+ * calls, and record why so the settings dialog can say it.
+ *
+ * This is the promise `lib/billing/validate-key.ts` makes when it refuses to
+ * block a key its probe dislikes: "the durable mechanism fires on the real
+ * request path, with the real payload". Until this existed, that promise was
+ * only true for keys that failed to decrypt — a key revoked at the provider
+ * stayed `active` forever and every patrol, sweep and message the user ran
+ * kept failing with nothing anywhere pointing at the cause.
+ *
+ * Fire-and-forget: a failed model call must not become a failed model call AND
+ * an unhandled rejection, and the user's error is already on its way up the
+ * stack. `markProviderKeyInvalid` swallows its own write errors.
+ */
+function reportUserKeyFailure({
+  userId,
+  provider,
+  error,
+}: {
+  userId: string;
+  provider: ByokProviderId;
+  error: unknown;
+}): void {
+  const failure = classifyProviderFailure(error, provider);
+
+  if (failure.kind !== "credential") {
+    return;
+  }
+
+  console.warn("Disabling a user provider key the provider refused", {
+    userId,
+    provider,
+    statusCode: failure.statusCode,
+  });
+
+  markProviderKeyInvalid({
+    userId,
+    provider,
+    reason: failure.reason,
+  }).catch((writeError) => {
+    console.error("Failed to mark provider key invalid", {
+      provider,
+      error:
+        writeError instanceof Error ? writeError.message : String(writeError),
+    });
+  });
+}
+
+/**
+ * Watch one user-funded model call for credential failures.
+ *
+ * Applied here rather than in each of the eleven call sites for the ordinary
+ * reason: a call site that forgets it produces a user whose dead key never gets
+ * flagged, and there is no way to notice that from the outside.
+ *
+ * Both arms are needed. `wrapGenerate` covers extraction, sweep, kickoff and
+ * every structured call; `wrapStream` covers chat, which is the path a user is
+ * most likely to be sitting in front of when their key dies. Streams report
+ * failures two different ways — a rejected `doStream()` for an auth error
+ * caught at connect time, and an `error` part mid-stream for one caught after
+ * the response opened — so both are inspected.
+ */
+function userKeyGuard(
+  userId: string,
+  provider: ByokProviderId
+): LanguageModelMiddleware {
+  const report = (error: unknown) =>
+    reportUserKeyFailure({ userId, provider, error });
+
+  return {
+    specificationVersion: "v3",
+    wrapGenerate: async ({ doGenerate }) => {
+      try {
+        return await doGenerate();
+      } catch (error) {
+        report(error);
+        throw error;
+      }
+    },
+    wrapStream: async ({ doStream }) => {
+      try {
+        const { stream, ...rest } = await doStream();
+
+        return {
+          ...rest,
+          stream: stream.pipeThrough(
+            new TransformStream({
+              transform(chunk, controller) {
+                if (chunk.type === "error") {
+                  report(chunk.error);
+                }
+                controller.enqueue(chunk);
+              },
+            })
+          ),
+        };
+      } catch (error) {
+        report(error);
+        throw error;
+      }
+    },
+  };
+}
+
 export function getLanguageModel(modelId: string) {
   if (isTestEnvironment && myProvider) {
     return myProvider.languageModel("chat-model");
@@ -129,17 +254,40 @@ export function getLanguageModel(modelId: string) {
     );
   }
 
-  const userKey = userKeyFor(model.id);
+  const provider = byokProviderForModelId(model.id);
+  const userKey = provider ? byokKeyForProvider(provider) : null;
+  const resolved = resolveLanguageModel(model, userKey);
 
+  if (!(provider && userKey)) {
+    return resolved;
+  }
+
+  // No context means no user to attribute the failure to. That should be
+  // impossible — a user key can only be in scope because `withUserFunding` put
+  // it there — but guessing an owner is worse than skipping the bookkeeping.
+  const userId = getBillingContext()?.userId;
+
+  return userId
+    ? wrapLanguageModel({
+        model: resolved,
+        middleware: userKeyGuard(userId, provider),
+      })
+    : resolved;
+}
+
+function resolveLanguageModel(
+  model: NonNullable<ReturnType<typeof getModelById>>,
+  userKey: string | null
+) {
   switch (model.providerType) {
     case "anthropic":
       return (
         userKey ? createAnthropic({ apiKey: userKey }) : anthropicProvider
       ).chat(model.providerModelId);
     case "openai":
-      return (userKey ? createOpenAI({ apiKey: userKey }) : openaiProvider).chat(
-        model.providerModelId
-      );
+      return (
+        userKey ? createOpenAI({ apiKey: userKey }) : openaiProvider
+      ).chat(model.providerModelId);
     case "bedrock":
       if (!bedrockProvider) {
         throw new Error("Amazon Bedrock is not configured.");

@@ -12,7 +12,8 @@ import {
   selectModelForTask,
   TASK_TIER,
 } from "@/lib/ai/model-policy";
-import { getLanguageModel } from "@/lib/ai/providers";
+import { classifyProviderFailure } from "@/lib/ai/provider-failure-core";
+import { getLanguageModel, runsOnUserKey } from "@/lib/ai/providers";
 import {
   chooseRetryModel,
   providerBreaker,
@@ -73,6 +74,36 @@ export async function generateObjectResilient<T>({
       degraded: false,
     };
   } catch (primaryError) {
+    // Before anything else: was this the provider's failure, or this user's?
+    //
+    // Degrading was built for outages, and both of its effects are wrong for a
+    // dead credential. Tripping `providerBreaker` on a 401 lets one tenant's
+    // revoked key open the circuit for every other tenant on the deployment —
+    // a shared health signal poisoned by a private fact. And retrying on
+    // another provider moves the call onto a model the user has no key for,
+    // which means the platform pays for a user who explicitly opted out of
+    // being paid for, and never finds out their key stopped working. Both are
+    // silent, which is what makes them worse than the error they replace.
+    //
+    // So: user key + credential failure = stop here. The wrapper in
+    // providers.ts has already marked the key invalid, so the *next* call runs
+    // on the free allowance with the settings dialog saying why.
+    if (
+      classifyProviderFailure(primaryError).kind === "credential" &&
+      runsOnUserKey(primaryId)
+    ) {
+      logRouting({
+        task,
+        modelId: primaryId,
+        outcome: "failed_user_credential",
+        error:
+          primaryError instanceof Error
+            ? primaryError.message
+            : String(primaryError),
+      });
+      throw primaryError;
+    }
+
     providerBreaker.recordFailure(primaryProvider);
 
     const tier = TASK_TIER[task];
@@ -121,7 +152,18 @@ export async function generateObjectResilient<T>({
         degraded: true,
       };
     } catch (retryError) {
-      providerBreaker.recordFailure(providerKeyForModel(retryId));
+      // Same split as above. The retry model may itself be one the user funds
+      // — two connected keys, both dead — and a private credential must not
+      // reach the shared breaker from this arm either.
+      if (
+        !(
+          classifyProviderFailure(retryError).kind === "credential" &&
+          runsOnUserKey(retryId)
+        )
+      ) {
+        providerBreaker.recordFailure(providerKeyForModel(retryId));
+      }
+
       logRouting({
         task,
         modelId: retryId,
