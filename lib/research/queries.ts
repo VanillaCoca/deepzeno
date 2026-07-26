@@ -8,6 +8,7 @@ import {
   type RunProgress,
   type RunStatus,
   type RunType,
+  settlementForAbandonedRun,
 } from "@/lib/research/run-progress-core";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -359,6 +360,92 @@ export async function insertEvidence(
   return (first.data as Record<string, unknown>[]).map(mapEvidence);
 }
 
+/**
+ * Close out any run in this batch whose invocation is provably gone.
+ *
+ * Reaping happens on read rather than on a schedule, and that is the point:
+ * the moment anyone asks what this project is doing is exactly the moment a
+ * dead row starts lying to them. A cron would be the conventional answer, but
+ * this deployment's cron budget is one daily job — a run could sit `running`
+ * for twenty hours before anything looked at it, and the person waiting on it
+ * would be looking long before that.
+ *
+ * It takes the rows the caller already fetched instead of running its own
+ * query, so a listing that finds nothing abandoned costs exactly nothing
+ * extra. Each write is a compare-and-swap on the status we read, so a run that
+ * finished honestly in the microseconds between the read and the write keeps
+ * its own verdict rather than ours. And it never throws: this runs inside the
+ * poll that draws the activity bar, and failing to bury a dead run is not a
+ * reason to stop reporting the live ones.
+ */
+async function settleAbandonedRuns(
+  runs: ResearchRun[]
+): Promise<ResearchRun[]> {
+  const nowMs = Date.now();
+  const finishedAt = new Date(nowMs).toISOString();
+
+  const abandoned = runs.flatMap((run) => {
+    const settlement = settlementForAbandonedRun(run, nowMs);
+    return settlement ? [{ run, settlement }] : [];
+  });
+
+  if (abandoned.length === 0) {
+    return runs;
+  }
+
+  const db = getClient();
+  const settled = new Map<
+    string,
+    { status: RunStatus; error: string | null }
+  >();
+
+  await Promise.all(
+    abandoned.map(async ({ run, settlement }) => {
+      try {
+        const { error } = await db
+          .from("research_run")
+          .update({
+            status: settlement.status,
+            error: settlement.error,
+            finished_at: finishedAt,
+          })
+          .eq("id", run.id)
+          // Compare-and-swap: only bury the run we actually read.
+          .eq("status", run.status);
+
+        if (error) {
+          console.warn("Abandoned run not settled", {
+            runId: run.id,
+            code: error.code ?? null,
+            message: error.message,
+          });
+          return;
+        }
+
+        settled.set(run.id, settlement);
+      } catch (cause) {
+        console.warn("Abandoned run not settled", { runId: run.id, cause });
+      }
+    })
+  );
+
+  if (settled.size === 0) {
+    return runs;
+  }
+
+  return runs.map((run) => {
+    const settlement = settled.get(run.id);
+    return settlement
+      ? {
+          ...run,
+          status: settlement.status,
+          error: settlement.error,
+          finishedAt,
+        }
+      : run;
+  });
+}
+
 export async function listResearchRunsForNode({
   nodeId,
   limit = 10,
@@ -378,7 +465,7 @@ export async function listResearchRunsForNode({
     "Failed to list research runs for node"
   );
 
-  return rows.map(mapResearchRun);
+  return settleAbandonedRuns(rows.map(mapResearchRun));
 }
 
 /**
@@ -475,7 +562,7 @@ export async function listProjectRunActivity({
     "Failed to list project run activity"
   );
 
-  const runs = rows.map(mapResearchRun);
+  const runs = await settleAbandonedRuns(rows.map(mapResearchRun));
   const nodeIds = [
     ...new Set(
       runs

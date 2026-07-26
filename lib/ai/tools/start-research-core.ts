@@ -60,7 +60,7 @@ export const RESEARCH_QUESTION_MAX_LENGTH = 200;
 /**
  * The only two kinds the research pipeline accepts as an origin.
  *
- * Mirrors the gate in `runResearchPipeline`. Checked here as well so a model
+ * Mirrors the gate in `prepareResearchRun`. Checked here as well so a model
  * that names the wrong node is told why synchronously, instead of the failure
  * disappearing into a detached tail where the only trace is a `failed` run row.
  */

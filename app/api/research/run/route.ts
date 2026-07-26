@@ -1,10 +1,14 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/app/(auth)/auth";
 import { ChatbotError } from "@/lib/errors";
 import { irErrorToResponse } from "@/lib/ir/api";
 import { getIRNodeForUser } from "@/lib/ir/queries";
 import { resolveResearchBudget } from "@/lib/research/budget";
-import { runResearchPipeline } from "@/lib/research/pipeline";
+import {
+  executeResearchRun,
+  prepareResearchRun,
+} from "@/lib/research/pipeline";
 import { listRecentRunCosts } from "@/lib/research/queries";
 import {
   BUDGET_BOUNDS,
@@ -13,8 +17,10 @@ import {
 } from "@/lib/research/run-progress-core";
 import { ResearchToolUnavailableError } from "@/lib/research/search";
 
-// A default-budget run (≤6 searches, ≤10 fetches, 3 model phases) fits one
-// Fluid Compute invocation; the run row records partial/failed states.
+// This route is where a research run lives. The POST hands the response back
+// before the pipeline starts, so all 300 seconds belong to the run and nothing
+// else — which is the whole reason the run has a route of its own instead of
+// being awaited inside whatever request happened to ask for it.
 export const maxDuration = 300;
 
 const bodySchema = z.object({
@@ -93,6 +99,23 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Start a run. Accept-and-detach, not request-and-wait.
+ *
+ * Everything that can be the caller's fault — no session, a node that is not
+ * theirs or is not a question, no search provider, a budget out of bounds — is
+ * decided before this returns, so the caller still gets a real 4xx/503 for a
+ * real mistake. What it does not do is hold the connection open for the four
+ * minutes of work that follows. That was never a service to anyone: the
+ * activity bar already polls the run row, so a caller blocked on the response
+ * was watching a spinner while the same progress was being written where it
+ * could actually see it.
+ *
+ * The detached half is where the run's time budget comes from. `after()` runs
+ * once the response is sent but inside this invocation, and this invocation
+ * has nothing else to spend, which is exactly what a run stranded in a shared
+ * `after()` tail did not have.
+ */
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -102,19 +125,11 @@ export async function POST(request: Request) {
     }
 
     const body = bodySchema.parse(await request.json());
-    const node = await getIRNodeForUser({
-      id: body.node_id,
-      userId: session.user.id,
-    });
 
-    if (!node) {
-      return new ChatbotError(
-        "not_found:chat",
-        "IR node not found"
-      ).toResponse();
-    }
-
-    const result = await runResearchPipeline({
+    // Throws for a missing node, a non-researchable kind or an unconfigured
+    // search provider, and creates the run row. Nothing here is slow and
+    // nothing here spends money.
+    const prepared = await prepareResearchRun({
       userId: session.user.id,
       originNodeId: body.node_id,
       budgetOverride: clampBudgetOverride({
@@ -123,14 +138,24 @@ export async function POST(request: Request) {
       }),
     });
 
+    after(async () => {
+      try {
+        await executeResearchRun(prepared);
+      } catch (error) {
+        // The pipeline has already written `failed` onto the row with this
+        // message before rethrowing, so there is nothing to recover here —
+        // but an unhandled rejection in `after()` would be logged as a
+        // platform error rather than as this run's error.
+        console.error("Research run failed", {
+          runId: prepared.run.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+
     return Response.json(
-      {
-        run: result.run,
-        evidence_count: result.evidenceCount,
-        candidates_created: result.candidatesCreated,
-        skipped_duplicates: result.skippedDuplicates,
-      },
-      { status: 201 }
+      { run: prepared.run, accepted: true },
+      { status: 202 }
     );
   } catch (error) {
     if (error instanceof ResearchToolUnavailableError) {

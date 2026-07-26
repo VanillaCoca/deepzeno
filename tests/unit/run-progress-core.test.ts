@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  type AbandonedRunInput,
   BUDGET_BOUNDS,
   clampBudgetOverride,
   formatCost,
@@ -10,10 +11,12 @@ import {
   medianCost,
   PHASE_RAIL,
   phaseCounterOf,
+  RUN_MAX_LIFETIME_SECONDS,
   RUN_STALE_SECONDS,
   type RunProgress,
   type RunRecord,
   rankRunViews,
+  settlementForAbandonedRun,
   summarizeActivity,
   summarizeRun,
 } from "../../lib/research/run-progress-core.ts";
@@ -435,5 +438,116 @@ describe("status predicates", () => {
     assert.equal(isIncompleteTerminalStatus("failed"), true);
     assert.equal(isIncompleteTerminalStatus("done"), false);
     assert.equal(isIncompleteTerminalStatus("running"), false);
+  });
+});
+
+describe("settlementForAbandonedRun", () => {
+  function abandoned(
+    overrides: Partial<AbandonedRunInput> = {}
+  ): AbandonedRunInput {
+    return {
+      status: "running",
+      createdAt: at(RUN_MAX_LIFETIME_SECONDS + 1),
+      progress: null,
+      ...overrides,
+    } satisfies AbandonedRunInput;
+  }
+
+  it("leaves a run alone while it could still be executing", () => {
+    // The whole safety argument rests on this: the threshold is above every
+    // route's maxDuration, so anything younger may well be mid-collect and
+    // about to write its own verdict.
+    assert.equal(
+      settlementForAbandonedRun(abandoned({ createdAt: at(30) }), NOW),
+      null
+    );
+  });
+
+  it("holds its fire exactly at the threshold and settles one second past it", () => {
+    assert.equal(
+      settlementForAbandonedRun(
+        abandoned({ createdAt: at(RUN_MAX_LIFETIME_SECONDS) }),
+        NOW
+      ),
+      null
+    );
+    assert.equal(
+      settlementForAbandonedRun(
+        abandoned({ createdAt: at(RUN_MAX_LIFETIME_SECONDS + 1) }),
+        NOW
+      )?.status,
+      "failed"
+    );
+  });
+
+  it("calls an orphaned run that produced nothing a failure, and says where it died", () => {
+    const settlement = settlementForAbandonedRun(
+      abandoned({ progress: { phase: "collect" } as RunProgress }),
+      NOW
+    );
+
+    assert.equal(settlement?.status, "failed");
+    assert.match(settlement?.error ?? "", /collect/);
+  });
+
+  it("calls it partial when anything actually landed", () => {
+    // Evidence rows and candidate nodes are already in the database; burying
+    // the run as `failed` would tell the user to disregard work they have.
+    assert.equal(
+      settlementForAbandonedRun(
+        abandoned({ progress: { phase: "judge", evidence: 4 } as RunProgress }),
+        NOW
+      )?.status,
+      "partial"
+    );
+    assert.equal(
+      settlementForAbandonedRun(
+        abandoned({
+          progress: {
+            phase: "land",
+            evidence: 0,
+            candidates: 2,
+          } as RunProgress,
+        }),
+        NOW
+      )?.status,
+      "partial"
+    );
+  });
+
+  it("settles an abandoned cancelling run as cancelled, with no error", () => {
+    // The user asked for this. A cancelled run is not a failed run, and
+    // writing an error onto it would put a red mark on their own decision.
+    const settlement = settlementForAbandonedRun(
+      abandoned({
+        status: "cancelling",
+        progress: { phase: "collect", evidence: 3 } as RunProgress,
+      }),
+      NOW
+    );
+
+    assert.deepEqual(settlement, { status: "cancelled", error: null });
+  });
+
+  it("never touches a run that already reached a verdict of its own", () => {
+    for (const status of ["done", "partial", "cancelled", "failed"]) {
+      assert.equal(
+        settlementForAbandonedRun(
+          abandoned({ status, createdAt: at(999_999) }),
+          NOW
+        ),
+        null,
+        `${status} must be left alone`
+      );
+    }
+  });
+
+  it("leaves a run alone when its age cannot be established", () => {
+    // An unprovable death is not a death. Without a parsable timestamp there
+    // is no argument that the invocation is gone, only a suspicion.
+    assert.equal(
+      settlementForAbandonedRun(abandoned({ createdAt: "not a date" }), NOW),
+      null
+    );
   });
 });

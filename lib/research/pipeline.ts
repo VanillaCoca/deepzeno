@@ -602,7 +602,32 @@ async function landPhase(
 // Orchestrator
 // ---------------------------------------------------------------------------
 
-export async function runResearchPipeline({
+type ResearchOriginNode = NonNullable<
+  Awaited<ReturnType<typeof getIRNodeForUser>>
+>;
+
+export type PreparedResearchRun = {
+  userId: string;
+  node: ResearchOriginNode;
+  run: ResearchRun;
+  budget: ReturnType<typeof resolveResearchBudget>;
+  preferredModelId: string | null;
+};
+
+/**
+ * Everything a run needs settled before it starts costing anything: the node
+ * is real and researchable, search is configured, the budget is fixed, and the
+ * row exists.
+ *
+ * This is split from the execution half for one reason. The work takes minutes
+ * and has to own a whole serverless invocation, so a caller that is already
+ * holding an invocation open for something else — a chat stream, say — must be
+ * able to do the cheap, failable part in front of the user and hand the
+ * expensive part somewhere with its own clock. Everything here answers in
+ * milliseconds and everything here can still be reported as an error the
+ * caller caused; nothing after it can.
+ */
+export async function prepareResearchRun({
   userId,
   originNodeId,
   preferredModelId: preferredModelIdInput,
@@ -616,7 +641,7 @@ export async function runResearchPipeline({
   // Per-run budget the user set before starting. Already clamped by the route;
   // clamped again here because this is also called from the patrol path.
   budgetOverride?: { maxSearches?: number; maxFetches?: number };
-}): Promise<PipelineResult> {
+}): Promise<PreparedResearchRun> {
   // ── 1. Load + gate ──────────────────────────────────────────────────────────
   const node = await getIRNodeForUser({ id: originNodeId, userId });
 
@@ -663,6 +688,26 @@ export async function runResearchPipeline({
     budget,
   });
 
+  return { userId, node, run, budget, preferredModelId };
+}
+
+/**
+ * The expensive half: plan, collect, judge, land.
+ *
+ * Takes a run that already exists rather than creating one, so that whoever
+ * called `prepareResearchRun` has already been told the run started and can
+ * watch it in the activity bar while this executes somewhere else. Every exit
+ * path from here writes a terminal status onto the row — that is the contract
+ * the activity bar and the abandonment reaper are both built on.
+ */
+export async function executeResearchRun({
+  userId,
+  node,
+  run,
+  budget,
+  preferredModelId,
+}: PreparedResearchRun): Promise<PipelineResult> {
+  const originNodeId = node.id;
   const modelsUsed: ModelsUsedAccumulator = {};
 
   // The run's progress channel. Every beat also reads the cancel flag, so the

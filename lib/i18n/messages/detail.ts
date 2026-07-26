@@ -82,8 +82,8 @@ export const detailMessages: LocaleMessages = {
     "detail.researchStanceSupports": "supports",
     "detail.researchStanceContradicts": "contradicts",
     "detail.researchStanceNeutral": "neutral",
-    "detail.researchDoneToast":
-      "{evidence} evidence items, {candidates} candidates proposed.",
+    "detail.researchStartedToast":
+      "Research started. Progress shows in the activity bar.",
     "detail.researchUnavailableToast":
       "Web search isn't configured on this deployment.",
     "detail.researchFailedToast": "Research run failed. Try again.",
@@ -161,7 +161,7 @@ export const detailMessages: LocaleMessages = {
     "detail.researchStanceSupports": "支持",
     "detail.researchStanceContradicts": "矛盾",
     "detail.researchStanceNeutral": "中立",
-    "detail.researchDoneToast": "{evidence} 条证据，提议 {candidates} 个候选。",
+    "detail.researchStartedToast": "调研已开始，进度见活动栏。",
     "detail.researchUnavailableToast": "当前部署未配置网络搜索。",
     "detail.researchFailedToast": "调研运行失败，请重试。",
   },
@@ -248,8 +248,8 @@ export const detailMessages: LocaleMessages = {
     "detail.researchStanceSupports": "soutient",
     "detail.researchStanceContradicts": "contredit",
     "detail.researchStanceNeutral": "neutre",
-    "detail.researchDoneToast":
-      "{evidence} preuves, {candidates} candidats proposés.",
+    "detail.researchStartedToast":
+      "Recherche lancée. La progression s'affiche dans la barre d'activité.",
     "detail.researchUnavailableToast":
       "La recherche web n'est pas configurée sur ce déploiement.",
     "detail.researchFailedToast": "La recherche a échoué. Réessayez.",

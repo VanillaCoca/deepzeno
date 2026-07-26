@@ -139,9 +139,12 @@ export function ResearchSection({
     (item) => latestRun !== null && item.runId === latestRun.id
   );
 
-  // Fix 2: revalidate evidence when a background-polled run transitions to a
-  // terminal state (done / partial / failed).  A ref guards against the initial
-  // mount so we only trigger on an actual status change.
+  // Everything a finished run produced, pulled in the moment the polled status
+  // leaves an active state. This is the only place it can be pulled in from
+  // now that starting a run returns before the run has done anything: the POST
+  // that starts it knows nothing about what it will find, so the "it landed"
+  // moment is a status transition, not a response. A ref guards the initial
+  // mount so this fires on an actual change rather than on arrival.
   const prevRunStatusRef = useRef<ResearchRunStatus | null | undefined>(
     undefined
   );
@@ -160,8 +163,11 @@ export function ResearchSection({
       !ACTIVE_STATUSES.includes(next)
     ) {
       mutateEvidence().catch(console.error);
+      // The node's own detail carries the edges the run's candidates hang off.
+      mutate(irNodeKey(nodeId)).catch(console.error);
+      onLanded();
     }
-  }, [latestRun?.status, mutateEvidence]);
+  }, [latestRun?.status, mutateEvidence, mutate, nodeId, onLanded]);
 
   async function handleResearch() {
     setIsStarting(true);
@@ -191,23 +197,26 @@ export function ResearchSection({
         return;
       }
 
+      // The route answers 202 as soon as the run row exists; nothing has been
+      // researched yet. So this says "started", and the landing — evidence,
+      // candidates, the node's own edges — is picked up by the effect above
+      // when the polled run leaves an active status. Claiming results here
+      // would be claiming them before they exist.
       toast({
         type: "success",
-        description: t("detail.researchDoneToast", {
-          evidence: payload.evidence_count,
-          candidates: payload.candidates_created,
-        }),
+        description: t("detail.researchStartedToast"),
       });
-      // Fix 1: also revalidate the open node's detail SWR key so the Relations
-      // section reflects any newly-landed candidate edges immediately.
-      await mutate(irNodeKey(nodeId));
-      onLanded();
     } catch (error) {
       console.error(error);
       toast({ type: "error", description: t("detail.researchFailedToast") });
     } finally {
+      // Revalidated before the starting flag is cleared, not after, so the
+      // button hands over from "starting" to "running" in one render instead
+      // of flickering back to idle until the next poll. Only the run list is
+      // pulled: nothing has been researched yet, so there is no new evidence
+      // and no new edge to fetch.
+      await mutateRuns();
       setIsStarting(false);
-      await Promise.all([mutateRuns(), mutateEvidence()]);
     }
   }
 

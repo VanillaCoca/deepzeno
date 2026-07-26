@@ -58,17 +58,18 @@ import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
 /**
- * 300s, not the 60s this route ran on until the chat model could start research.
+ * 60s, back down from the 300s this route was briefly raised to.
  *
- * `after()` work counts against this route's budget, and this route registers
- * two tails: the IR sweep, and now a research run that takes minutes. 60s cut
- * the research tail off shortly after the stream ended, which does not produce
- * an error — it produces a `research_run` row stuck at `running` that every
- * client's activity bar polls forever. The ceiling is free when unused (Fluid
- * compute bills active time, not the reservation) and it is the same ceiling
- * `/api/research/run` already needs to finish the identical pipeline.
+ * That raise was an attempt to buy room for a research run executing in this
+ * route's `after()` tail, and it was the wrong fix for the right observation.
+ * `after()` work counts against this ceiling and shares it with the streamed
+ * answer, so the run never had a knowable budget no matter how high the number
+ * went — a long answer still starved it, and a starved run does not error, it
+ * leaves a `research_run` row stuck at `running`. The run now goes to
+ * `/api/research/run`, which owns a whole invocation, so what is left here is
+ * the stream plus the IR sweep and 60s is what that has always needed.
  */
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 function getMessageModelOverride(text: string) {
   const match = text.match(/(?:^|\s)@([^\s]+)/);
@@ -425,6 +426,12 @@ export async function POST(request: Request) {
             projectId,
             topicId,
             conversationId,
+            // The run is started by posting to this same deployment, so it
+            // needs where "here" is and who is asking. Taken from the live
+            // request rather than an env var so it is correct in dev, in
+            // previews behind deployment protection, and in production.
+            origin: new URL(request.url).origin,
+            cookie: request.headers.get("cookie") ?? "",
           }),
         }
       : undefined;

@@ -91,6 +91,25 @@ export function isActiveRunStatus(status: string): boolean {
 export const RUN_STALE_SECONDS = 150;
 
 /**
+ * The longest a run can still have a process behind it, measured from the
+ * moment its row was written.
+ *
+ * This is not a heuristic like the number above it. A run executes inside one
+ * serverless invocation, and the longest ceiling any of our run routes
+ * declares is 300s — so an invocation that began when the row was inserted
+ * cannot still be executing once that ceiling has passed. A row still marked
+ * `running` past this point is not slow; it is orphaned, and the 30s of slack
+ * covers the gap between the insert and the invocation's own clock.
+ *
+ * The two thresholds are deliberately far apart because they answer different
+ * questions. Staleness is a warning the UI draws and takes back the instant a
+ * checkpoint lands. This one writes a terminal status into the database, which
+ * nothing takes back. Warning early is cheap; declaring a run dead early is
+ * not.
+ */
+export const RUN_MAX_LIFETIME_SECONDS = 330;
+
+/**
  * Terminal states in which the rail must NOT be shown as complete.
  *
  * Exported because the UI owes these runs an explanation, not just a colour:
@@ -159,6 +178,71 @@ function clampRatio(value: number): number {
   }
 
   return value > 1 ? 1 : value;
+}
+
+export type AbandonedRunInput = {
+  status: string;
+  createdAt: string;
+  progress: RunProgress | null;
+};
+
+export type RunSettlement = {
+  status: RunStatus;
+  /** Written to `research_run.error`; null when nothing went wrong. */
+  error: string | null;
+};
+
+/**
+ * How a run that lost its process should be settled, or null if it is still
+ * entitled to be running.
+ *
+ * The bar exists because the previous design had none: a killed invocation
+ * left `running` in the row forever, the activity bar honestly reported "lost
+ * contact", and nothing on either side ever resolved the contradiction. The
+ * client had already concluded the run was dead; the database still claimed
+ * otherwise, and the database is what every other decision reads. Pressing
+ * cancel did not help either — that only moves `running` to `cancelling`,
+ * which is equally active and equally unattended.
+ *
+ * Which terminal state it gets is the same distinction the pipeline itself
+ * draws. A run that landed something before it died is `partial`, because
+ * discarding the evidence it did collect would throw away work the user paid
+ * for. A run that landed nothing is `failed`. A run that was already
+ * cancelling is `cancelled` with no error, because the user asked it to stop
+ * and it is stopped — Iron Law 2 forbids reporting a failure that did not
+ * happen just as firmly as it forbids reporting a success that did not.
+ */
+export function settlementForAbandonedRun(
+  run: AbandonedRunInput,
+  nowMs: number
+): RunSettlement | null {
+  if (!isActiveRunStatus(run.status)) {
+    return null;
+  }
+
+  const startedMs = parseTime(run.createdAt);
+
+  // An unparseable created_at is the one case where we cannot prove anything,
+  // and an unprovable death is not a death. Leave the row alone.
+  if (
+    startedMs === null ||
+    (nowMs - startedMs) / 1000 <= RUN_MAX_LIFETIME_SECONDS
+  ) {
+    return null;
+  }
+
+  if (run.status === "cancelling") {
+    return { status: "cancelled", error: null };
+  }
+
+  const landed =
+    (run.progress?.evidence ?? 0) > 0 || (run.progress?.candidates ?? 0) > 0;
+  const phase = run.progress?.phase;
+
+  return {
+    status: landed ? "partial" : "failed",
+    error: `Lost contact${phase ? ` during ${phase}` : ""}: the run's invocation ended before it could finish.`,
+  };
 }
 
 /**

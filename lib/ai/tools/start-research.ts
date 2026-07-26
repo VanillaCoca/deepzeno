@@ -1,7 +1,6 @@
 import "server-only";
 
 import { tool } from "ai";
-import { after } from "next/server";
 import { z } from "zod";
 import {
   createIRNodeForUser,
@@ -9,7 +8,6 @@ import {
   getIRNodeForUser,
   logIREvent,
 } from "@/lib/ir/queries";
-import { runResearchPipeline } from "@/lib/research/pipeline";
 import { listResearchRunsForNode } from "@/lib/research/queries";
 import {
   resolveSearchProvider,
@@ -43,12 +41,21 @@ import {
  * reference; the evidence lands in the judgment inbox, the progress lands in
  * the activity bar, and the model has learned nothing it could assert.
  *
- * The launch is detached with `after()` for a reason that is not stylistic:
- * `runResearchPipeline` takes minutes, and a promise the response does not
- * await is frozen the instant a Vercel invocation returns. Awaiting it inside
- * the tool would hold the whole chat stream open behind it, which is the exact
- * blocking behaviour `/api/research/run` already has and the reason it needs
- * its own 300s route.
+ * How the run leaves this request is the part that had to be got right and was
+ * not. The first version ran the pipeline in the chat route's own `after()`
+ * tail, which looked detached and was not: `after()` executes inside the same
+ * invocation as the response, so a four-minute pipeline was handed whatever
+ * was left of the route's ceiling once the model had finished writing its
+ * answer. A long answer left it almost nothing, and the run died mid-collect
+ * with its row still saying `running` — a run the user could watch but never
+ * get.
+ *
+ * So the tool does not run anything. It posts to `/api/research/run` on this
+ * same deployment, carrying the caller's own cookies, and that request gets
+ * its own invocation with its own untouched 300 seconds. The hop costs a round
+ * trip and buys the one thing the run needs, which is a clock nobody else is
+ * spending. It also means chat and the research panel now start runs through
+ * exactly one code path — the one that was already proven to finish.
  */
 export type StartResearchResult =
   | {
@@ -87,16 +94,72 @@ function decline(reason: StartResearchDeclineReason): StartResearchResult {
   return { status: "declined", reason, message: DECLINE_MESSAGES[reason] };
 }
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+/**
+ * Hand the run to its own invocation and report whether it was taken.
+ *
+ * The cookies are forwarded rather than replaced with a service token on
+ * purpose. A shared secret would let this path start a run as anyone, which is
+ * a privilege the chat model has no business holding; the user's own session
+ * gives it exactly the reach the user already had, and the run route
+ * authenticates it the same way it authenticates the research panel.
+ */
+async function dispatchResearchRun({
+  origin,
+  cookie,
+  nodeId,
+}: {
+  origin: string;
+  cookie: string;
+  nodeId: string;
+}): Promise<{ ok: true; runId: string | null } | { ok: false }> {
+  const response = await fetch(
+    new URL(`${BASE_PATH}/api/research/run`, origin),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        node_id: nodeId,
+        max_searches: CHAT_RESEARCH_BUDGET.maxSearches,
+        max_fetches: CHAT_RESEARCH_BUDGET.maxFetches,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    console.error("Research run dispatch rejected", {
+      nodeId,
+      status: response.status,
+      body: await response.text().catch(() => "<unreadable>"),
+    });
+    return { ok: false };
+  }
+
+  const payload = (await response.json().catch(() => null)) as {
+    run?: { id?: unknown };
+  } | null;
+  const runId = payload?.run?.id;
+
+  return { ok: true, runId: typeof runId === "string" ? runId : null };
+}
+
 export function createStartResearchTool({
   userId,
   projectId,
   topicId,
   conversationId,
+  origin,
+  cookie,
 }: {
   userId: string;
   projectId: string;
   topicId: string;
   conversationId: string;
+  /** Origin of the request being served, so the run route is this deployment. */
+  origin: string;
+  /** The caller's cookie header, forwarded so the run runs as them. */
+  cookie: string;
 }) {
   // Per-turn, not per-user: the closure lives exactly as long as one assistant
   // turn, which is the unit the cap is actually about. `stopWhen:
@@ -211,26 +274,22 @@ export function createStartResearchTool({
           return decline("node_busy");
         }
 
-        launched += 1;
-
-        // The callback form, not `after(promise)`: the pipeline must not start
-        // until the response is done, or its first phase competes with the
-        // stream the user is reading. Everything that could fail cheaply has
-        // already been checked above, so what runs here fails the way research
-        // failures are supposed to — into the run row, visible in the activity
-        // bar, never silently.
-        after(() => {
-          runResearchPipeline({
-            userId,
-            originNodeId,
-            budgetOverride: { ...CHAT_RESEARCH_BUDGET },
-          }).catch((error) => {
-            console.error("Chat-initiated research run failed", {
-              originNodeId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
+        // Awaited, not detached. The run route answers as soon as it has
+        // created the row, so this costs one round trip — and in exchange the
+        // tool result says "started" only when something actually started.
+        // Announcing a run that was never accepted is the silent-miss failure
+        // Iron Law 2 does not excuse.
+        const dispatched = await dispatchResearchRun({
+          origin,
+          cookie,
+          nodeId: originNodeId,
         });
+
+        if (!dispatched.ok) {
+          return decline("start_failed");
+        }
+
+        launched += 1;
 
         await logIREvent({
           projectId,
@@ -241,6 +300,7 @@ export function createStartResearchTool({
           metadata: {
             trigger: "chat_tool",
             conversationId,
+            runId: dispatched.runId,
             budget: CHAT_RESEARCH_BUDGET,
             mintedNode: !node_id,
           },
