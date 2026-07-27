@@ -37,6 +37,11 @@ export type TruthGraphProps = {
   onSelect: (nodeId: string | null) => void;
   // Lets the empty state send the user to the conversation to start building.
   onStartConversation?: () => void;
+  // Re-entry overlay (amendment №4 §2), rendered by the stage and positioned
+  // by the graph. It lives here for the same reason the Detail card does: the
+  // graph owns floating geometry, which is how §2.1's "zero canvas impact"
+  // stays enforceable in one place instead of being re-argued per caller.
+  reEntrySlot?: ReactNode;
   selectedNodeId: string | null;
   topics: TruthGraphTopic[];
   // Nodes under Watchtower patrol — rows get a subtle radar badge.
@@ -214,6 +219,7 @@ export function TruthGraph({
   onModeChange,
   onSelect,
   onStartConversation,
+  reEntrySlot,
   selectedNodeId,
   topics,
   watchedNodeIds,
@@ -509,6 +515,13 @@ export function TruthGraph({
           </ul>
         </aside>
       ) : null}
+
+      {/* Re-entry overlay — absolutely positioned, so the lanes underneath do
+          not shift by a single pixel whether it is present or not (§2.1). It
+          is intentionally NOT inside the scrolling lanes container: scrolling
+          the canvas must not scroll the diff away mid-read, and the watermark
+          only advances once the diff is dismissed or read (§2.5). */}
+      {reEntrySlot}
 
       {activeSelectedNodeId && detailSlot ? (
         // Detail = the tall right card (portrait → comfortable reading measure).

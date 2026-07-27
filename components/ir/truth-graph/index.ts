@@ -11,6 +11,10 @@ export {
   getUpstreamNodeIds,
 } from "./data";
 export {
+  ReEntryOverlay,
+  type ReEntryOverlayProps,
+} from "./re-entry-overlay";
+export {
   TruthGraph,
   type TruthGraphMode,
   type TruthGraphProps,

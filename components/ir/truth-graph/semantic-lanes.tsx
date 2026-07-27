@@ -17,6 +17,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CornerDownRightIcon,
+  EyeIcon,
   HelpCircleIcon,
   LightbulbIcon,
   RadarIcon,
@@ -46,6 +47,12 @@ export type SemanticLanesProps = {
 // visible without interaction (amendment №2); larger sets fold to one line
 // (v1 §6.3) with per-node ⚓N badges as the fallback cue.
 const PREMISES_AUTO_OPEN_MAX = 4;
+
+// Baseline density for `idea` rows (v1.3 §2.1, amendment №4 §3.3). It is a
+// BASELINE, not a multiplier: when focus mode dims a row, the focus opacity
+// replaces this value rather than compounding with it, so an off-chain idea
+// never fades to 0.7 × faint and disappear.
+const IDEA_BASELINE_OPACITY = 0.7;
 
 type TopicLanes = {
   anchors: IRNode[];
@@ -165,12 +172,38 @@ function TypeChip({
 }
 
 // Focus dimming mirrors the SVG canvas (v1 §4.6): when a node is selected,
-// everything off its chain fades but stays in place.
-function focusStyle(dimmed: boolean) {
+// everything off its chain fades but stays in place. That channel belongs to
+// user selection only — amendment №4 §4.2 forbids the agent from using opacity
+// to express its own emphasis, so nothing else may write to it.
+//
+// `baselineOpacity` is the lifecycle density of the row itself (idea rows sit
+// at 0.7). Dimming REPLACES it, never multiplies.
+function focusStyle(dimmed: boolean, baselineOpacity?: number) {
+  let opacity: string | undefined;
+
+  if (dimmed) {
+    opacity = "var(--z-focus-faint)";
+  } else if (baselineOpacity !== undefined) {
+    opacity = String(baselineOpacity);
+  }
+
   return {
-    opacity: dimmed ? "var(--z-focus-faint)" : undefined,
+    opacity,
     transition: "opacity var(--z-transition)",
   } as const;
+}
+
+// `待观察` — the type chip for the idea lane (amendment №4 §3.3 extends the
+// №1 §3 chip table). Dotted outline, neutral tone: it is deliberately outside
+// the green/red judgment system, because an idea is not a verdict in either
+// direction and must not read as one.
+function WatchlistChip({ label }: { label: string }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--z-text-3)] border-dotted px-2 py-0.5 text-[11px] font-medium text-[var(--z-text-3)]">
+      <EyeIcon className="size-3" />
+      {label}
+    </span>
+  );
 }
 
 function SubNodeBadge({ count }: { count: number }) {
@@ -275,6 +308,8 @@ function FrontierCard({
 // Single row — the "on the record, consult when needed" form for settled
 // truths, premises, ideas, and excluded items.
 function LaneRow({
+  baselineOpacity,
+  chip,
   dimmed,
   icon: Icon,
   iconClassName,
@@ -290,6 +325,12 @@ function LaneRow({
   watchLabel,
   watched,
 }: {
+  // Lifecycle density of the row (amendment №1 §4). Undefined = full density.
+  baselineOpacity?: number;
+  // Type chip rendered at the row's trailing edge. №1 §3's promise is that a
+  // first-time reader needs no legend, so any lane that is visually distinct
+  // must also say its own name.
+  chip?: ReactNode;
   dimmed: boolean;
   icon: IconComponent;
   iconClassName: string;
@@ -321,7 +362,7 @@ function LaneRow({
       )}
       data-testid={`truth-graph-node-${node.id}`}
       onClick={() => onSelect(node.id)}
-      style={focusStyle(dimmed)}
+      style={focusStyle(dimmed, baselineOpacity)}
       type="button"
     >
       <Icon className={cn("size-3.5 shrink-0", iconClassName)} />
@@ -339,6 +380,7 @@ function LaneRow({
       <SubNodeBadge count={subNodeCount} />
       <PremiseBadge count={premiseCount} />
       <WatchBadge label={watchLabel ?? ""} watched={watched ?? false} />
+      {chip && !isCell ? chip : null}
       {trailing && !isCell ? (
         <span className="shrink-0 text-[11px] text-[var(--z-text-3)]">
           {trailing}
@@ -545,11 +587,13 @@ function TopicSection({
         </div>
       ) : null}
 
-      {frontierCount(lanes) > 0 ? (
+      {frontierCount(lanes) > 0 || lanes.ideas.length > 0 ? (
         <div className="mb-5">
-          <LaneHeading className="text-[var(--z-attention-text)]">
-            {t("graph.laneFrontier")} · {t("graph.frontierHint")}
-          </LaneHeading>
+          {frontierCount(lanes) > 0 ? (
+            <LaneHeading className="text-[var(--z-attention-text)]">
+              {t("graph.laneFrontier")} · {t("graph.frontierHint")}
+            </LaneHeading>
+          ) : null}
           <div className="space-y-2">
             {lanes.questions.map((question) => (
               <div className="space-y-2" key={question.id}>
@@ -621,22 +665,48 @@ function TopicSection({
                 watchLabel={watchLabel}
               />
             ))}
-            {lanes.ideas.map((idea) => (
-              <LaneRow
-                dimmed={isDimmed(idea.id)}
-                icon={LightbulbIcon}
-                iconClassName="text-[var(--z-text-3)]"
-                key={idea.id}
-                muted
-                node={idea}
-                onSelect={onSelect}
-                premiseCount={premiseDepCount(idea.id)}
-                selected={selectedNodeId === idea.id}
-                subNodeCount={subCount(idea.id)}
-                trailing={t("graph.chipIdea")}
-              />
-            ))}
           </div>
+
+          {lanes.ideas.length > 0 ? (
+            // 待观察 — the idea fold (amendment №4 §3.3). The enqueue gate only
+            // saves attention if `idea` also LOOKS unlike `pending`: left inline
+            // among the candidates, these rows read as debt whether or not they
+            // carry a confirm button. Folded and counted, they read as what they
+            // are — recorded, costing nothing, available.
+            //
+            // Deliberately absent: any confirm affordance. Ruling on one of
+            // these means either discussing it in the sandbox or promoting it
+            // explicitly (§3.3) — a user action, so Iron Law 0 holds.
+            <details
+              className="group mt-3"
+              onToggle={onLayoutChange}
+              open={lanes.ideas.some((node) => node.id === selectedNodeId)}
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-[var(--z-text-3)] hover:bg-[var(--z-node-fill)] [&::-webkit-details-marker]:hidden">
+                <EyeIcon className="size-3.5" />
+                {t("graph.watchlistFold", { count: lanes.ideas.length })}
+                <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" />
+              </summary>
+              <div className="mt-1 space-y-0.5 pl-4">
+                {lanes.ideas.map((idea) => (
+                  <LaneRow
+                    baselineOpacity={IDEA_BASELINE_OPACITY}
+                    chip={<WatchlistChip label={t("graph.chipWatchlist")} />}
+                    dimmed={isDimmed(idea.id)}
+                    icon={LightbulbIcon}
+                    iconClassName="text-[var(--z-text-3)]"
+                    key={idea.id}
+                    muted
+                    node={idea}
+                    onSelect={onSelect}
+                    premiseCount={premiseDepCount(idea.id)}
+                    selected={selectedNodeId === idea.id}
+                    subNodeCount={subCount(idea.id)}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : null}
 
