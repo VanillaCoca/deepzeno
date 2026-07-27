@@ -20,13 +20,21 @@ export type PatrolBudget = {
   weeklyAlertCap: number;
   maxWatchesPerSweep: number;
   /**
-   * How many patrols one sweep runs at a time.
+   * How many patrols one sweep asks to run at a time.
    *
    * A patrol is almost entirely waiting — two searches, three page fetches,
    * a handful of model calls — so running them one after another spent a
    * 300-second invocation mostly idle and capped the whole product's standing
    * capacity at 8 watches a day. Raising it costs nothing per patrol; it only
    * changes how much of the invocation is used.
+   *
+   * "Asks to" is doing real work in that sentence. Four lanes in production
+   * still deliver 8 patrols a sweep, arriving evenly spaced rather than in
+   * bursts, which is what serialisation somewhere below this setting looks
+   * like — probably the model provider serving one request per deployment at a
+   * time. So this is a ceiling this code requests, not a throughput it
+   * achieves. Never derive capacity from it; see sweep-capacity-core, which
+   * measures instead.
    *
    * Not unbounded, for the ordinary reason: every lane holds open sockets to
    * the same few search and model endpoints, and enough of them turns one
@@ -62,10 +70,12 @@ export function resolvePatrolBudget(
     alertCooldownDays: intFromEnv(env, "ZENO_PATROL_ALERT_COOLDOWN_DAYS", 7),
     weeklyAlertCap: intFromEnv(env, "ZENO_PATROL_WEEKLY_ALERT_CAP", 3),
     // 24, not 8. The old number was not a budget decision — it was what a
-    // serial loop could finish inside 300 seconds. With four lanes the same
-    // invocation reaches roughly three times as many watches for the same
-    // money per watch, and the thing that now bounds standing cost is the
-    // per-user watch quota, which is checked where a human can hear it.
+    // serial loop could finish inside 300 seconds. This one is a budget
+    // decision, and it is an upper bound on how much work the sweep may take
+    // on, not a claim about how much it gets through: production finishes 8 of
+    // these 24 and defers the rest. Keeping the cap above the real ceiling is
+    // deliberate — it is the over-fetch that lets a sweep discover the ceiling
+    // at all (see the note at the listDueWatches call site).
     maxWatchesPerSweep: intFromEnv(
       env,
       "ZENO_PATROL_MAX_WATCHES_PER_SWEEP",

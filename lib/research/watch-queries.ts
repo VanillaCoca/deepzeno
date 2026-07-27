@@ -8,6 +8,14 @@ import {
   type PatrolCadence,
   parseAgentSettings,
 } from "./agent-settings";
+import type { PatrolBudget } from "./patrol-core";
+import {
+  CAPACITY_WINDOW,
+  type CapacityEstimate,
+  estimateSweepCapacity,
+  SWEEP_EVENT,
+  type SweepObservation,
+} from "./sweep-capacity-core";
 
 // ---------------------------------------------------------------------------
 // Types (pure module — importable from client components too)
@@ -331,6 +339,72 @@ export async function countPatrolQueue(): Promise<{
   }
 
   return { active: active.count ?? 0, due: due.count ?? 0 };
+}
+
+/**
+ * What recent sweeps actually managed, newest first.
+ *
+ * Reads the sweep's own log entries out of the event stream so capacity can be
+ * measured rather than assumed (see sweep-capacity-core). Best-effort by
+ * design: this feeds an estimate that already has a documented fallback, and a
+ * telemetry read must never be the reason patrols stop running.
+ */
+export async function listRecentSweeps(
+  limit: number
+): Promise<SweepObservation[]> {
+  try {
+    const db = getClient();
+    const result = await db
+      .from("ir_extraction_events")
+      .select("metadata")
+      .eq("layer", "watchtower")
+      .eq("event", SWEEP_EVENT)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (result.error) {
+      return [];
+    }
+
+    return ((result.data ?? []) as Array<{ metadata: unknown }>).flatMap(
+      (row) => {
+        const meta = row.metadata;
+        if (!meta || typeof meta !== "object") {
+          return [];
+        }
+        const { processed, deferred } = meta as Record<string, unknown>;
+        if (typeof processed !== "number" || typeof deferred !== "number") {
+          return [];
+        }
+        return [{ processed, deferred }];
+      }
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What this deployment can patrol in a day, measured where the record allows.
+ *
+ * Two places state a cycle length: the sweep's own log, and the API behind the
+ * "checked about every N days" sentence a user reads. If they compute it
+ * differently the product contradicts itself about its own schedule — and the
+ * one the user sees is the one that would be wrong quietly. One function, so
+ * they cannot drift.
+ *
+ * Never throws: `listRecentSweeps` swallows its own failures and
+ * `estimateSweepCapacity` falls back to the configured budget on an empty
+ * record, so the worst case here is today's answer being the old asserted one.
+ */
+export async function measureSweepCapacity(
+  budget: PatrolBudget
+): Promise<CapacityEstimate> {
+  return estimateSweepCapacity({
+    observations: await listRecentSweeps(CAPACITY_WINDOW),
+    configuredPerSweep: budget.maxWatchesPerSweep,
+    sweepsPerDay: budget.sweepsPerDay,
+  });
 }
 
 // Active watches across every project one user owns — the denominator the

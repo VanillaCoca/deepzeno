@@ -25,6 +25,7 @@ import {
   getProjectAgentSettings,
   getWatchById,
   listWatchesByProject,
+  measureSweepCapacity,
   updateProjectAgentSettings,
   updateWatch,
 } from "@/lib/research/watch-queries";
@@ -59,16 +60,24 @@ export async function GET(request: Request) {
 
     try {
       const budget = resolvePatrolBudget();
-      const [watches, settings, queue, admission] = await Promise.all([
-        listWatchesByProject(projectId),
-        getProjectAgentSettings(projectId),
-        countPatrolQueue(),
-        admitNewWatch(session.user.id),
-      ]);
+      const [watches, settings, queue, admission, capacity] = await Promise.all(
+        [
+          listWatchesByProject(projectId),
+          getProjectAgentSettings(projectId),
+          countPatrolQueue(),
+          admitNewWatch(session.user.id),
+          measureSweepCapacity(budget),
+        ]
+      );
+      // The measured throughput, not `maxWatchesPerSweep × sweepsPerDay`. This
+      // is the number the user reads: it becomes "Zeno reaches this about every
+      // N days" in the UI. Deriving it from the budget made that sentence
+      // understate the wait by a factor of three — the product quietly
+      // reassuring people about the one thing they asked it to promise.
       const health = summarizePatrolQueue({
         activeWatches: queue.active,
         dueNow: queue.due,
-        dailyCapacity: budget.maxWatchesPerSweep * budget.sweepsPerDay,
+        dailyCapacity: capacity.perDay,
       });
       return Response.json({
         watches,
