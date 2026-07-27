@@ -10,9 +10,7 @@ import useSWR from "swr";
 import { useLocale } from "@/components/i18n/locale-provider";
 import { postJSON } from "@/components/ir/use-ir-actions";
 import { Button } from "@/components/ui/button";
-import { ChangeBar } from "@/components/workspace/change-bar";
 import { ISLAND_SURFACE } from "@/components/workspace/island";
-import type { WorkspaceView } from "@/components/workspace/workspace-header";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import {
   formatCost,
@@ -187,25 +185,21 @@ function RunLine({
 }
 
 /**
- * The one bar under the header.
+ * The one bar under the header: what is running right now.
  *
- * "What is running now" and "what changed while I was away" are the same object
- * caught at two moments, so they get one strip of screen rather than two
- * competing ones. In-flight work wins the slot while it exists — money is being
- * spent right now — and the change bar takes it back the moment the work
- * settles, which is also the moment its own contents just changed.
+ * It used to carry a second job — "what changed while I was away" — on the
+ * theory that in-flight work and just-settled work are the same object caught
+ * at two moments. Amendment №4 §2 moved that job onto the canvas as the
+ * re-entry overlay, because a report the user meets on arrival has to sit where
+ * the evidence is, and because the resting state it collapses into (№1 §6's
+ * global pending strip) already lives inside the lanes. What is left here is
+ * the half that was always about the present.
  *
- * There is deliberately no dismiss control on the running state. The change bar
- * can be dismissed because it reports the past and the user can decide it does
- * not matter; a run in flight is spending the user's money whether or not the
- * bar is on screen, and letting them hide it would make the product quieter
- * about cost exactly when it should be loudest.
+ * There is deliberately no dismiss control. A run in flight is spending the
+ * user's money whether or not the bar is on screen, and letting them hide it
+ * would make the product quieter about cost exactly when it should be loudest.
  */
-export function ActivityBar({
-  onGoTo,
-}: {
-  onGoTo: (view: WorkspaceView) => void;
-}) {
+export function ActivityBar() {
   const { t } = useLocale();
   const { activeProjectId } = useWorkspace();
   // `null` means "follow the default", which for concurrent runs is open.
@@ -293,7 +287,13 @@ export function ActivityBar({
   }
 
   if (!(summary.headline && activeProjectId)) {
-    return <ChangeBar onGoTo={onGoTo} />;
+    // The change bar used to live here. Amendment №4 §2.1 moved the re-entry
+    // report onto the canvas as an overlay, and №1 §6's global pending strip —
+    // already rendered inside SemanticLanes — is the resting state it collapses
+    // back into. Two surfaces reporting the same pending set, on two different
+    // absence thresholds (30min/24h here vs 24h/14d there), could only ever
+    // disagree; the user would then have to work out which one was lying.
+    return null;
   }
 
   const multiple = summary.active.length > 1;

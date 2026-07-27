@@ -4,8 +4,13 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { IRDetailPane } from "@/components/ir/ir-detail";
 import { irNodeKey, useIR } from "@/components/ir/ir-provider";
-import { TruthGraph, type TruthGraphMode } from "@/components/ir/truth-graph";
+import {
+  ReEntryOverlay,
+  TruthGraph,
+  type TruthGraphMode,
+} from "@/components/ir/truth-graph";
 import { AgentSettingsPopover } from "@/components/ir/truth-graph/agent-settings-popover";
+import { useReEntryOverlay } from "@/components/ir/truth-graph/use-re-entry-overlay";
 import { useIRActions } from "@/components/ir/use-ir-actions";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
 import type { IRDetail, IREdge, IRNode } from "@/lib/ir/types";
@@ -123,6 +128,29 @@ export function TruthGraphStage() {
     />
   ) : null;
 
+  // Re-entry overlay (amendment №4 §2). Handed to TruthGraph as a slot for the
+  // same reason Detail is: the graph owns floating geometry, which is what
+  // makes §2.1's "zero canvas impact" enforceable in one place. Selecting a
+  // node from it dismisses it — the user has stopped reading the diff and
+  // started working, which is exactly when the watermark should advance.
+  const { overlay, dismiss: dismissReEntry } = useReEntryOverlay(
+    activeProjectId ?? null
+  );
+  const reEntrySlot = overlay ? (
+    <ReEntryOverlay
+      onDismiss={dismissReEntry}
+      onOpenInbox={() => {
+        dismissReEntry();
+        requestView("inbox");
+      }}
+      onSelectNode={(nodeId) => {
+        dismissReEntry();
+        selectNode(nodeId);
+      }}
+      overlay={overlay}
+    />
+  ) : null;
+
   return (
     <div className="flex h-full flex-col pt-16" data-testid="truth-graph-stage">
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -154,6 +182,7 @@ export function TruthGraphStage() {
           onModeChange={setGraphMode}
           onSelect={selectNode}
           onStartConversation={() => requestView("conversation")}
+          reEntrySlot={reEntrySlot}
           selectedNodeId={selectedNodeId}
           topics={truthGraphTopics}
           watchedNodeIds={watchedNodeIds}

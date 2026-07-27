@@ -194,7 +194,7 @@ export function WorkspaceShell({
                   `z-10`, under the header's `z-20`: they do not overlap today,
                   and if a long label ever makes them, the header should win. */}
               <div className="pointer-events-none absolute inset-x-0 top-14 z-10 flex justify-center px-3">
-                <ActivityBar onGoTo={applyView} />
+                <ActivityBar />
               </div>
               <div className="min-h-0 flex-1 overflow-hidden">
                 {renderStage()}
